@@ -70,8 +70,8 @@ internal static class ResourceIdentityConverterTests
             var package = Path.Combine(directory, "rejected.lfxp");
             Require(Invoke(executable, directory, Arguments(package, target)) != 0 && !File.Exists(package),
                 "Converter silently bypassed mapping for a package.");
-            var raw = Path.Combine(directory, "rejected.lfxb");
-            Require(Invoke(executable, directory, ["convert", input, raw]) != 0 && !File.Exists(raw),
+            var unsupported = Path.Combine(directory, "rejected.bin");
+            Require(Invoke(executable, directory, ["convert", input, unsupported]) != 0 && !File.Exists(unsupported),
                 "Converter silently discarded embedded portable identities.");
         }
         finally { Directory.Delete(directory, recursive: true); }

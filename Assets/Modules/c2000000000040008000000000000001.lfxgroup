@@ -18,7 +18,7 @@
           {
             "Id": "proceduralState",
             "Type": "string",
-            "Value": "{\"operations\":[{\"id\":\"c201ffff-0000-4000-8000-000000000011\",\"kind\":5,\"inputA\":0,\"inputB\":0,\"inputC\":0,\"seed\":0,\"flags\":0,\"values\":[0.5,0.5,0.5,1,0,0,0,0,0,0,0,0]},{\"id\":\"c201ffff-0000-4000-8000-000000000012\",\"kind\":25,\"inputA\":1,\"inputB\":0,\"inputC\":0,\"seed\":0,\"flags\":0,\"values\":[0,0,0,0,0,0,0,0,0,0,0,0]}],\"outputRegister\":2}"
+            "Value": "{\"operations\":[{\"id\":\"c201ffff-0000-4000-8000-000000000011\",\"kind\":5,\"inputA\":0,\"inputB\":0,\"seed\":0,\"values\":[0.5,0.5,0.5,1,0,0,0,0,0,0,0,0]},{\"id\":\"c201ffff-0000-4000-8000-000000000012\",\"kind\":25,\"inputA\":1,\"inputB\":0,\"seed\":0,\"values\":[0,0,0,0,0,0,0,0,0,0,0,0]}],\"outputRegister\":2}"
           }
         ]
       }

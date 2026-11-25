@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using LiberaFx.Models.Graph;
 
 namespace LiberaFx.Services.Compilation;
 
@@ -14,10 +15,51 @@ public sealed partial class VfxProgram
     {
         if (bytes.Length < 16 || !bytes.AsSpan(0, 4).SequenceEqual("LFXB"u8))
             throw new InvalidDataException("Invalid CPU stage bytecode header.");
-        if (BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(4)) != 3) return bytes;
+        var version = BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(4));
+        if (version is not (3 or 11)) return bytes;
         var count = BinaryPrimitives.ReadInt32LittleEndian(bytes.AsSpan(8));
-        if (count < 0 || count > MaxInstructions || bytes.Length != 16 + count * 256)
+        if (count < 0 || count > MaxInstructions || bytes.Length < 16 + count * 256)
+            throw new InvalidDataException("Invalid CPU stage length.");
+        if (version == 3 && bytes.Length != 16 + count * 256)
             throw new InvalidDataException("Invalid V3 CPU stage length.");
+        var valueTypes = Array.Empty<VfxNodeValueTypes>();
+        var logicalRoutes = Array.Empty<VfxLogicalSignalRoute>();
+        if (version == 11)
+        {
+            var typeOffset = bytes.Length - ValueTypeHeaderSize - count * ValueTypeRecordSize;
+            if (typeOffset < 16 + count * 256 || !bytes.AsSpan(typeOffset, 4).SequenceEqual("LFTY"u8) ||
+                BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(typeOffset + 4)) != 1 ||
+                BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(typeOffset + 6)) != ValueTypeRecordSize)
+                throw new InvalidDataException("Invalid CPU value-type metadata.");
+            var enumOffset = 16 + count * 256;
+            if (typeOffset - enumOffset < EnumBranchHeaderSize + LogicalEventHeaderSize ||
+                !bytes.AsSpan(enumOffset, 4).SequenceEqual("LFEB"u8) ||
+                BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(enumOffset + 12)) != EnumBranchHeaderSize)
+                return bytes;
+            var logicalOffset = enumOffset + EnumBranchHeaderSize;
+            if (!bytes.AsSpan(logicalOffset, 4).SequenceEqual("LFLE"u8) ||
+                BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(logicalOffset + 6)) != 0)
+                return bytes;
+            var routeCount = BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(logicalOffset + 8));
+            if (routeCount > MaxSignalRoutes ||
+                logicalOffset + LogicalEventHeaderSize + (long)routeCount * 12 != typeOffset)
+                return bytes;
+            logicalRoutes = new VfxLogicalSignalRoute[routeCount];
+            for (var index = 0; index < logicalRoutes.Length; index++)
+            {
+                var route = bytes.AsSpan(logicalOffset + LogicalEventHeaderSize + index * 12, 12);
+                logicalRoutes[index] = new(BinaryPrimitives.ReadInt32LittleEndian(route), route[4],
+                    BinaryPrimitives.ReadInt32LittleEndian(route[8..]), route[5]);
+            }
+            valueTypes = new VfxNodeValueTypes[count];
+            for (var index = 0; index < count; index++)
+            {
+                var record = bytes.AsSpan(typeOffset + ValueTypeHeaderSize + index * ValueTypeRecordSize, ValueTypeRecordSize);
+                if (record[1] > 4) throw new InvalidDataException("Invalid CPU value-type input count.");
+                valueTypes[index] = new((GraphValueType)record[0],
+                    record.Slice(2, record[1]).ToArray().Select(value => (GraphValueType)value).ToArray());
+            }
+        }
         var typed = new VfxTypedInstruction[count];
         var customs = new List<VfxCustomInstruction>();
         for (var index = 0; index < count; index++)
@@ -66,12 +108,14 @@ public sealed partial class VfxProgram
         }
         var legacy = typed.Select(node => new VfxInstruction(node.NodeId, node.Opcode, node.InputA, node.InputB,
             node.DefaultA[0], node.DefaultB[0])).ToArray();
-        var program = new VfxProgram(legacy, typed, customs.ToArray(), [], 3);
+        var program = new VfxProgram(legacy, typed, customs.ToArray(), [], 3,
+            logicalSignalRoutes: logicalRoutes, valueTypes: valueTypes);
         // Preserve noncanonical or extension-bearing records byte for byte.
-        // Never normalize unknown fields while optimizing a known expression.
-        if (!program.ToBinary().AsSpan().SequenceEqual(bytes)) return bytes;
+        var canonical = version == 11 ? program.ToPackageBinary() : program.ToBinary();
+        if (!canonical.AsSpan().SequenceEqual(bytes)) return bytes;
         var optimized = program.OptimizeCpuKernel();
-        return ReferenceEquals(program, optimized) ? bytes : optimized.ToBinary();
+        return ReferenceEquals(program, optimized) ? bytes :
+            version == 11 ? optimized.ToPackageBinary() : optimized.ToBinary();
     }
 
     internal VfxProgram OptimizeCpuKernel()
@@ -146,6 +190,24 @@ public sealed partial class VfxProgram
                 BranchTargets = item.BranchTargets.Select(Map).ToArray(),
                 BranchAdditionalTargets = item.BranchAdditionalTargets.Select(branch => branch.Select(Map).ToArray()).ToArray() };
         }).ToArray();
-        return new VfxProgram(legacy, typed, customs, [], 3);
+        var valueTypes = _valueTypes.Where((_, index) => !removed.Contains(index)).ToArray();
+        if (valueTypes.Length != 0)
+        {
+            foreach (var (index, replacement) in replacements)
+            {
+                var mappedIndex = remap[index];
+                valueTypes[mappedIndex] = valueTypes[mappedIndex] with
+                {
+                    InputTypes = valueTypes[mappedIndex].InputTypes.Take(replacement.Inputs.Length).ToArray()
+                };
+            }
+        }
+        var logicalRoutes = _logicalSignalRoutes.Select(route => route with
+        {
+            SourceIndex = Map(route.SourceIndex),
+            TargetIndex = Map(route.TargetIndex)
+        }).ToArray();
+        return new VfxProgram(legacy, typed, customs, [], 3,
+            logicalSignalRoutes: logicalRoutes, valueTypes: valueTypes);
     }
 }

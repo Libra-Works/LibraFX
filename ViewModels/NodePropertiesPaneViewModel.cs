@@ -38,7 +38,7 @@ public sealed class NodePropertiesPaneViewModel : Tool, IDisposable
     public IRelayCommand ToggleNodeLockCommand { get; }
     public bool IsInspectingContainingSpawnable =>
         _node is not null && ReferenceEquals(_node, _graph.ContainingSpawnable) && _graph.SelectedNode is null;
-    public bool ShowSelectedConnections => !IsPinned && !IsInspectingContainingSpawnable && _graph.SelectedConnections.Count > 0;
+    public bool ShowSelectedConnections => !IsPinned && !IsInspectingContainingSpawnable && _graph.IncidentConnections.Count > 0;
     public string InspectorTitle => LocalizationService.Shared.Get(
         IsInspectingContainingSpawnable ? "Panels.ContainingSpawnable" : "Editor.SelectedNode");
     public string InspectorNodeName

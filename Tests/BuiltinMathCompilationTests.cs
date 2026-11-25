@@ -71,7 +71,7 @@ public static class BuiltinMathCompilationTests
             "The connected scalar and edited Smoothstep bounds must compile.");
         var package = SpawnableGroupPackageBinary.Deserialize(
             SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(scalarGraph)));
-        Require(package.ParentBytecode.SequenceEqual(scalarProgram.ToBinary()),
+        Require(package.ParentBytecode.SequenceEqual(scalarProgram.ToPackageBinary()),
             "Packaging must preserve the compiled custom scalar nodes.");
         var examples = Path.Combine(AppContext.BaseDirectory, "Runtime", "examples", "CustomNodes");
         var customDefinitions = GraphNodeDefinition.LoadDirectory(examples, out var warnings);

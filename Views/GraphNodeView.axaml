@@ -119,7 +119,7 @@
                                     </Button.Foreground>
                                 </Button>
                                 <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center"
-                                           TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" />
+                                           TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding ToolTip}" />
                             </Grid>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>

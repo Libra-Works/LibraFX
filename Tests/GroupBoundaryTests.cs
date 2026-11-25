@@ -101,9 +101,9 @@ internal static class GroupBoundaryTests
         graph.CreateNode(GraphNodeKind.FloatFCurve);
         var snapshot = graph.CreateSnapshot();
         var package = SpawnableGroupPackage.Compile(snapshot);
-        if (package.ParentBytecode[4] != 5 ||
+        if (package.ParentBytecode[4] != 11 ||
             !package.ParentBytecode.SequenceEqual(SpawnableGroupPackage.Compile(snapshot).ParentBytecode))
-            throw new InvalidOperationException("Signal fan-out and FCurve must compile deterministically to v5.");
+            throw new InvalidOperationException("Signal fan-out and FCurve must compile deterministically to v11.");
         VerifyNativeFanout(package, source.Id, first.Id, second.Id);
         var plain = new GraphWorkspaceViewModel(new UndoRedoManager());
         var plainSource = plain.CreateNode(GraphNodeKind.Sequence);
@@ -113,7 +113,7 @@ internal static class GroupBoundaryTests
             !plain.TryConnectNodes(plainSource, b, out _, sourcePortId: "then_1"))
             throw new InvalidOperationException("Cannot connect plain Signal fan-out.");
         var plainBytes = SpawnableGroupPackage.Compile(plain.CreateSnapshot()).ParentBytecode;
-        if (!plainBytes.SequenceEqual(VfxProgram.Compile(plain.CreateSnapshot()).ToBinary()))
+        if (!plainBytes.SequenceEqual(VfxProgram.Compile(plain.CreateSnapshot()).ToPackageBinary()))
             throw new InvalidOperationException("Standalone Signal compilation must preserve fan-out.");
         VerifyNativeBuiltinFanout(plainBytes, plainSource.Id);
         var plainGroup = new GraphWorkspaceViewModel(new UndoRedoManager());
@@ -129,13 +129,13 @@ internal static class GroupBoundaryTests
         if (!plainGroup.TryConnectNodes(entry, plainContainer, out _, GroupBoundarySchema.InputPortId(groupInput.Id)))
             throw new InvalidOperationException("Cannot connect standalone Group Signal input.");
         var groupSnapshot = plainGroup.CreateSnapshot();
-        var groupBytes = VfxProgram.Compile(groupSnapshot).ToBinary();
+        var groupBytes = VfxProgram.Compile(groupSnapshot).ToPackageBinary();
         if (!groupBytes.SequenceEqual(SpawnableGroupPackage.Compile(groupSnapshot).ParentBytecode))
             throw new InvalidOperationException("Standalone Group Signal compilation must preserve boundary routing.");
         VerifyNativeBuiltinFanout(groupBytes, entry.Id);
         if (Environment.GetEnvironmentVariable("LIBERAFX_UNITY_SIGNAL_FIXTURE") is { Length: > 0 } fixture)
         {
-            File.WriteAllBytes(fixture, plainBytes);
+            File.WriteAllBytes(fixture, SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(plain.CreateSnapshot())));
             File.WriteAllText(fixture + ".id", plainSource.Id.ToString());
             using var stream = new MemoryStream();
             new ProjectFileService().SaveAsync(stream, plain).GetAwaiter().GetResult();
@@ -146,76 +146,47 @@ internal static class GroupBoundaryTests
     private static void VerifyNativeBuiltinFanout(byte[] bytes, Guid source)
     {
         var path = Environment.GetEnvironmentVariable("LIBERAFX_NATIVE_TEST_LIBRARY");
-        if (string.IsNullOrEmpty(path)) return;
-        var library = NativeLibrary.Load(path);
-        T Fn<T>(string name) where T : Delegate => Marshal.GetDelegateForFunctionPointer<T>(NativeLibrary.GetExport(library, name));
-        static void Check(int result) { if (result != 0) throw new InvalidOperationException($"Builtin Signal runtime error {result}."); }
-        ulong program = 0, instance = 0;
-        try
+        if (string.IsNullOrEmpty(path))
         {
-            Check(Fn<CreateProgram>("libra_program_create")(bytes, (ulong)bytes.Length, out program));
-            Check(Fn<CreateInstance>("libra_instance_create")(program, out instance));
-            Check(Fn<Evaluate>("libra_evaluate")(instance, 0, IntPtr.Zero, 0, IntPtr.Zero));
-            if (Fn<Dispatch>("libra_dispatch_signal")(instance, source.ToByteArray(true), 0, 2) != 14)
+            return;
+        }
+        var package = new SpawnableGroupPackage(bytes, []) { AutoDestroyWhenIdle = false };
+        using (var limited = new NativeSpawnableSession(package, path, 2))
+        {
+            limited.Advance(0);
+            if (limited.TryDispatchSignal(source) != 14)
+            {
                 throw new InvalidOperationException("Builtin Signal fan-out must use a shared budget.");
-            Check(Fn<Dispatch>("libra_dispatch_signal")(instance, source.ToByteArray(true), 0, 3));
+            }
         }
-        finally
-        {
-            if (instance != 0) Fn<Release>("libra_instance_release")(instance);
-            if (program != 0) Fn<Release>("libra_program_release")(program);
-            NativeLibrary.Free(library);
-        }
+        using var sufficient = new NativeSpawnableSession(package, path, 3);
+        sufficient.Advance(0);
+        sufficient.DispatchSignal(source);
     }
 
     private static void VerifyNativeFanout(SpawnableGroupPackage package, Guid source, Guid first, Guid second)
     {
         var path = Environment.GetEnvironmentVariable("LIBERAFX_NATIVE_TEST_LIBRARY");
-        if (string.IsNullOrEmpty(path)) return;
-        var library = NativeLibrary.Load(path);
-        T Fn<T>(string name) where T : Delegate => Marshal.GetDelegateForFunctionPointer<T>(NativeLibrary.GetExport(library, name));
-        static void Check(int result) { if (result != 0) throw new InvalidOperationException($"Native fan-out runtime error {result}."); }
-        var programs = new List<ulong>();
-        var pools = new List<ulong>();
-        ulong parent = 0, instance = 0;
-        try
+        if (string.IsNullOrEmpty(path))
         {
-            var bindings = new List<NativeBinding>();
-            foreach (var template in package.Templates)
-            {
-                Check(Fn<CreateProgram>("libra_program_create")(template.Bytecode, (ulong)template.Bytecode.Length, out var child));
-                programs.Add(child);
-                Check(Fn<CreatePool>("libra_generator_pool_create")(child, template.ContainerId.ToByteArray(true), 4, 65536, 8, out var pool));
-                pools.Add(pool);
-                bindings.Add(new NativeBinding { Container = template.ContainerId.ToByteArray(true),
-                    Type = template.SignalTypeId.ToByteArray(true), Pool = pool,
-                    Widths = new byte[4], Colors = new byte[4], Nodes = new byte[64] });
-            }
-            Check(Fn<CreateParent>("libra_program_create_spawnable")(package.ParentBytecode,
-                (ulong)package.ParentBytecode.Length, bindings.ToArray(), (uint)bindings.Count, out parent));
-            Check(Fn<CreateInstance>("libra_instance_create")(parent, out instance));
-            Check(Fn<Evaluate>("libra_evaluate")(instance, 0, IntPtr.Zero, 0, IntPtr.Zero));
-            var firstPool = pools[package.Templates.ToList().FindIndex(item => item.ContainerId == first)];
-            var secondPool = pools[package.Templates.ToList().FindIndex(item => item.ContainerId == second)];
-            if (Fn<Dispatch>("libra_dispatch_signal")(instance, source.ToByteArray(true), 0, 4) != 14)
-                throw new InvalidOperationException("Fan-out must share its instruction budget across branches.");
-            Check(Fn<ProcessPool>("libra_generator_process_spawns")(firstPool, 4, out var firstCount));
-            Check(Fn<ProcessPool>("libra_generator_process_spawns")(secondPool, 4, out var secondCount));
-            if (firstCount != 1 || secondCount != 0)
-                throw new InvalidOperationException("Fan-out must finish its first branch before executing the second.");
-            Check(Fn<Dispatch>("libra_dispatch_signal")(instance, source.ToByteArray(true), 0, 5));
-            Check(Fn<ProcessPool>("libra_generator_process_spawns")(firstPool, 4, out firstCount));
-            Check(Fn<ProcessPool>("libra_generator_process_spawns")(secondPool, 4, out secondCount));
-            if (firstCount != 1 || secondCount != 1)
-                throw new InvalidOperationException("Signal fan-out did not execute all connected branches.");
+            return;
         }
-        finally
+        package = package with { AutoDestroyWhenIdle = false };
+        using (var limited = new NativeSpawnableSession(package, path, 4))
         {
-            if (instance != 0) Fn<Release>("libra_instance_release")(instance);
-            if (parent != 0) Fn<Release>("libra_program_release")(parent);
-            foreach (var pool in pools) Fn<Release>("libra_generator_pool_release")(pool);
-            foreach (var program in programs) Fn<Release>("libra_program_release")(program);
-            NativeLibrary.Free(library);
+            limited.Advance(0);
+            if (limited.TryDispatchSignal(source) != 14)
+            {
+                throw new InvalidOperationException("Fan-out must share its instruction budget across branches.");
+            }
+        }
+        using var sufficient = new NativeSpawnableSession(package, path, 5);
+        sufficient.Advance(0);
+        sufficient.DispatchSignal(source);
+        var spawns = sufficient.Events.Where(item => item.Kind == 1).ToArray();
+        if (spawns.Length != 2 || spawns[0].ContainerId != first || spawns[1].ContainerId != second)
+        {
+            throw new InvalidOperationException("Signal fan-out did not execute both connected branches in order.");
         }
     }
 
@@ -274,7 +245,7 @@ internal static class GroupBoundaryTests
         if (inputCode.DefaultA[0] != 2 || code[inputCode.InputA].NodeId != source.Id ||
             code[outputCode.InputA].NodeId != input.Id || code[targetCode.InputA].NodeId != output.Id)
             throw new InvalidOperationException("Group input/output did not compile to the parent and child sources.");
-        VerifyNativeNumeric(program.ToBinary(), target.Id);
+        VerifyNativeNumeric(program.ToPackageBinary(), target.Id);
         using var stream = new MemoryStream();
         new ProjectFileService().SaveAsync(stream, graph).GetAwaiter().GetResult();
         stream.Position = 0;
@@ -323,7 +294,7 @@ internal static class GroupBoundaryTests
             throw new InvalidOperationException("Cannot connect group signal to Spawnable Group.");
         graph.CreateNode(GraphNodeKind.FloatFCurve);
         var package = SpawnableGroupPackage.Compile(graph.CreateSnapshot());
-        if (package.ParentBytecode[4] != 4)
+        if (package.ParentBytecode[4] != 11)
             throw new InvalidOperationException("Group signals and FCurves were not compiled together.");
         VerifyNativeSignal(package, source.Id);
     }
@@ -382,7 +353,7 @@ internal static class GroupBoundaryTests
             var snapshot = graph.CreateSnapshot();
             GraphValidator.Validate(snapshot);
             var program = VfxProgram.Compile(snapshot);
-            VerifyNativeNumeric(program.ToBinary(), target.Id, expected);
+            VerifyNativeNumeric(program.ToPackageBinary(), target.Id, expected);
         }
     }
 
@@ -616,7 +587,7 @@ internal static class GroupBoundaryTests
             throw new InvalidOperationException("Cannot connect Matrix boundaries in the parent.");
         var snapshot = graph.CreateSnapshot();
         var program = VfxProgram.Compile(snapshot);
-        VerifyNativeNumeric(program.ToBinary(), point.Id, [11d, 20d, 30d]);
+        VerifyNativeNumeric(program.ToPackageBinary(), point.Id, [11d, 20d, 30d]);
         var describe = LiberaFxMcpTools.DescribeRuntimeOutputs(new ActiveGraphProvider(graph), group.Id.ToString());
         Dispatcher.UIThread.RunJobs();
         using (var json = JsonDocument.Parse(describe.GetAwaiter().GetResult()))
@@ -631,7 +602,7 @@ internal static class GroupBoundaryTests
         if (!GraphSnapshot.ContentEquals(snapshot, ProjectDocumentReader.LoadAsync(stream).GetAwaiter().GetResult().Graph))
             throw new InvalidOperationException("Matrix boundaries did not survive project persistence.");
         graph.DisconnectConnection(graph.Connections.Single(edge => edge.Target == group));
-        VerifyNativeNumeric(VfxProgram.Compile(graph.CreateSnapshot()).ToBinary(), point.Id, [1d, 0d, 0d]);
+        VerifyNativeNumeric(VfxProgram.Compile(graph.CreateSnapshot()).ToPackageBinary(), point.Id, [1d, 0d, 0d]);
         if (!graph.History.Undo() || !GraphSnapshot.ContentEquals(snapshot, graph.CreateSnapshot()))
             throw new InvalidOperationException("Undo did not restore Matrix boundary wiring.");
         graph.EnterGraph(graph.GetNode(group.Id));
@@ -687,7 +658,7 @@ internal static class GroupBoundaryTests
         if (!graph.TryConnectNodes(transform, outer, out _, GroupBoundarySchema.InputPortId(outerInput.Id), "value") ||
             !graph.TryConnectNodes(outer, point, out _, "matrix", GroupBoundarySchema.OutputPortId(outerOutput.Id)))
             throw new InvalidOperationException("Cannot connect outer Matrix group.");
-        VerifyNativeNumeric(VfxProgram.Compile(graph.CreateSnapshot()).ToBinary(), point.Id, [11d, 20d, 30d]);
+        VerifyNativeNumeric(VfxProgram.Compile(graph.CreateSnapshot()).ToPackageBinary(), point.Id, [11d, 20d, 30d]);
     }
 
     private static void ExportUnrealFixture(string directory)
@@ -732,7 +703,7 @@ internal static class GroupBoundaryTests
             throw new InvalidOperationException("Cannot connect fixture Matrix to the rendered position.");
         var snapshot = graph.CreateSnapshot();
         Directory.CreateDirectory(directory);
-        File.WriteAllBytes(Path.Combine(directory, "program.lfxb"), VfxProgram.Compile(snapshot).ToBinary());
+        File.WriteAllBytes(Path.Combine(directory, "program.lfxp"), EffectBinary.Compile(snapshot));
         File.WriteAllBytes(Path.Combine(directory, "render-config.json"), RenderProgramBindings.CreateScene(snapshot, 1));
         File.WriteAllText(Path.Combine(directory, "expected.json"), JsonSerializer.Serialize(new
         {
@@ -758,114 +729,61 @@ internal static class GroupBoundaryTests
             !signalGraph.TryConnectNodes(signalGroup, signalTarget, out _,
                 sourcePortId: GroupBoundarySchema.OutputPortId(signalOutput.Id)))
             throw new InvalidOperationException("Cannot connect fixture Signal in the parent.");
-        File.WriteAllBytes(Path.Combine(directory, "signal-program.lfxb"),
-            SpawnableGroupPackage.Compile(signalGraph.CreateSnapshot()).ParentBytecode);
+        File.WriteAllBytes(Path.Combine(directory, "signal-program.lfxp"),
+            SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(signalGraph.CreateSnapshot())));
         File.WriteAllText(Path.Combine(directory, "signal-entry.txt"), signalSource.Id.ToString("D"));
         var secondTarget = signalGraph.CreateNode(GraphNodeKind.Signal);
         if (!signalGraph.TryConnectNodes(signalSource, secondTarget, out _))
             throw new InvalidOperationException("Cannot connect fixture Signal fan-out.");
-        File.WriteAllBytes(Path.Combine(directory, "signal-fanout.lfxb"),
-            SpawnableGroupPackage.Compile(signalGraph.CreateSnapshot()).ParentBytecode);
+        File.WriteAllBytes(Path.Combine(directory, "signal-fanout.lfxp"),
+            SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(signalGraph.CreateSnapshot())));
     }
-
-    [StructLayout(LayoutKind.Sequential, Pack = 8)]
-    private struct NativeValue { public double X, Y, Z, W; public uint Count, Reserved; }
-    [StructLayout(LayoutKind.Sequential, Pack = 8)]
-    private struct NativeBinding
-    {
-        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 16)] public byte[] Container;
-        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 16)] public byte[] Type;
-        public ulong Pool;
-        public uint Count, Reserved;
-        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 4)] public byte[] Widths;
-        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 4)] public byte[] Colors;
-        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 64)] public byte[] Nodes;
-    }
-    [StructLayout(LayoutKind.Sequential, Pack = 8)]
-    private struct NativeEvent
-    {
-        public uint Kind, Reserved;
-        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 16)] public byte[] Container;
-        public ulong Instance;
-        public double Start;
-        public ulong Seed;
-    }
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int CreateProgram(byte[] bytes, ulong length, out ulong handle);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int CreateParent(byte[] bytes, ulong length, [In] NativeBinding[] bindings, uint count, out ulong handle);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int CreateInstance(ulong program, out ulong instance);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int Release(ulong handle);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int Bind(ulong instance, byte[] id, out uint binding);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int EvaluateValue(ulong instance, double time, [In] uint[] bindings, uint count, out NativeValue value);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int Evaluate(ulong instance, double time, IntPtr bindings, uint count, IntPtr values);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int CreatePool(ulong program, byte[] container, uint max, ulong budget, uint events, out ulong pool);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int Dispatch(ulong instance, byte[] id, double time, uint budget);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int ProcessPool(ulong pool, uint max, out uint processed);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int NextEvent(ulong pool, out NativeEvent value, out uint hasEvent);
 
     private static void VerifyNativeNumeric(byte[] bytes, Guid target, double[]? expected = null)
     {
         var path = Environment.GetEnvironmentVariable("LIBERAFX_NATIVE_TEST_LIBRARY");
-        if (string.IsNullOrEmpty(path)) return;
-        var library = NativeLibrary.Load(path);
-        T Fn<T>(string name) where T : Delegate => Marshal.GetDelegateForFunctionPointer<T>(NativeLibrary.GetExport(library, name));
-        static void Check(int result) { if (result != 0) throw new InvalidOperationException($"Native group runtime error {result}."); }
-        ulong program = 0, instance = 0;
-        try
+        if (string.IsNullOrEmpty(path))
         {
-            Check(Fn<CreateProgram>("libra_program_create")(bytes, (ulong)bytes.Length, out program));
-            Check(Fn<CreateInstance>("libra_instance_create")(program, out instance));
-            Check(Fn<Bind>("libra_bind_value")(instance, target.ToByteArray(true), out var binding));
-            Check(Fn<EvaluateValue>("libra_evaluate")(instance, 0, [binding], 1, out var value));
-            expected ??= [7d];
-            var actual = new[] { value.X, value.Y, value.Z, value.W };
-            if (value.Count != expected.Length || !actual.Take(expected.Length).SequenceEqual(expected))
-                throw new InvalidOperationException("Native runtime did not propagate the parent value through the group.");
+            return;
         }
-        finally
+        using var host = new NativeSpawnableSession(new SpawnableGroupPackage(bytes, []) { AutoDestroyWhenIdle = false }, path);
+        host.Advance(0);
+        var value = host.ReadRoot(target);
+        expected ??= [7d];
+        if (value.Width != expected.Length || !value.Lanes.Take(expected.Length).SequenceEqual(expected))
         {
-            if (instance != 0) Fn<Release>("libra_instance_release")(instance);
-            if (program != 0) Fn<Release>("libra_program_release")(program);
-            NativeLibrary.Free(library);
+            throw new InvalidOperationException("Native runtime did not propagate the parent value through the group.");
         }
     }
 
     private static void VerifyNativeSignal(SpawnableGroupPackage package, Guid source)
     {
         var path = Environment.GetEnvironmentVariable("LIBERAFX_NATIVE_TEST_LIBRARY");
-        if (string.IsNullOrEmpty(path)) return;
-        var library = NativeLibrary.Load(path);
-        T Fn<T>(string name) where T : Delegate => Marshal.GetDelegateForFunctionPointer<T>(NativeLibrary.GetExport(library, name));
-        static void Check(int result) { if (result != 0) throw new InvalidOperationException($"Native group runtime error {result}."); }
-        ulong child = 0, pool = 0, parent = 0, instance = 0;
+        if (string.IsNullOrEmpty(path))
+        {
+            return;
+        }
+        var malformed = package with { ParentBytecode = package.ParentBytecode[..^1] };
+        var rejected = false;
         try
         {
-            var template = package.Templates.Single();
-            Check(Fn<CreateProgram>("libra_program_create")(template.Bytecode, (ulong)template.Bytecode.Length, out child));
-            Check(Fn<CreatePool>("libra_generator_pool_create")(child, template.ContainerId.ToByteArray(true), 2, 65536, 8, out pool));
-            var binding = new NativeBinding { Container = template.ContainerId.ToByteArray(true),
-                Type = template.SignalTypeId.ToByteArray(true), Pool = pool,
-                Widths = new byte[4], Colors = new byte[4], Nodes = new byte[64] };
-            var malformed = package.ParentBytecode[..^1];
-            if (Fn<CreateParent>("libra_program_create_spawnable")(malformed, (ulong)malformed.Length,
-                    [binding], 1, out var rejected) == 0 || rejected != 0)
-                throw new InvalidOperationException("Malformed v4 group signal bytecode was accepted.");
-            Check(Fn<CreateParent>("libra_program_create_spawnable")(package.ParentBytecode,
-                (ulong)package.ParentBytecode.Length, [binding], 1, out parent));
-            Check(Fn<CreateInstance>("libra_instance_create")(parent, out instance));
-            Check(Fn<Evaluate>("libra_evaluate")(instance, 0, IntPtr.Zero, 0, IntPtr.Zero));
-            Check(Fn<Dispatch>("libra_dispatch_signal")(instance, source.ToByteArray(true), 0, 20));
-            Check(Fn<ProcessPool>("libra_generator_process_spawns")(pool, 2, out var processed));
-            Check(Fn<NextEvent>("libra_generator_next_event")(pool, out var spawned, out var hasEvent));
-            if (processed != 1 || hasEvent != 1 || spawned.Kind != 1)
-                throw new InvalidOperationException("Native group signal did not reach the explicitly connected Spawnable Group.");
+            using var invalid = new NativeSpawnableSession(malformed, path);
         }
-        finally
+        catch (InvalidOperationException)
         {
-            if (instance != 0) Fn<Release>("libra_instance_release")(instance);
-            if (parent != 0) Fn<Release>("libra_program_release")(parent);
-            if (pool != 0) Fn<Release>("libra_generator_pool_release")(pool);
-            if (child != 0) Fn<Release>("libra_program_release")(child);
-            NativeLibrary.Free(library);
+            rejected = true;
+        }
+        if (!rejected)
+        {
+            throw new InvalidOperationException("Malformed embedded group signal program was accepted.");
+        }
+        using var host = new NativeSpawnableSession(package with { AutoDestroyWhenIdle = false }, path);
+        host.Advance(0);
+        host.DispatchSignal(source);
+        var spawned = host.Events.Where(item => item.Kind == 1).ToArray();
+        if (spawned.Length != 1 || spawned[0].ContainerId != package.Templates.Single().ContainerId)
+        {
+            throw new InvalidOperationException("Native group signal did not reach the explicitly connected Spawnable Group.");
         }
     }
 }

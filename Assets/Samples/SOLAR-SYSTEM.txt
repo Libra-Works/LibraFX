@@ -53,8 +53,8 @@ a rotated translated parent maps local (3,0,0) to world (10,23,30).
 Solar checks cover times 0, pi/2, 10 and repeated 0, seven positions and Earth's
 rotation, including negative replacement spin and no spin inheritance by Moon.
 
-The fixture directories also contain program.lfxb, render-config.json and
-expected.json. Run Libra.Editor.Preview.CpuRootFixture with
+The fixture directories also contain the compiled `.lfxp` package,
+render-config.json and expected.json; internal program data stays embedded. Run Libra.Editor.Preview.CpuRootFixture with
 -LibraPreviewCpuFixture=<fixture-directory> in the matching Unreal preview build
 to check actual native transforms, MID values and framebuffer colors for all
 seven models at every fixed time. Numeric-only tests do not establish pixels.

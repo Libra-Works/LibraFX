@@ -14,7 +14,7 @@ internal sealed class UnityPackagePreviewSender
     private long _signalSequence;
 
     public CompiledPreviewMessage? Prepare(PreviewPublication publication, bool force,
-        ResourceIdentityRenderContext? resources)
+        ResourceIdentityRenderContext? resources, bool supportsCurveDelta = false)
     {
         var sameGraph = _last is { } last && last.DocumentId == publication.DocumentId &&
             ReferenceEquals(last.Graph, publication.Graph) &&
@@ -53,9 +53,10 @@ internal sealed class UnityPackagePreviewSender
         }
         if (!force && _loaded && _last is { } prev &&
             prev.DocumentId == publication.DocumentId &&
+            CompiledPreviewProtocol.SamePlayback(prev, publication) &&
             prev.IncludePreviewDebugDraw == publication.IncludePreviewDebugDraw &&
             prev.Playback?.DebugDrawStopped == publication.Playback?.DebugDrawStopped &&
-            PackageParameterDelta.TryCreatePayload(prev.Graph, publication.Graph, publication.Sequence, out var deltaBytes))
+            PackageParameterDelta.TryCreatePayload(prev.Graph, publication.Graph, publication.Sequence, out var deltaBytes, supportsCurveDelta))
         {
             return new(deltaBytes!, CompiledPreviewKind.Scene, publication);
         }

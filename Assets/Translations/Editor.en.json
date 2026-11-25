@@ -1,4 +1,6 @@
 {
+  "Editor.NavigateBack": "Back",
+  "Editor.NavigateForward": "Forward",
   "Editor.Node.CpuParticleMeshPosition": "Mesh Surface Position",
   "Editor.Node.CpuParticleMeshNormal": "Mesh Surface Normal",
   "Editor.Node.CpuParticleMeshUV": "Mesh Surface UV",

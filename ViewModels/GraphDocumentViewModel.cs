@@ -34,10 +34,12 @@ public sealed class GraphDocumentViewModel : Document
     public GraphDocumentViewModel(GraphWorkspaceViewModel workspace)
     {
         Workspace = workspace;
+        Workspace.SetDocumentName(_fileName);
         _savedSnapshot = workspace.CreateSnapshot();
         _savedHistoryRevisionId = workspace.History.TimelineRevisionId;
         _savedHistoryNodeId = workspace.History.CurrentNodeId;
         Workspace.History.StateChanged += OnHistoryStateChanged;
+        MessageLocalization.Observe(this, static document => document.RefreshLocalizedTitle());
         UpdateTitle();
     }
 
@@ -51,12 +53,25 @@ public sealed class GraphDocumentViewModel : Document
         var oldKey = FileKey;
         _fileName = string.IsNullOrWhiteSpace(fileName) ? LocalizationService.Shared.Get("Messages.Untitled") : fileName;
         FileKey = fileKey;
+        Workspace.SetDocumentName(_fileName);
         _savedSnapshot = savedSnapshot;
         _savedHistoryRevisionId = savedHistory?.TimelineRevisionId;
         _savedHistoryNodeId = savedHistory?.CurrentNodeId;
         if (oldName != _fileName) OnPropertyChanged(nameof(FileName));
         if (oldKey != FileKey) OnPropertyChanged(nameof(FileKey));
         UpdateDirtyState();
+        UpdateTitle();
+    }
+
+    private void RefreshLocalizedTitle()
+    {
+        if (FileKey is not null)
+        {
+            return;
+        }
+        _fileName = LocalizationService.Shared.Get("Messages.Untitled");
+        Workspace.SetDocumentName(_fileName);
+        OnPropertyChanged(nameof(FileName));
         UpdateTitle();
     }
 

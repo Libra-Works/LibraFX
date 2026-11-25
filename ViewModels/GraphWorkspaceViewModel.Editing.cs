@@ -263,11 +263,6 @@ public sealed partial class GraphWorkspaceViewModel
     public void AssignRenderMaterial(GraphNodeViewModel node, EngineAsset asset, int slot)
     {
         ArgumentNullException.ThrowIfNull(asset);
-        if (Nodes.Contains(node) && node.Definition.TypeName == "GpuParticle")
-        {
-            GpuParticleEditorService.AssignBillboardTexture(this, node, asset);
-            return;
-        }
         if (!Nodes.Contains(node) || !RenderNodeSchema.IsRenderNode(node.Definition))
         {
             throw new InvalidOperationException("Select a model or sprite render node.");

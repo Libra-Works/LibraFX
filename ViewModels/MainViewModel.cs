@@ -747,7 +747,7 @@ public partial class MainViewModel : ViewModelBase
 
     private static FilePickerFileType VfxBinaryFileType => new(LocalizationService.Shared.Get("Messages.BinaryFileType"))
     {
-        Patterns = ["*.lfxb"]
+        Patterns = ["*.lfxp"]
     };
 
     /// <summary>

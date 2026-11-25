@@ -6,20 +6,22 @@ using LiberaFx.Services.Compilation;
 
 namespace LiberaFx.Services;
 
-// Per-connection sender. Existing protocol-3 peers continue to receive LFXB.
+// Per-connection package preview sender.
 internal sealed class GodotPackagePreviewSender
 {
     private const int MaxPackageBytes = 16 * 1024 * 1024 - CompiledPreviewProtocol.HeaderSize;
     private const int MaxSignalRequests = 32;
     private PreviewPublication? _good;
     private PreviewPublication? _failed;
+    private PreviewPublication? _lastTransport;
     private long _lastSent;
     private long _signalSequence;
     private string? _signalDocument;
     private object? _signalGraph;
 
     public CompiledPreviewMessage? Prepare(PreviewPublication publication, bool force,
-        ResourceIdentityRenderContext? resources = null)
+        ResourceIdentityRenderContext? resources = null, bool supportsCurveDelta = false,
+        bool supportsParameterDelta = true)
     {
         var sameSignalStream = _signalDocument == publication.DocumentId &&
             ReferenceEquals(_signalGraph, publication.Graph);
@@ -75,11 +77,12 @@ internal sealed class GodotPackagePreviewSender
         {
             if (SkeletalPoseSchema.ContainsSource(publication.Graph))
                 throw new NotSupportedException("Godot package preview does not support SOURCE skeletal poses.");
-            if (!force && _good is { } prev &&
+            if (!force && supportsParameterDelta && _good is { } prev &&
                 prev.DocumentId == publication.DocumentId &&
+                _lastTransport is not null && CompiledPreviewProtocol.SamePlayback(_lastTransport, publication) &&
                 prev.IncludePreviewDebugDraw == publication.IncludePreviewDebugDraw &&
                 prev.Playback?.DebugDrawStopped == publication.Playback?.DebugDrawStopped &&
-                PackageParameterDelta.TryCreatePayload(prev.Graph, publication.Graph, publication.Sequence, out var deltaBytes))
+                PackageParameterDelta.TryCreatePayload(prev.Graph, publication.Graph, publication.Sequence, out var deltaBytes, supportsCurveDelta))
             {
                 return new(deltaBytes!, CompiledPreviewKind.Scene, publication);
             }
@@ -106,8 +109,11 @@ internal sealed class GodotPackagePreviewSender
 
     public void Sent(CompiledPreviewMessage message)
     {
-        if (message.Kind is CompiledPreviewKind.Program or CompiledPreviewKind.Playback)
+        if (message.Kind is CompiledPreviewKind.Program or CompiledPreviewKind.Playback or CompiledPreviewKind.Scene or CompiledPreviewKind.Control)
+        {
             _lastSent = message.Publication.Sequence;
+            _lastTransport = message.Publication;
+        }
         _signalSequence = message.Publication.SignalRequestSequence;
         if (message.Kind is CompiledPreviewKind.Program or CompiledPreviewKind.Scene) { _good = message.Publication; _failed = null; }
         else if (message.Kind == CompiledPreviewKind.CompileError) _failed = message.Publication;

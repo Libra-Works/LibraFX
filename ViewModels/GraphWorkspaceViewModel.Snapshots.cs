@@ -162,13 +162,24 @@ public sealed partial class GraphWorkspaceViewModel
         OnPropertyChanged(nameof(IsReadOnly));
         OnPropertyChanged(nameof(IsCpuParticleOverview));
         Breadcrumbs.Clear();
-        Breadcrumbs.Add(new GraphBreadcrumb(LocalizationService.Shared.Get("Messages.Top"), 0));
+        Breadcrumbs.Add(new GraphBreadcrumb(DocumentName, 0, Models.Appearance.EditorIcon.Document));
         var graph = _rootSnapshot;
         foreach (var id in _graphPath)
         {
             var node = graph.Nodes.First(item => item.Id == id);
-            Breadcrumbs.Add(new GraphBreadcrumb(node.Name, Breadcrumbs.Count));
+            var icon = node.Kind == GraphNodeKind.SpawnableGroup ? Models.Appearance.EditorIcon.Play :
+                CpuParticleSchema.HasChild(node.Kind) ? Models.Appearance.EditorIcon.Settings : Models.Appearance.EditorIcon.Group;
+            Breadcrumbs.Add(new GraphBreadcrumb(node.Name, Breadcrumbs.Count, icon));
             graph = node.ChildGraph!;
+        }
+        if (_navigationSpecializedNode is { } specializedId && Nodes.FirstOrDefault(node => node.Id == specializedId) is { } specialized)
+        {
+            var icon = specialized.IsGpuParticle ? Models.Appearance.EditorIcon.Settings : Models.Appearance.EditorIcon.Image;
+            Breadcrumbs.Add(new GraphBreadcrumb(specialized.DisplayName, _graphPath.Count + 1, icon, IsSpecialized: true));
+            if (_navigationKernel is { } kernel)
+            {
+                Breadcrumbs.Add(new GraphBreadcrumb(kernel, _graphPath.Count + 2, Models.Appearance.EditorIcon.SignalRuntime, IsKernel: true));
+            }
         }
         RefreshContainingSpawnable();
     }

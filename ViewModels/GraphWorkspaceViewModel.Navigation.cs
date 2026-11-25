@@ -6,6 +6,98 @@ namespace LiberaFx.ViewModels;
 
 public sealed partial class GraphWorkspaceViewModel
 {
+    private sealed record NavigationEntry(Guid[] Path, Guid? SpecializedNode, string? Kernel);
+    private readonly List<NavigationEntry> _navigationHistory = [new([], null, null)];
+    private int _navigationIndex;
+    private bool _restoringNavigation;
+    private Guid? _navigationSpecializedNode;
+    private string? _navigationKernel;
+    public bool CanNavigateBack => _navigationHistory.Take(_navigationIndex).Any(IsNavigationEntryValid);
+    public bool CanNavigateForward => _navigationHistory.Skip(_navigationIndex + 1).Any(IsNavigationEntryValid);
+    public event EventHandler<(Guid? Node, string? Kernel)>? SpecializedNavigationRequested;
+
+    private void RecordNavigation(Guid? specializedNode = null, string? kernel = null)
+    {
+        _navigationSpecializedNode = specializedNode;
+        _navigationKernel = kernel;
+        RefreshBreadcrumbs();
+        if (_restoringNavigation)
+        {
+            return;
+        }
+        var entry = new NavigationEntry(_graphPath.ToArray(), specializedNode, kernel);
+        var current = _navigationHistory[_navigationIndex];
+        if (current.Path.SequenceEqual(entry.Path) && current.SpecializedNode == entry.SpecializedNode && current.Kernel == entry.Kernel)
+        {
+            return;
+        }
+        if (_navigationIndex + 1 < _navigationHistory.Count)
+        {
+            _navigationHistory.RemoveRange(_navigationIndex + 1, _navigationHistory.Count - _navigationIndex - 1);
+        }
+        _navigationHistory.Add(entry);
+        _navigationIndex = _navigationHistory.Count - 1;
+        OnPropertyChanged(nameof(CanNavigateBack));
+        OnPropertyChanged(nameof(CanNavigateForward));
+    }
+
+    public void RecordSpecializedNavigation(Guid nodeId, string? kernel = null) => RecordNavigation(nodeId, kernel);
+    public void RecordGraphNavigation() => RecordNavigation();
+    public void NavigateBack() => NavigateHistory(-1);
+    public void NavigateForward() => NavigateHistory(1);
+
+    private bool IsNavigationEntryValid(NavigationEntry entry)
+    {
+        var graph = _rootSnapshot;
+        foreach (var id in entry.Path)
+        {
+            var child = graph.Nodes.FirstOrDefault(node => node.Id == id)?.ChildGraph;
+            if (child is null)
+            {
+                return false;
+            }
+            graph = child;
+        }
+        if (entry.SpecializedNode is not { } nodeId)
+        {
+            return true;
+        }
+        var node = graph.Nodes.FirstOrDefault(item => item.Id == nodeId);
+        return node is not null && (GpuParticleEditorService.IsGpu(node.Kind) || ProceduralResourceSchema.IsMetadata(node.Kind));
+    }
+
+    private void NavigateHistory(int direction)
+    {
+        var next = _navigationIndex + direction;
+        while (next >= 0 && next < _navigationHistory.Count)
+        {
+            var entry = _navigationHistory[next];
+            if (IsNavigationEntryValid(entry))
+            {
+                _restoringNavigation = true;
+                try
+                {
+                    NavigateToNode(entry.Path, Guid.Empty, frameSelection: false);
+                    if (!_graphPath.SequenceEqual(entry.Path))
+                    {
+                        return;
+                    }
+                    _navigationIndex = next;
+                    RecordNavigation(entry.SpecializedNode, entry.Kernel);
+                    SpecializedNavigationRequested?.Invoke(this, (entry.SpecializedNode, entry.Kernel));
+                }
+                finally
+                {
+                    _restoringNavigation = false;
+                    OnPropertyChanged(nameof(CanNavigateBack));
+                    OnPropertyChanged(nameof(CanNavigateForward));
+                }
+                return;
+            }
+            next += direction;
+        }
+    }
+
     public void ReportStatus(string status)
     {
         if (MessageLocalization.ErrorKey(status) is { } key)
@@ -63,6 +155,7 @@ public sealed partial class GraphWorkspaceViewModel
         RefreshBreadcrumbs();
         SetConnectionStatus("Messages.EditingNestedGraph");
         HierarchyChanged?.Invoke(this, CurrentHierarchyKey);
+        RecordNavigation();
         return true;
     }
 
@@ -82,6 +175,7 @@ public sealed partial class GraphWorkspaceViewModel
         RefreshBreadcrumbs();
         SetConnectionStatus("Messages.GraphLevelChanged");
         HierarchyChanged?.Invoke(this, CurrentHierarchyKey);
+        RecordNavigation();
     }
 
     public void NavigateToNode(IReadOnlyList<Guid> parentPath, Guid nodeId, bool frameSelection = true)
@@ -129,6 +223,7 @@ public sealed partial class GraphWorkspaceViewModel
             RefreshBreadcrumbs();
             SetConnectionStatus("Messages.GraphLevelChanged");
             HierarchyChanged?.Invoke(this, CurrentHierarchyKey);
+            RecordNavigation();
         }
         var target = Nodes.FirstOrDefault(node => node.Id == nodeId);
         if (target is not null)

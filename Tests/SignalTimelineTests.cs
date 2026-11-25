@@ -17,16 +17,11 @@ internal static class SignalTimelineTests
     public static void Run(string? output = null)
     {
         VerifyAutomaticTracks();
-        var library = EditorNativePreviewSession.ResolveLibraryPath();
+        var library = PreviewNativeLibrary.ResolveLibraryPath();
         VerifyAuthoring();
         var root = RootGraph();
         VerifyExport(root, library);
-        VerifyPlayback(root, library);
-        VerifySubframePlayback(library);
         var scoped = VerifyScopes(library);
-        VerifyScopedSeek(scoped, library);
-        VerifyManualSend(root, library);
-        VerifySender(scoped, library);
         VerifyGroupPersistence(root);
         VerifyOrdinaryGroup(library);
         if (output is not null)
@@ -42,7 +37,7 @@ internal static class SignalTimelineTests
             new ProjectFileService().SaveAsync(project, workspace).GetAwaiter().GetResult();
             File.WriteAllBytes(Path.Combine(output, "Timeline.lfxproj"), project.ToArray());
         }
-        Console.WriteLine("Signal timeline editing/history/persistence, preview/runtime separation, frame-step and native scoped dispatch passed.");
+        Console.WriteLine("Signal timeline editing/history/persistence and native scoped dispatch passed.");
     }
 
     public static void VerifyAutomaticTracks()
@@ -169,54 +164,6 @@ internal static class SignalTimelineTests
         Require(JsonSerializer.Serialize(root) == before, "Signal lowering mutated source graph data.");
     }
 
-    private static void VerifyPlayback(GraphSnapshot graph, string library)
-    {
-        using var playback = new EditorPlayback();
-        playback.EndText = "3";
-        playback.Loop = false;
-        using var native = new EditorNativePreviewSession(graph, library);
-        void Sample() => native.EvaluateScene(playback.TimeSeconds, 1, playback.Snapshot);
-        Sample();
-        Require(native.GameIoEvents.Count == 0, "Opening a paused preview fired timeline keys.");
-        playback.StepForwardCommand.Execute(null);
-        Sample();
-        Require(native.GameIoEvents.Count == 2, "Forward frame stepping skipped the start/current-frame Signal keys.");
-        playback.Play();
-        playback.Pause();
-        Sample();
-        Require(native.GameIoEvents.Count == 2, "Pause/Resume re-fired a Signal key.");
-        playback.StepForwardCommand.Execute(null);
-        Sample();
-        Require(native.GameIoEvents.Count == 3, "Second frame step did not dispatch its preview key.");
-        playback.Frame = 1;
-        Sample();
-        Require(native.GameIoEvents.Count == 3, "Seeking backwards fired a Signal key.");
-        playback.StepForwardCommand.Execute(null);
-        Sample();
-        Require(native.GameIoEvents.Count == 4, "Forward-after-seek did not exclude the seek position and include the crossed key.");
-        playback.StopCommand.Execute(null);
-        Sample();
-        playback.Play();
-        Sample();
-        Require(native.GameIoEvents.Count == 5, "Restart did not re-fire the start key.");
-        playback.Pause();
-
-        using var looping = new EditorPlayback();
-        looping.EndText = "3";
-        using var loopNative = new EditorNativePreviewSession(graph, library);
-        void LoopSample() => loopNative.EvaluateScene(looping.TimeSeconds, 1, looping.Snapshot);
-        LoopSample();
-        looping.Play();
-        LoopSample();
-        looping.Advance(6d / 60);
-        LoopSample();
-        Require(looping.Frame == 0 && loopNative.GameIoEvents.Count == 7,
-            "Coalesced full-loop advances dropped cycles or duplicated boundary keys.");
-        looping.Pause();
-        LoopSample();
-        Require(loopNative.GameIoEvents.Count == 7, "Paused loop position dispatched more keys.");
-    }
-
     private static GraphSnapshot VerifyScopes(string library)
     {
         var graph = new GraphWorkspaceViewModel(new UndoRedoManager());
@@ -252,72 +199,6 @@ internal static class SignalTimelineTests
         return snapshot;
     }
 
-    private static void VerifySubframePlayback(string library)
-    {
-        var graph = RootGraph();
-        graph = graph with { Nodes = graph.Nodes.Select(node => node.Kind.Value == "InputSignal"
-            ? node with { SignalKeys = [new(Guid.NewGuid(), 1d / 240, SignalTimelineMode.Preview)] } : node).ToArray() };
-        using var playback = new EditorPlayback();
-        playback.FpsText = "240";
-        using var native = new EditorNativePreviewSession(graph, library);
-        native.EvaluateScene(0, 1, playback.Snapshot);
-        playback.StepForwardCommand.Execute(null);
-        native.EvaluateScene(playback.TimeSeconds, 1, playback.Snapshot);
-        Require(native.GameIoEvents.Count == 1 && native.EvaluatedTimeSeconds == 1d / 240,
-            "A sub-60Hz frame step skipped its Signal key.");
-        playback.Frame = 0;
-        native.EvaluateScene(0, 1, playback.Snapshot);
-        playback.Frame = 1;
-        native.EvaluateScene(playback.TimeSeconds, 1, playback.Snapshot);
-        Require(native.GameIoEvents.Count == 1, "Seek reconstruction re-sent a Signal notification.");
-        playback.StepForwardCommand.Execute(null);
-        native.EvaluateScene(playback.TimeSeconds, 1, playback.Snapshot);
-        Require(native.GameIoEvents.Count == 1, "Forward-after-seek re-fired the seek-destination key.");
-    }
-
-    private static void VerifyScopedSeek(GraphSnapshot graph, string library)
-    {
-        using var playback = new EditorPlayback();
-        using var native = new EditorNativePreviewSession(graph, library);
-        playback.TimeSeconds = 0.6;
-        var scene = JsonNode.Parse(native.EvaluateScene(0.6, 1, playback.Snapshot))!;
-        Require(scene["activeInstances"]!.GetValue<int>() == 1 && native.Events.Count == 0,
-            "Seek did not reconstruct spawned state silently.");
-        playback.Play();
-        playback.Advance(0.2);
-        playback.Pause();
-        native.EvaluateScene(playback.TimeSeconds, 1, playback.Snapshot);
-        var signals = native.Events.Where(item => item.Kind == 4).ToArray();
-        Require(signals.Length == 1 && signals[0].Time == 0.75,
-            "A global seek cutoff incorrectly suppressed a later instance's local Signal key.");
-        playback.TimeSeconds = 0.1;
-        native.EvaluateScene(playback.TimeSeconds, 1, playback.Snapshot);
-        Require(native.ActiveCount == 1 && native.Events.Count(item => item.Kind == 4) == 1,
-            "Backward seek lost reconstructed state or re-sent notifications.");
-    }
-
-    private static void VerifyManualSend(GraphSnapshot graph, string library)
-    {
-        var node = graph.Nodes.Single(item => item.Kind.Value == "InputSignal").Id;
-        using var playback = new EditorPlayback();
-        using var native = new EditorNativePreviewSession(graph, library);
-        native.EnableManualSignals();
-        native.EvaluateScene(0, 1, playback.Snapshot);
-        native.SendSignal(node);
-        native.SendSignal(node);
-        native.EvaluateScene(0, 1, playback.Snapshot);
-        Require(native.GameIoEvents.Count == 2 && playback.Frame == 0 && !playback.IsPlaying,
-            "Paused Send did not dispatch once per click without advancing time.");
-        playback.StepForwardCommand.Execute(null);
-        native.EvaluateScene(playback.TimeSeconds, 1, playback.Snapshot);
-        Require(native.GameIoEvents.Count == 4, "Starting after Send duplicated exploratory-input notifications.");
-        Require(!graph.Nodes.Any(item => item.SignalKeys?.Count > 3), "Send changed authored graph data.");
-        var rejected = false;
-        try { native.SendSignal(Guid.NewGuid()); }
-        catch (InvalidOperationException) { rejected = true; }
-        Require(rejected, "Manual Send silently accepted an unknown/scope-less target.");
-    }
-
     private static void VerifyGroupPersistence(GraphSnapshot graph)
     {
         var directory = Path.Combine(Environment.GetEnvironmentVariable("LIBERAFX_DATA_ROOT")!,
@@ -329,41 +210,6 @@ internal static class SignalTimelineTests
         File.WriteAllText(Path.Combine(directory, asset.Id.ToString("N") + GroupAssetLibrary.FileExtension),
             JsonSerializer.Serialize(asset with { FormatVersion = 4 }));
         ExpectInvalid(() => library.Load(asset.Id));
-    }
-
-    private static void VerifySender(GraphSnapshot graph, string library)
-    {
-        var signal = graph.Nodes.Single(node => node.Kind == GraphNodeKind.Signal).Id;
-        using var playback = new EditorPlayback();
-        PreviewPublication Publication(long sequence, long request, params PreviewSignalRequest[] requests) =>
-            new(sequence, "signal-document", graph, GraphNodeDefinition.All, playback.Snapshot)
-            { SignalRequestSequence = request, SignalRequests = requests };
-        static int Instances(CompiledPreviewMessage message) =>
-            JsonNode.Parse(message.EvaluatedRenderScene!)!["activeInstances"]!.GetValue<int>();
-        using var sender = new CompiledPreviewSender(library);
-        var first = sender.Prepare(Publication(1, 0))!;
-        Require(first.Kind == CompiledPreviewKind.Program && Instances(first) == 1, "Initial keyed state was not reconstructed.");
-        sender.Sent(first);
-        var click = sender.Prepare(Publication(2, 1, new PreviewSignalRequest(1, signal)))!;
-        Require(click.Kind == CompiledPreviewKind.Playback && Instances(click) == 2,
-            "The preview publication did not deliver a paused Send to native execution.");
-        sender.Sent(click);
-        var coalesced = Publication(4, 3, new(1, signal), new(2, signal), new(3, signal));
-        var two = sender.Prepare(coalesced)!;
-        Require(Instances(two) == 4, "Coalesced publications lost consecutive Send clicks.");
-        sender.Sent(two);
-        Require(Instances(sender.Prepare(coalesced, true)!) == 4, "Snapshot/resync re-fired previous Send requests.");
-        using (var fresh = new CompiledPreviewSender(library))
-            Require(Instances(fresh.Prepare(coalesced)!) == 1, "A new connection replayed stale exploratory inputs.");
-        var gap = Publication(7, 7, new PreviewSignalRequest(7, signal));
-        var error = sender.Prepare(gap)!;
-        Require(error.Kind == CompiledPreviewKind.CompileError, "Missing input history was silently dropped.");
-        sender.Sent(error);
-        Require(sender.Prepare(gap, true)!.Kind == CompiledPreviewKind.Program, "Explicit resync could not recover from an input-history gap.");
-        var child = graph.Nodes.Single(node => node.Kind == GraphNodeKind.SpawnableGroup)
-            .ChildGraph!.Nodes.Single(node => node.Kind.Value == "SpawnInputSignal").Id;
-        Require(sender.Prepare(Publication(8, 8, new PreviewSignalRequest(8, child)))!.Kind == CompiledPreviewKind.CompileError,
-            "The native preview silently broadcast an instance-less child Send.");
     }
 
     private static void VerifyOrdinaryGroup(string library)

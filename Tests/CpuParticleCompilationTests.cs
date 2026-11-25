@@ -16,8 +16,8 @@ public static class CpuParticleCompilationTests
         var original = SpawnableGroupPackage.Compile(graph,
             options: new VfxCompileOptions { OptimizeCpuParticleKernels = false });
         var optimized = SpawnableGroupPackage.Compile(graph);
-        Require(original.CpuPrograms.Length - optimized.CpuPrograms.Length == 5 * 256,
-            "Distribution compilation must remove five lifetime-color intermediates before writing the CPU binary.");
+        Require(original.CpuPrograms.Length - optimized.CpuPrograms.Length == 5 * (256 + 8),
+            "Distribution compilation must remove five instructions and their v11 type records.");
         Require(original.ParentBytecode.SequenceEqual(optimized.ParentBytecode),
             "CPU kernel optimization must preserve the outer effect program.");
         Require(GraphSnapshot.ContentEquals(graph, saved), "Offline optimization must preserve the editable source graph.");
@@ -27,6 +27,15 @@ public static class CpuParticleCompilationTests
         var restored = SpawnableGroupPackageBinary.Deserialize(SpawnableGroupPackageBinary.Serialize(optimized));
         Require(restored.CpuPrograms.SequenceEqual(optimized.CpuPrograms),
             "Preoptimized CPU code must survive ordinary package serialization.");
+        Require(BinaryPrimitives.ReadUInt32LittleEndian(original.CpuPrograms) == 2,
+            "CPU payloads without an emitter mesh must use version 2.");
+        var mesh = SpawnableGroupPackage.Compile(LiberaFx.Services.ParticleSamples.Create("CpuMeshSurface"));
+        Require(BinaryPrimitives.ReadUInt32LittleEndian(mesh.CpuPrograms) == 2,
+            "CPU payloads with an emitter mesh must use version 2.");
+        var oldPayload = original.CpuPrograms.ToArray();
+        BinaryPrimitives.WriteUInt32LittleEndian(oldPayload, 1);
+        var oldPackage = SpawnableGroupPackageBinary.Serialize(original with { CpuPrograms = oldPayload });
+        Reject(() => CpuParticleBinaryOptimizer.OptimizePackage(oldPackage), "Legacy CPU payload optimization");
         var originalBytes = SpawnableGroupPackageBinary.Serialize(original);
         var savedBytes = originalBytes.ToArray();
         var rewritten = CpuParticleBinaryOptimizer.OptimizePackage(originalBytes);
@@ -56,9 +65,9 @@ public static class CpuParticleCompilationTests
         var saved = JsonSerializer.Deserialize<GraphSnapshot>(JsonSerializer.Serialize(graph))!;
         Require(GraphSnapshot.ContentEquals(graph, saved), "CPU stage snapshots must roundtrip with stable IDs.");
         var package = SpawnableGroupPackage.Compile(saved);
-        Require(package.Version == 12 && package.CpuPrograms.Length > 0, "CPU must produce executable numeric payload.");
+        Require(package.Version == SpawnableGroupPackage.FormatVersion && package.CpuPrograms.Length > 0, "CPU must produce executable numeric payload.");
         var bytes = SpawnableGroupPackageBinary.Serialize(package);
-        Require(BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(4)) == 4, "CPU requires explicit new envelope version.");
+        Require(BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(4)) == 5, "CPU must use the canonical package envelope.");
         var restored = SpawnableGroupPackageBinary.Deserialize(bytes);
         Require(restored.CpuPrograms.SequenceEqual(package.CpuPrograms), "CPU payload must survive package serialization.");
         using var scene = JsonDocument.Parse(restored.RootRenderConfiguration);
@@ -86,7 +95,7 @@ public static class CpuParticleCompilationTests
         }] };
         Reject(() => SpawnableGroupPackage.Compile(invalid), "Missing Update stage");
         var legacy = SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(new([Node("Float")], [])));
-        Require(BinaryPrimitives.ReadUInt16LittleEndian(legacy.AsSpan(4)) == 3, "Non-CPU package format must remain unchanged.");
+        Require(BinaryPrimitives.ReadUInt16LittleEndian(legacy.AsSpan(4)) == 5, "Non-CPU packages must use the canonical envelope.");
 
         var burst = Node("EmitterBurst", Parameter("count", "float", 4d));
         var trigger = Node("Signal");
@@ -313,9 +322,9 @@ public static class CpuParticleCompilationTests
             throw new ArgumentException("Supply an absolute NEW isolated temporary directory.");
         }
         Directory.CreateDirectory(directory);
-        File.WriteAllBytes(Path.Combine(directory, "cpu-emitter-matrix.lfxb"),
+        File.WriteAllBytes(Path.Combine(directory, "cpu-emitter-matrix.lfxp"),
             SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(MatrixFixture())));
-        File.WriteAllBytes(Path.Combine(directory, "cpu-particles.lfxb"),
+        File.WriteAllBytes(Path.Combine(directory, "cpu-particles.lfxp"),
             SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(Fixture())));
         var atlasSystem = Node("CpuParticle", Parameter("rate", "float", 0d), Parameter("burst", "int", 1)) with
         { ChildGraph = CpuParticleSchema.CreateChild(Definition("CpuParticle").Kind) };
@@ -327,7 +336,7 @@ public static class CpuParticleCompilationTests
                     Parameter("atlasColumns", "int", 2), Parameter("atlasRows", "int", 2), Parameter("atlasFps", "float", 4d)]
             }).ToArray()
         } };
-        File.WriteAllBytes(Path.Combine(directory, "cpu-flipbook.lfxb"),
+        File.WriteAllBytes(Path.Combine(directory, "cpu-flipbook.lfxp"),
             SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(new([atlasSystem], []))));
         var renderGraph = Fixture();
         var system = renderGraph.Nodes.Single(Cpu);
@@ -350,7 +359,7 @@ public static class CpuParticleCompilationTests
         {
             Nodes = renderGraph.Nodes.Select(node => node.Id == system.Id ? system : node).ToArray()
         };
-        File.WriteAllBytes(Path.Combine(directory, "cpu-particles-render.lfxb"),
+        File.WriteAllBytes(Path.Combine(directory, "cpu-particles-render.lfxp"),
             SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(renderGraph)));
     }
     private static bool Cpu(GraphNodeSnapshot node) => CpuParticleSchema.IsContainer(node.Kind);

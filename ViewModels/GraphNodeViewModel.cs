@@ -106,6 +106,14 @@ public sealed class GraphNodeViewModel : ObservableObject
         get
         {
             var ports = Definition.InputPorts ?? [];
+            if (Definition.Kind.Value == "Transform")
+            {
+                return ports.Select(port => port.Id == "parent" ? port with
+                {
+                    Name = LocalizationService.Shared.Get("TransformOrder.Parent"),
+                    ToolTip = LocalizationService.Shared.Get("TransformOrder.ParentHelp")
+                } : port).ToArray();
+            }
             if (IsPreviewDebugDraw) return ports.Select(port => port with { Name = LocalizationService.Shared.Get(
                 port.Id == "matrix" ? "DebugDraw.Matrix" : "DebugDraw.Visible") }).ToArray();
             if (!ProceduralResourceSchema.IsMetadata(Definition.Kind)) return ports;
@@ -327,7 +335,7 @@ public sealed class GraphNodeViewModel : ObservableObject
         OnPropertyChanged(nameof(OriginalNodeName));
         if (BaseDefinition.Kind.Value is "EffectAge" or "InstanceAge") OnPropertyChanged(nameof(OutputPorts));
         OnPropertyChanged(nameof(DisplayName));
-        if (IsPreviewDebugDraw || ProceduralResourceSchema.IsMetadata(Definition.Kind)) OnPropertyChanged(nameof(InputPorts));
+        if (IsPreviewDebugDraw || Definition.Kind.Value == "Transform" || ProceduralResourceSchema.IsMetadata(Definition.Kind)) OnPropertyChanged(nameof(InputPorts));
         OnPropertyChanged(nameof(Description));
         OnPropertyChanged(nameof(HeaderHelp));
         OnPropertyChanged(nameof(HeaderHelpToolTip));
@@ -576,6 +584,7 @@ public sealed class GraphNodeViewModel : ObservableObject
              definition.OutputPorts is not null && _definition.OutputPorts is not null && definition.OutputPorts.SequenceEqual(_definition.OutputPorts))) return;
         _definition = definition;
         OnPropertyChanged(nameof(Definition));
+        OnPropertyChanged(nameof(PortBrush));
         OnPropertyChanged(nameof(PortType));
         OnPropertyChanged(nameof(DisplayPortType));
         OnPropertyChanged(nameof(InputPorts));

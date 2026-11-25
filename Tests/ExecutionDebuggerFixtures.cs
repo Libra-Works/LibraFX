@@ -27,7 +27,8 @@ internal static class ExecutionDebuggerFixtures
         ]));
         if (program.BinaryVersion != 1) throw new InvalidDataException("Expected a legacy scalar debugger fixture.");
         Directory.CreateDirectory(directory);
-        File.WriteAllBytes(Path.Combine(directory, "DebugScalar.lfxb"), program.ToBinary());
+        File.WriteAllBytes(Path.Combine(directory, "DebugScalar.lfxp"),
+            SpawnableGroupPackageBinary.Serialize(new SpawnableGroupPackage(program.ToPackageBinary(), [])));
         WriteChildPackage(directory);
     }
 

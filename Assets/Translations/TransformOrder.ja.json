@@ -1,3 +1,5 @@
 {
-  "TransformOrder.Parameter": "合成順（行列の積・右から作用）"
+  "TransformOrder.Parameter": "合成順（行列の積・右から作用）",
+  "TransformOrder.Parent": "親",
+  "TransformOrder.ParentHelp": "省略可能な親行列。出力は 親 × ローカル、未接続の場合はローカル行列です。"
 }

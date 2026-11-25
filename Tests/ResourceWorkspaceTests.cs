@@ -69,7 +69,7 @@ public static class ResourceWorkspaceTests
             using var model = new ProjectResourcesViewModel(main);
             var entry = model.Entries.Single(resource => resource.Group?.Id == group.Id);
             Require(entry.Origin == projectName && !entry.PreviewOnly, "Group origin must name its project.");
-            model.Query = "glow";
+            model.Query = "Reusable glow";
             Require(model.Entries.Count == 1, "Group resources must be searchable.");
             model.SelectedEntry = model.Entries[0];
             Complete(model.PreviewTask);

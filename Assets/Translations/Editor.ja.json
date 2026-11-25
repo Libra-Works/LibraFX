@@ -1,4 +1,6 @@
 {
+  "Editor.NavigateBack": "戻る",
+  "Editor.NavigateForward": "進む",
   "Editor.Node.CpuParticleMeshPosition": "メッシュ表面の位置",
   "Editor.Node.CpuParticleMeshNormal": "メッシュ表面の法線",
   "Editor.Node.CpuParticleMeshUV": "メッシュ表面のUV",

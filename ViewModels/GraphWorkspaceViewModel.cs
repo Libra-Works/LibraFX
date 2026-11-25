@@ -5,6 +5,7 @@ using Avalonia;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using LiberaFx.Models.Commands;
+using LiberaFx.Models.Appearance;
 using LiberaFx.Models.Graph;
 using LiberaFx.Models.Resources;
 using LiberaFx.Services;
@@ -76,6 +77,13 @@ public sealed partial class GraphWorkspaceViewModel : ObservableObject
     private readonly Dictionary<string, CachedHierarchyState> _hierarchyCache = new(StringComparer.Ordinal);
     private GraphSnapshot _rootSnapshot = new([], []);
     private readonly List<Guid> _graphPath = [];
+    private string? _documentName;
+    public string DocumentName => _documentName ?? LocalizationService.Shared.Get("Messages.Untitled");
+    internal void SetDocumentName(string name)
+    {
+        _documentName = name;
+        RefreshBreadcrumbs();
+    }
     internal Dictionary<string, GraphCameraState> CameraStates { get; } = new(StringComparer.Ordinal);
     public string CurrentHierarchyKey => string.Join("/", _graphPath);
     public event EventHandler<string>? HierarchyChanging;
@@ -86,11 +94,13 @@ public sealed partial class GraphWorkspaceViewModel : ObservableObject
     public GraphItemCollection<GraphNodeViewModel> Nodes { get; } = [];
     public ObservableCollection<GraphNodeViewModel> CommentNodes { get; } = [];
     public ObservableCollection<GraphNodeViewModel> ForegroundNodes { get; } = [];
-    public ObservableCollection<GraphBreadcrumb> Breadcrumbs { get; } = [new(LocalizationService.Shared.Get("Messages.Top"), 0)];
+    public ObservableCollection<GraphBreadcrumb> Breadcrumbs { get; } = [new(LocalizationService.Shared.Get("Messages.Untitled"), 0, EditorIcon.Document)];
 
     public GraphItemCollection<GraphConnectionViewModel> Connections { get; } = [];
 
     public ObservableCollection<GraphConnectionViewModel> SelectedConnections { get; } = [];
+    public ObservableCollection<GraphConnectionViewModel> IncidentConnections { get; } = [];
+    public bool HasAnySelection => _selectedNodes.Count > 0 || SelectedConnections.Count > 0;
     public ObservableCollection<GraphProblemViewModel> TypeProblems { get; } = [];
     public bool HasTypeProblems => TypeProblems.Count > 0;
     public bool IsGraphEmpty => Nodes.Count == 0 && CommentNodes.Count == 0;
@@ -254,6 +264,8 @@ public sealed partial class GraphWorkspaceViewModel : ObservableObject
             _history.StateChanged += (_, _) =>
         {
             PublishGpuChanges();
+            OnPropertyChanged(nameof(CanNavigateBack));
+            OnPropertyChanged(nameof(CanNavigateForward));
             RefreshContainingSpawnable();
             RefreshInlineReadOnlyState();
         };
@@ -303,7 +315,7 @@ public sealed partial class GraphWorkspaceViewModel : ObservableObject
             nodeDefinitions.Changed += changed;
         }
         Nodes.CollectionChanged += OnNodesChanged;
-        DeleteSelectedNodeCommand = new RelayCommand(DeleteSelectedNode, () => HasSelection);
+        DeleteSelectedNodeCommand = new RelayCommand(DeleteSelectedNode, () => HasAnySelection);
         Connections.CollectionChanged += (_, _) =>
         {
             if (_restoringGraph) return;
@@ -481,7 +493,8 @@ public sealed partial class GraphWorkspaceViewModel : ObservableObject
 
 }
 
-public sealed record GraphBreadcrumb(string Name, int Depth)
+public sealed record GraphBreadcrumb(string Name, int Depth, EditorIcon Icon = EditorIcon.Group,
+    bool IsSpecialized = false, bool IsKernel = false)
 {
-    public bool HasSeparator => Depth > 0;
+    public bool HasSeparator => Depth > 0 || IsSpecialized || IsKernel;
 }

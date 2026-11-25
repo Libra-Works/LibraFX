@@ -112,24 +112,27 @@ public sealed partial class LiberaFxMcpTools
         await ChatMcpExecution.InvokeAsync(() =>
         {
             var graph = activeGraph.Graph;
-            if (graph.Breadcrumbs.Count < 2) throw new McpException("Already at the root graph.");
-            graph.NavigateToGraph(graph.Breadcrumbs.Count - 2);
+            if (graph.GraphPath.Count == 0)
+            {
+                throw new McpException("Already at the root graph.");
+            }
+            graph.NavigateToGraph(graph.GraphPath.Count - 1);
             return EncodeGraph(graph.CreateCurrentSnapshot()).ToJsonString(JsonOptions);
         });
 
     [McpServerTool(Name = "libera_graph_compile", ReadOnly = true, OpenWorld = false)]
-    [Description("Compile a numeric graph to VFX bytecode. Graphs containing Signal, lifecycle, Spawn boundaries, or Spawnable Group must use libera_graph_compile_spawnable.")]
+    [Description("Compile the current graph to an LFXP effect package.")]
     public static async Task<string> CompileGraph(ActiveGraphProvider activeGraph)
     {
         var snapshot = await ChatMcpExecution.InvokeAsync(() => activeGraph.Graph.CreateCurrentSnapshot());
         try
         {
-            var program = VfxProgram.Compile(snapshot);
+            var package = SpawnableGroupPackage.Compile(snapshot);
             return JsonSerializer.Serialize(new
             {
-                format = "LFXB", version = program.BinaryVersion, byteOrder = "little-endian",
-                gameIoPorts = program.GameIoPorts,
-                workBytes = program.WorkSizeBytes, bytecodeBase64 = Convert.ToBase64String(program.ToBinary())
+                format = "LFXP", version = package.Version, byteOrder = "little-endian",
+                gameIoPorts = package.GameIoPorts,
+                packageBase64 = Convert.ToBase64String(SpawnableGroupPackageBinary.Serialize(package))
             }, JsonOptions);
         }
         catch (InvalidDataException ex) { throw new McpException(ex.Message); }
@@ -162,7 +165,7 @@ public sealed partial class LiberaFxMcpTools
         });
 
     [McpServerTool(Name = "libera_graph_compile_spawnable", ReadOnly = true, OpenWorld = false)]
-    [Description("Compile Signal or Spawnable graphs to an immutable parent LFXB program and separate Spawnable template programs, per-pin CaptureAtSpawn/Live mappings, render configurations, GPU snapshots and executable GPU payloads. This also supports Signal graphs without Spawnable Groups. Signals connected to a Spawnable enqueue runtime instances, not editor graph copies. Engine adapters consume lifecycle events; no engine objects are created by this tool.")]
+    [Description("Compile Signal or Spawnable graphs to an LFXP package and inspect its templates, per-pin CaptureAtSpawn/Live mappings, render configurations, GPU snapshots and executable GPU payloads. This also supports Signal graphs without Spawnable Groups. Signals connected to a Spawnable enqueue runtime instances, not editor graph copies. Engine adapters consume lifecycle events; no engine objects are created by this tool.")]
     public static async Task<string> CompileSpawnable(ActiveGraphProvider activeGraph)
     {
         var snapshot = await ChatMcpExecution.InvokeAsync(() =>
@@ -173,13 +176,12 @@ public sealed partial class LiberaFxMcpTools
             var package = SpawnableGroupPackage.Compile(snapshot);
             return JsonSerializer.Serialize(new
             {
-                format = "LiberaFxSpawnablePackage",
+                format = "LFXP",
                 version = package.Version,
-                bytecodeFormat = "LFXB",
+                packageBase64 = Convert.ToBase64String(SpawnableGroupPackageBinary.Serialize(package)),
                 signalPassthroughTypeId = SpawnableGroupPackage.SignalPassthroughTypeId,
                 package.AutoDestroyWhenIdle,
                 gameIoPorts = package.GameIoPorts,
-                parentBytecodeBase64 = Convert.ToBase64String(package.ParentBytecode),
                 rootRenderConfigurationBase64 = Convert.ToBase64String(package.RootRenderConfiguration),
                 rootGpuProgramsBase64 = Convert.ToBase64String(package.RootGpuPrograms),
                 cpuProgramsBase64 = Convert.ToBase64String(package.CpuPrograms),
@@ -195,7 +197,6 @@ public sealed partial class LiberaFxMcpTools
                 {
                     template.ContainerId,
                     template.SignalTypeId,
-                    bytecodeBase64 = Convert.ToBase64String(template.Bytecode),
                     gpuProgramsBase64 = Convert.ToBase64String(template.GpuPrograms),
                     cpuProgramsBase64 = Convert.ToBase64String(template.CpuPrograms),
                     capturePolicy = template.Inputs.Any(input => input.IsLive) ? "PerPin" : "CaptureAtSpawn",
@@ -363,6 +364,54 @@ public sealed partial class LiberaFxMcpTools
             var connection = graph.Connections.Last();
             return JsonSerializer.Serialize(new GraphConnectionSnapshot(source.Id, target.Id,
                 connection.TargetPortId, connection.SourcePortId), JsonOptions);
+        });
+
+    [McpServerTool(Name = "libera_graph_insert_reroute", Destructive = false, OpenWorld = false)]
+    [Description("Insert a reroute on an existing exact connection as one undoable edit. Read port IDs with libera_graph_read; null denotes a legacy unnamed port.")]
+    public static async Task<string> InsertReroute(ActiveGraphProvider activeGraph,
+        [Description("Source node GUID.")] string sourceId,
+        [Description("Destination node GUID.")] string targetId,
+        [Description("Horizontal graph position.")] double x,
+        [Description("Vertical graph position.")] double y,
+        [Description("Exact source port ID, or null for an unnamed port.")] string? sourcePortId = null,
+        [Description("Exact destination port ID, or null for an unnamed port.")] string? targetPortId = null) =>
+        await ChatMcpExecution.InvokeAsync(() =>
+        {
+            ValidatePosition(x, y);
+            var graph = activeGraph.Graph;
+            var source = FindNode(graph, sourceId);
+            var target = FindNode(graph, targetId);
+            var connection = graph.Connections.SingleOrDefault(edge => edge.Source == source && edge.Target == target &&
+                edge.SourcePortId == sourcePortId && edge.TargetPortId == targetPortId);
+            if (connection is null)
+            {
+                throw new McpException("The specified connection does not exist; read the graph for exact port IDs.");
+            }
+            var reroute = graph.InsertRerouteOnConnection(connection, x, y);
+            if (reroute is null)
+            {
+                throw new McpException("The reroute could not be inserted in this graph.");
+            }
+            return SerializeNode(graph, reroute.Id);
+        });
+
+    [McpServerTool(Name = "libera_graph_remove_reroute", OpenWorld = false)]
+    [Description("Remove a connected reroute and reconnect its upstream source to its destinations in one undoable edit.")]
+    public static async Task<string> RemoveReroute(ActiveGraphProvider activeGraph,
+        [Description("Reroute node GUID in the current graph.")] string nodeId) =>
+        await ChatMcpExecution.InvokeAsync(() =>
+        {
+            var graph = activeGraph.Graph;
+            var node = FindNode(graph, nodeId);
+            try
+            {
+                graph.RemoveRerouteAndReconnect(node);
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or InvalidDataException or ArgumentException)
+            {
+                throw new McpException(ex.Message);
+            }
+            return JsonSerializer.Serialize(new { removedNodeId = node.Id }, JsonOptions);
         });
 
     [McpServerTool(Name = "libera_graph_rename_node", OpenWorld = false)]
@@ -603,6 +652,15 @@ public sealed partial class LiberaFxMcpTools
             throw new McpException("Node coordinates must be finite numbers.");
     }
 
-    private static string SerializeNode(GraphWorkspaceViewModel graph, Guid id) =>
-        EncodeNode(graph.CreateCurrentSnapshot().Nodes.Single(node => node.Id == id)).ToJsonString(JsonOptions);
+    private static string SerializeNode(GraphWorkspaceViewModel graph, Guid id)
+    {
+        var snapshot = graph.CreateCurrentSnapshot();
+        var specification = snapshot.Nodes.Single(node => node.Id == id);
+        var node = EncodeNode(specification);
+        if (specification.Kind.Value == "Reroute")
+        {
+            AddRerouteType(specification, node, GraphPolymorphism.Resolve(snapshot));
+        }
+        return node.ToJsonString(JsonOptions);
+    }
 }

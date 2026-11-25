@@ -79,8 +79,8 @@ internal static class ResourceIdentityExportTests
             Parameters = [new("assetPath", "string", JsonSerializer.SerializeToElement("/Game/Old/Old.Old"))]
         }], []), map, target, probe), "Legacy path cannot silently become portable");
 
-        var mappedLfxb = ResourceIdentityExport.CompileMappedBinary(loaded, map, target, probe);
-        var pkg = LiberaFx.Services.Compilation.SpawnableGroupPackageBinary.Deserialize(mappedLfxb);
+        var mappedLfxp = ResourceIdentityExport.CompileMappedBinary(loaded, map, target, probe);
+        var pkg = LiberaFx.Services.Compilation.SpawnableGroupPackageBinary.Deserialize(mappedLfxp);
         Require(pkg.ParentBytecode.Length > 0 &&
                 System.Text.Encoding.UTF8.GetString(pkg.RootRenderConfiguration).Contains("/Game/New/New.New", StringComparison.Ordinal),
             "CompileMappedBinary must emit a playable package with resolved engine resource paths.");
@@ -91,8 +91,8 @@ internal static class ResourceIdentityExportTests
             [new(godotProject, id, "model", godotBinding)], [], [], []);
         var godotProbe = new ResourceIdentitySnapshotProbe(new(1, godotProject, true,
             [new(godotBinding, ResourceResolutionStatus.Resolved, "model")], []));
-        var godotLfxb = ResourceIdentityExport.CompileMappedBinary(loaded, godotMap, godotProject, godotProbe);
-        var godotPkg = LiberaFx.Services.Compilation.SpawnableGroupPackageBinary.Deserialize(godotLfxb);
+        var godotLfxp = ResourceIdentityExport.CompileMappedBinary(loaded, godotMap, godotProject, godotProbe);
+        var godotPkg = LiberaFx.Services.Compilation.SpawnableGroupPackageBinary.Deserialize(godotLfxp);
         Require(System.Text.Encoding.UTF8.GetString(godotPkg.RootRenderConfiguration).Contains("res://models/cube.mesh", StringComparison.Ordinal),
             "Godot CompileMappedBinary must embed resolved res:// paths.");
 
@@ -105,7 +105,7 @@ internal static class ResourceIdentityExportTests
         Require(EngineAssetFolder.Parent("res://models") == "res://", "Godot root parent");
         Require(EngineAssetFolder.Normalize("Packages/works.libra.liberafx/") == "Packages/works.libra.liberafx", "Unity package folder normalization");
 
-        VerifyAtomicStorageWrite(godotLfxb);
+        VerifyAtomicStorageWrite(godotLfxp);
     }
 
     private static void VerifyAtomicStorageWrite(byte[] payload)
@@ -114,7 +114,7 @@ internal static class ResourceIdentityExportTests
         Directory.CreateDirectory(dir);
         try
         {
-            var dest = Path.Combine(dir, "effect.lfxb");
+            var dest = Path.Combine(dir, "effect.lfxp");
             File.WriteAllBytes(dest, [1, 2, 3, 4]);
             LiberaFx.ViewModels.MainViewModel.WriteLocalFileAtomicallyAsync(dest, payload).GetAwaiter().GetResult();
             Require(File.ReadAllBytes(dest).SequenceEqual(payload), "Atomic storage write did not replace target bytes.");

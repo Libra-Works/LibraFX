@@ -8,6 +8,13 @@ namespace LiberaFx.ViewModels;
 
 public sealed class GraphConnectionViewModel : ObservableObject
 {
+    private bool _isSelected;
+    public bool IsSelected
+    {
+        get => _isSelected;
+        internal set => SetProperty(ref _isSelected, value);
+    }
+
     public GraphNodeViewModel Source { get; }
 
     public GraphNodeViewModel Target { get; }

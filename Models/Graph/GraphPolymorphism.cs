@@ -132,10 +132,58 @@ public static class GraphPolymorphism
                 item.ChildGraph), item.ChildGraph));
         var incoming = graph.Connections.ToLookup(edge => edge.TargetNodeId);
         var outgoing = graph.Connections.ToLookup(edge => edge.SourceNodeId);
+        // An unconnected reroute inherits the first concrete endpoint in its chain.
+        // Upstream takes precedence so mismatched downstream ports remain diagnosable.
+        (GraphPortCategory Category, string Type)? RerouteEndpoint(Guid id, bool upstream)
+        {
+            var visited = new HashSet<Guid> { id };
+            var pending = new Queue<Guid>();
+            pending.Enqueue(id);
+            while (pending.TryDequeue(out var current))
+            {
+                foreach (var edge in upstream ? incoming[current] : outgoing[current])
+                {
+                    var other = upstream ? edge.SourceNodeId : edge.TargetNodeId;
+                    if (!visited.Add(other))
+                    {
+                        continue;
+                    }
+                    if (nodes[other].Kind.Value == "Reroute")
+                    {
+                        pending.Enqueue(other);
+                        continue;
+                    }
+                    var definition = result[other];
+                    var type = upstream ? definition.GetOutputPortType(edge.SourcePortId) :
+                        definition.GetInputPortType(edge.TargetPortId);
+                    if (type is not null)
+                    {
+                        var category = upstream ? definition.GetOutputPortCategory(edge.SourcePortId) :
+                            definition.GetInputPortCategory(edge.TargetPortId);
+                        return (category, type);
+                    }
+                }
+            }
+            return null;
+        }
         var degree = graph.Nodes.ToDictionary(node => node.Id, node => incoming[node.Id].Count());
         var queue = new Queue<GraphNodeSnapshot>(graph.Nodes.Where(node => degree[node.Id] == 0));
         while (queue.TryDequeue(out var node))
         {
+            if (node.Kind.Value == "Reroute" &&
+                (RerouteEndpoint(node.Id, true) ?? RerouteEndpoint(node.Id, false)) is { } endpoint)
+            {
+                var basis = result[node.Id];
+                result[node.Id] = basis with
+                {
+                    PortType = endpoint.Type,
+                    PortCategory = endpoint.Category,
+                    InputPorts = basis.InputPorts?.Select(port => port with
+                        { PortType = endpoint.Type, Category = endpoint.Category }).ToArray(),
+                    OutputPorts = basis.OutputPorts?.Select(port => port with
+                        { PortType = endpoint.Type, Category = endpoint.Category }).ToArray()
+                };
+            }
             if (node.IsPolymorphic && TryFamily(node.Kind, out var family))
             {
                 var shaped = incoming[node.Id]

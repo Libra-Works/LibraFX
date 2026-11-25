@@ -13,6 +13,7 @@ internal static class MatrixNodeTests
     {
         VerifyAuthoring();
         VerifyLowering(fixtureDirectory);
+        VerifyParentInput(fixtureDirectory);
         VerifyDefaultsAndFailures(fixtureDirectory);
         VerifyPointOperations(fixtureDirectory);
         VerifyTransformOrders(fixtureDirectory);
@@ -167,7 +168,7 @@ internal static class MatrixNodeTests
         var renderGraph = workspace.CreateSnapshot();
         var fixture = Path.Combine(directory, "point-operations-unreal");
         Directory.CreateDirectory(fixture);
-        File.WriteAllBytes(Path.Combine(fixture, "program.lfxb"), VfxProgram.Compile(renderGraph).ToBinary());
+        File.WriteAllBytes(Path.Combine(fixture, "program.lfxp"), EffectBinary.Compile(renderGraph));
         File.WriteAllBytes(Path.Combine(fixture, "render-config.json"), RenderProgramBindings.CreateScene(renderGraph, 1));
         File.WriteAllText(Path.Combine(fixture, "expected.json"), JsonSerializer.Serialize(new
         {
@@ -183,10 +184,10 @@ internal static class MatrixNodeTests
     {
         if (directory is null) return;
         var program = VfxProgram.Compile(graph);
-        File.WriteAllBytes(Path.Combine(directory, "solar-system-matrix.lfxb"), program.ToBinary());
+        File.WriteAllBytes(Path.Combine(directory, "solar-system-matrix.lfxp"), EffectBinary.Compile(graph));
         var nativeDirectory = Path.Combine(directory, "solar-system-matrix");
         Directory.CreateDirectory(nativeDirectory);
-        File.WriteAllBytes(Path.Combine(nativeDirectory, "program.lfxb"), program.ToBinary());
+        File.WriteAllBytes(Path.Combine(nativeDirectory, "program.lfxp"), EffectBinary.Compile(graph));
         File.WriteAllBytes(Path.Combine(nativeDirectory, "render-config.json"), RenderProgramBindings.CreateScene(graph, 1));
         var frames = new List<object>();
         using var writer = new StreamWriter(Path.Combine(directory, "solar-system-matrix.checks"));
@@ -216,9 +217,9 @@ internal static class MatrixNodeTests
             void Position(string name, double[] value)
             {
                 var node = graph.Nodes.Single(item => item.Name == $"{name} draw transform");
-                var index = program.TypedInstructions.ToList().FindIndex(item => item.NodeId == node.Id);
-                Require(index >= 0, "The renderer's transformed position must exist in native bytecode.");
-                writer.WriteLine($"{seconds.ToString("R", CultureInfo.InvariantCulture)} {index} 3 " +
+                Require(program.TypedInstructions.Any(item => item.NodeId == node.Id),
+                    "The renderer's transformed position must exist in native bytecode.");
+                writer.WriteLine($"{seconds.ToString("R", CultureInfo.InvariantCulture)} {node.Id:N} 3 " +
                     string.Join(" ", value.Select(lane => lane.ToString("R", CultureInfo.InvariantCulture))));
                 var draw = graph.Nodes.Single(item => item.Name == $"{name} mesh");
                 var speed = name switch
@@ -292,6 +293,105 @@ internal static class MatrixNodeTests
         Require(workspace.History.Undo() && workspace.Nodes.Count == 3 &&
                 workspace.History.Redo() && workspace.Nodes.Count == 5,
             "A copied Matrix chain must paste and undo/redo as one history operation.");
+    }
+
+    private static void VerifyParentInput(string? directory)
+    {
+        var parent = Node("Transform", "parent", ("position", "vector3", new[] { 10d, 20d, 30d }),
+            ("rotation", "vector3", new[] { 0d, 0d, 90d }), ("scale", "vector3", new[] { 2d, 3d, 4d }));
+        var local = Node("Transform", "local", ("position", "vector3", new[] { 3d, 1d, -2d }));
+        var child = local with { Id = Guid.NewGuid(), Name = "child" };
+        var mul = Node("MatrixMultiply", "existing composition");
+        var graph = new GraphSnapshot([parent, local, child, mul],
+        [
+            new(parent.Id, child.Id, "parent", "value"),
+            new(parent.Id, mul.Id, "parent", "value"), new(local.Id, mul.Id, "local", "value")
+        ]);
+        GraphValidator.Validate(graph);
+        var lowered = GraphPolymorphism.LowerWithOutputs(graph);
+        var nodes = lowered.Graph.Nodes.ToDictionary(item => item.Id);
+        var edges = lowered.Graph.Connections.ToLookup(item => item.TargetNodeId);
+        string Expression(GraphRuntimeOutput output)
+        {
+            var node = nodes[output.NodeId];
+            var parameters = string.Join(";", (node.Parameters ?? []).Select(item => $"{item.Id}:{item.Type}:{item.Value}"));
+            var inputs = string.Join(";", edges[node.Id].OrderBy(item => item.TargetPortId)
+                .Select(item => $"{item.TargetPortId}={Expression(new(item.SourceNodeId, item.SourcePortId))}"));
+            return $"{node.Kind}:{output.PortId}:{parameters}({inputs})";
+        }
+        Require(lowered.Outputs[(child.Id, "value")].Select(Expression).SequenceEqual(
+            lowered.Outputs[(mul.Id, "value")].Select(Expression)),
+            "Parent input and explicit MatrixMultiply must lower to the identical ordered operations and operands.");
+        var noParent = graph with { Connections = graph.Connections.Where(edge => edge.TargetNodeId != child.Id).ToArray() };
+        var plain = GraphPolymorphism.LowerWithOutputs(noParent);
+        Require(plain.Outputs[(child.Id, "value")].All(output => nodes.ContainsKey(output.NodeId)) &&
+            plain.Outputs[(child.Id, "value")].Select(output => plain.Graph.Nodes.Single(node => node.Id == output.NodeId).Kind.Value)
+                .All(kind => kind.StartsWith("MatrixRuntimeTransformRow", StringComparison.Ordinal)),
+            "Disconnected Parent must preserve the original direct transform rows without multiplying identity.");
+        _ = VfxProgram.Compile(graph);
+        var group = Node("GraphGroup", "nested parent") with { ChildGraph = graph };
+        _ = VfxProgram.Compile(new GraphSnapshot([group], []));
+        var cpu = LiberaFx.Tests.CpuParticleCompilationTests.MatrixFixture();
+        var cpuTransform = cpu.Nodes.Single(item => item.Kind.Value == "Transform");
+        cpu = cpu with { Nodes = [.. cpu.Nodes, parent],
+            Connections = [.. cpu.Connections, new(parent.Id, cpuTransform.Id, "parent", "value")] };
+        var cpuPackage = SpawnableGroupPackage.Compile(cpu);
+        Require(cpuPackage.CpuPrograms.Length > 0, "Parented Transform must compile for CPU particles.");
+
+        var gpuWorkspace = new GraphWorkspaceViewModel(new UndoRedoManager());
+        var gpu = GpuParticleEditorService.Create(gpuWorkspace);
+        var gpuGraph = gpuWorkspace.CreateSnapshot() with
+        {
+            Nodes = [.. gpuWorkspace.CreateSnapshot().Nodes, parent, child],
+            Connections = [new(parent.Id, child.Id, "parent", "value"),
+                new(child.Id, gpu.Id, "drawMatrix", "value"), new(child.Id, gpu.Id, "emitterMatrix", "value")]
+        };
+        using var gpuScene = JsonDocument.Parse(RenderProgramBindings.CreateScene(gpuGraph, 1));
+        Require(gpuScene.RootElement.GetProperty("gpuDrawTransforms")[0].GetProperty("rowNodeIds").GetArrayLength() == 4 &&
+            gpuScene.RootElement.GetProperty("gpuEmitterTransforms")[0].GetProperty("rowNodeIds").GetArrayLength() == 4,
+            "Parented Transform must retain all GPU draw and emitter matrix rows.");
+        _ = SpawnableGroupPackage.Compile(gpuGraph);
+
+        var procedural = ProceduralSamples.Create("Slash");
+        var draw = procedural.Nodes.Single(item => item.Kind.Value == "ModelDraw");
+        var decompose = Node("DecomposeTransform", "procedural placement");
+        procedural = procedural with { Nodes = [.. procedural.Nodes, parent, child, decompose],
+            Connections = [.. procedural.Connections, new(parent.Id, child.Id, "parent", "value"),
+                new(child.Id, decompose.Id, "matrix", "value"), new(decompose.Id, draw.Id, "position", "position")] };
+        _ = SpawnableGroupPackage.Compile(procedural);
+        var expected = new[] { 0d, -3, 0, 7, 2, 0, 0, 26, 0, 0, 4, 22, 0, 0, 0, 1 };
+        Export(directory, "matrix-parent", graph, [(child.Id, "value", expected), (mul.Id, "value", expected)]);
+
+        var workspace = new GraphWorkspaceViewModel(new UndoRedoManager());
+        var a = workspace.CreateNode(new("Transform"));
+        var b = workspace.CreateNode(new("Transform"));
+        var localization = LocalizationService.Shared;
+        var previousLanguage = localization.SelectedLanguage;
+        try
+        {
+            foreach (var language in new[] { "en", "ja" })
+            {
+                localization.SelectedLanguage = localization.Languages.Single(item => item.Id == language);
+                var port = b.InputPorts.Single(item => item.Id == "parent");
+                Require(port.Name == localization.Get("TransformOrder.Parent") &&
+                    port.ToolTip == localization.Get("TransformOrder.ParentHelp"), "Parent label and tooltip must be localized.");
+            }
+        }
+        finally
+        {
+            localization.SelectedLanguage = previousLanguage;
+        }
+        Require(workspace.TryConnectNodes(a, b, out _, "parent", "value"), "Parent Matrix pin must connect.");
+        Require(workspace.History.Undo() && workspace.Connections.Count == 0 &&
+            workspace.History.Redo() && workspace.Connections.Count == 1, "Parent connection must undo and redo.");
+        using var stream = new MemoryStream();
+        new ProjectFileService().SaveAsync(stream, workspace).GetAwaiter().GetResult();
+        stream.Position = 0;
+        Require(GraphSnapshot.ContentEquals(workspace.CreateSnapshot(), ProjectDocumentReader.LoadAsync(stream).GetAwaiter().GetResult().Graph),
+            "Parent connection must persist.");
+        workspace.SetSelection([workspace.GetNode(a.Id), workspace.GetNode(b.Id)]);
+        workspace.PasteSnapshot(workspace.CreateSelectionSnapshot(), 500, 300);
+        Require(workspace.CreateSelectionSnapshot().Connections.Single().TargetPortId == "parent", "Parent pin must survive copy/paste.");
     }
 
     private static void VerifyLowering(string? directory)
@@ -389,18 +489,16 @@ internal static class MatrixNodeTests
         if (directory is null) return;
         Directory.CreateDirectory(directory);
         var lowered = GraphPolymorphism.LowerWithOutputs(graph);
-        var program = VfxProgram.Compile(graph);
-        File.WriteAllBytes(Path.Combine(directory, name + ".lfxb"), program.ToBinary());
+        _ = VfxProgram.Compile(graph);
+        File.WriteAllBytes(Path.Combine(directory, name + ".lfxp"), EffectBinary.Compile(graph));
         using var writer = new StreamWriter(Path.Combine(directory, name + ".checks"));
         foreach (var (node, port, expected) in checks)
         {
             var bindings = lowered.Outputs[(node, port)];
             for (var row = 0; row < bindings.Count; row++)
             {
-                var index = program.TypedInstructions.ToList().FindIndex(item => item.NodeId == bindings[row].NodeId);
-                Require(index >= 0, "Expected runtime binding must exist.");
                 var values = bindings.Count == 4 ? expected.Skip(row * 4).Take(4).ToArray() : expected;
-                writer.WriteLine($"0 {index} {values.Length} {string.Join(" ", values.Select(value => value.ToString("R", CultureInfo.InvariantCulture)))}");
+                writer.WriteLine($"0 {bindings[row].NodeId:N} {values.Length} {string.Join(" ", values.Select(value => value.ToString("R", CultureInfo.InvariantCulture)))}");
             }
         }
     }

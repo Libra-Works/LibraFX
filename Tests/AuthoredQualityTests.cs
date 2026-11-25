@@ -52,7 +52,6 @@ internal static class AuthoredQualityTests
             ProjectDocumentReader.LoadAsync(stream).GetAwaiter().GetResult().Graph))
             throw new Exception("Quality/value Signals did not survive persistence.");
         var package = SpawnableGroupPackage.Compile(snapshot);
-        File.WriteAllBytes(Path.Combine(directory, "AuthoredQuality.lfxb"), package.ParentBytecode);
         File.WriteAllBytes(Path.Combine(directory, "AuthoredQuality.lfxp"),
             SpawnableGroupPackageBinary.Serialize(package));
         File.WriteAllBytes(Path.Combine(directory, "AuthoredQuality.ids"),

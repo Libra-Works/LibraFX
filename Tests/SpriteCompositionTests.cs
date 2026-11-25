@@ -89,7 +89,7 @@ internal static class SpriteCompositionTests
 
         if (fixtureDirectory is null) return;
         Directory.CreateDirectory(fixtureDirectory);
-        File.WriteAllBytes(Path.Combine(fixtureDirectory, "program.lfxb"), directProgram.ToBinary());
+        File.WriteAllBytes(Path.Combine(fixtureDirectory, "program.lfxp"), EffectBinary.Compile(restored));
         File.WriteAllBytes(Path.Combine(fixtureDirectory, "composition.lfxp"), packageBytes);
         File.WriteAllBytes(Path.Combine(fixtureDirectory, "composition.lfxproj"), stream.ToArray());
         File.WriteAllBytes(Path.Combine(fixtureDirectory, "render-config.json"), RenderProgramBindings.CreateScene(restored, 1));

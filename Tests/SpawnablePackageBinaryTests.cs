@@ -10,7 +10,7 @@ using LibraGpu.Core;
 
 internal static class SpawnablePackageBinaryTests
 {
-    private static readonly byte[] EmptyGpuPrograms = "{\"version\":1,\"programs\":[]}"u8.ToArray();
+    private static readonly byte[] EmptyGpuPrograms = "{\"version\":4,\"programs\":[]}"u8.ToArray();
 
     public static void Run(string outputPath)
     {
@@ -44,23 +44,35 @@ internal static class SpawnablePackageBinaryTests
         var godotGpuMatrix = CreateGpuSpawnableFixture(includeDrawMatrix: true);
         File.WriteAllBytes(Path.ChangeExtension(outputPath, ".godot-gpu-matrix.lfxp"), Verify(godotGpuMatrix.Package));
         File.WriteAllBytes(Path.ChangeExtension(outputPath, ".template-gameio.lfxp"), CreateTemplateGameIoFixture());
-        Console.WriteLine($"Portable Spawnable package v3 executable GPU payloads and v1/v2 compatibility passed ({binary.Length} bytes).");
+        Console.WriteLine($"Canonical Spawnable package and v1/v2 rejection passed ({binary.Length} bytes).");
     }
 
     public static byte[] Verify(SpawnableGroupPackage package)
     {
         var binary = SpawnableGroupPackageBinary.Serialize(package);
-        var expectedContainerVersion = package.Version switch { 11 => 3, 12 => 4, 13 => 5, _ => 0 };
+        const int expectedContainerVersion = 5;
         Require(binary.AsSpan(0, 4).SequenceEqual("LFXP"u8) &&
             BinaryPrimitives.ReadUInt16LittleEndian(binary.AsSpan(4)) == expectedContainerVersion &&
             BinaryPrimitives.ReadUInt32LittleEndian(binary.AsSpan(16)) == package.Version,
             "Current writer must emit the package's matching LFXP container/package version.");
         using (var emptyRootPrograms = JsonDocument.Parse(package.RootGpuPrograms.Length == 0
                    ? EmptyGpuPrograms : package.RootGpuPrograms))
-            Require(emptyRootPrograms.RootElement.GetProperty("version").GetInt32() == 1 &&
+            Require(emptyRootPrograms.RootElement.GetProperty("version").GetInt32() == 4 &&
                 emptyRootPrograms.RootElement.GetProperty("programs").ValueKind == JsonValueKind.Array,
                 "Current package root executable GPU payload must use the versioned schema.");
         var decoded = SpawnableGroupPackageBinary.Deserialize(binary);
+        Require(decoded.ParentBytecode.SequenceEqual(package.ParentBytecode), "Round-trip parent bytecode changed.");
+        Require(decoded.RootRenderConfiguration.SequenceEqual(package.RootRenderConfiguration), "Round-trip root render configuration changed.");
+        Require(decoded.RootGpuPrograms.SequenceEqual(EffectiveGpuPrograms(package.RootGpuPrograms)), "Round-trip root GPU programs changed.");
+        Require(JsonSerializer.SerializeToUtf8Bytes(decoded.RootGpuContainers).SequenceEqual(JsonSerializer.SerializeToUtf8Bytes(package.RootGpuContainers)), "Round-trip root GPU containers changed.");
+        Require(decoded.Templates.Count == package.Templates.Count, "Round-trip template count changed.");
+        foreach (var pair in decoded.Templates.Zip(package.Templates))
+        {
+            Require(pair.First.Bytecode.SequenceEqual(pair.Second.Bytecode), "Round-trip template bytecode changed.");
+            Require(pair.First.RenderConfiguration.SequenceEqual(pair.Second.RenderConfiguration), "Round-trip template render configuration changed.");
+            Require(pair.First.GpuPrograms.SequenceEqual(EffectiveGpuPrograms(pair.Second.GpuPrograms)), "Round-trip template GPU programs changed.");
+            Require(pair.First.CpuPrograms.SequenceEqual(pair.Second.CpuPrograms), "Round-trip template CPU programs changed.");
+        }
         Require(decoded.ParentBytecode.SequenceEqual(package.ParentBytecode) &&
             decoded.RootRenderConfiguration.SequenceEqual(package.RootRenderConfiguration) &&
             decoded.RootGpuPrograms.SequenceEqual(EffectiveGpuPrograms(package.RootGpuPrograms)) &&
@@ -128,12 +140,7 @@ internal static class SpawnablePackageBinaryTests
         BinaryPrimitives.WriteUInt16LittleEndian(legacy.AsSpan(4), 1);
         BinaryPrimitives.WriteUInt64LittleEndian(legacy.AsSpan(8), (ulong)legacy.Length);
         BinaryPrimitives.WriteUInt32LittleEndian(legacy.AsSpan(16), 9);
-        var decoded = SpawnableGroupPackageBinary.Deserialize(legacy);
-        Require(decoded.ParentBytecode.SequenceEqual(package.ParentBytecode) &&
-            decoded.Templates.Count == package.Templates.Count &&
-            decoded.RootRenderConfiguration.Length == 0 && decoded.RootGpuContainers.Count == 0 &&
-            decoded.RootGpuPrograms.Length == 0 && decoded.Templates.All(template => template.GpuPrograms.Length == 0),
-            "Legacy v1 LFXP data changed or invented root/program payloads.");
+        Reject(() => SpawnableGroupPackageBinary.Deserialize(legacy), "legacy v1 package");
         var mixed = legacy.ToArray();
         BinaryPrimitives.WriteUInt32LittleEndian(mixed.AsSpan(16), SpawnableGroupPackage.FormatVersion);
         Reject(() => SpawnableGroupPackageBinary.Deserialize(mixed), "mismatched container/package versions");
@@ -148,13 +155,7 @@ internal static class SpawnablePackageBinaryTests
         BinaryPrimitives.WriteUInt16LittleEndian(legacy.AsSpan(4), 2);
         BinaryPrimitives.WriteUInt64LittleEndian(legacy.AsSpan(8), (ulong)legacy.Length);
         BinaryPrimitives.WriteUInt32LittleEndian(legacy.AsSpan(16), 10);
-        var decoded = SpawnableGroupPackageBinary.Deserialize(legacy);
-        Require(decoded.ParentBytecode.SequenceEqual(package.ParentBytecode) &&
-            decoded.Templates.Count == package.Templates.Count &&
-            decoded.RootRenderConfiguration.SequenceEqual(package.RootRenderConfiguration) &&
-            decoded.RootGpuContainers.Count == package.RootGpuContainers.Count &&
-            decoded.RootGpuPrograms.Length == 0 && decoded.Templates.All(template => template.GpuPrograms.Length == 0),
-            "Legacy v2 LFXP data changed or invented executable GPU payloads.");
+        Reject(() => SpawnableGroupPackageBinary.Deserialize(legacy), "legacy v2 package");
         return legacy;
     }
 
@@ -260,7 +261,7 @@ internal static class SpawnablePackageBinaryTests
         using var templatePayload = JsonDocument.Parse(package.Templates.Single().GpuPrograms);
         var rootPrograms = rootPayload.RootElement.GetProperty("programs").EnumerateArray().ToArray();
         var templatePrograms = templatePayload.RootElement.GetProperty("programs").EnumerateArray().ToArray();
-        Require(rootPayload.RootElement.GetProperty("version").GetInt32() == 1 &&
+        Require(rootPayload.RootElement.GetProperty("version").GetInt32() == 4 &&
             rootPrograms.Length == 2 && templatePrograms.Length == 1 &&
             rootPrograms.Select(program => program.GetProperty("nodeId").GetGuid()).ToHashSet()
                 .SetEquals([rootGpu, nestedRootGpu]) &&

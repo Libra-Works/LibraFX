@@ -29,8 +29,8 @@ internal static class Fluid2DAuthoringTests
         var before = graph.CreateSnapshot();
         using (var json = JsonDocument.Parse(GpuProgramDeliveryService.CreateExecutablePayload(before)))
         {
-            Require(json.RootElement.GetProperty("version").GetInt32() == 1 &&
-                !json.RootElement.TryGetProperty("fluidPrograms", out _), "Particle-only payloads must retain version 1.");
+            Require(json.RootElement.GetProperty("version").GetInt32() == 4 &&
+                !json.RootElement.TryGetProperty("fluidPrograms", out _), "Particle-only payloads use the current manifest and omit absent fluid programs.");
         }
         var view = new GpuWorkspaceView();
         view.Open(graph, node.Id);
@@ -91,12 +91,12 @@ internal static class Fluid2DAuthoringTests
             using (var payload = JsonDocument.Parse(GpuProgramDeliveryService.CreateExecutablePayload(authored)))
             {
                 var root = payload.RootElement;
-                Require(root.GetProperty("version").GetInt32() == 2 &&
+                Require(root.GetProperty("version").GetInt32() == 4 &&
                     root.GetProperty("programs").GetArrayLength() == 0 &&
                     root.GetProperty("fluidPrograms")[0].GetProperty("nodeId").GetGuid() == node.Id &&
                     root.GetProperty("fluidPrograms")[0].GetProperty("settings").GetProperty("vorticity").GetSingle() == 12.5f &&
                     root.GetProperty("fluidPrograms")[0].GetProperty("settings").GetProperty("height").GetInt32() == 40,
-                    "Fluid mode must export explicit versioned resource execution, never dormant particle kernels.");
+                    "Fluid mode must export current resource execution, never dormant particle kernels.");
             }
             var package = SpawnableGroupPackage.Compile(authored);
             Require(Encoding.UTF8.GetString(package.RootGpuPrograms).Contains("\"fluidPrograms\"", StringComparison.Ordinal),
@@ -125,9 +125,9 @@ internal static class Fluid2DAuthoringTests
             }
             using (var bundle = JsonDocument.Parse(Complete(GpuParticleMcpTools.ExportBundle(provider, node.Id.ToString()))))
             {
-                Require(bundle.RootElement.GetProperty("version").GetInt32() == 2 &&
+                Require(bundle.RootElement.GetProperty("version").GetInt32() == 4 &&
                     bundle.RootElement.GetProperty("fluidPrograms").GetArrayLength() == 1,
-                    "MCP must explicitly version its fluid execution bundle.");
+                    "MCP must use the current fluid execution manifest.");
             }
             try
             {
@@ -347,7 +347,7 @@ internal static class Fluid2DAuthoringTests
                         ? item with { ChildGraph = item.ChildGraph! with { AutoDestroyWhenIdle = false } } : item).ToArray()
                 };
             }
-            File.WriteAllBytes(Path.Combine(directory, mode + ".lfxb"),
+            File.WriteAllBytes(Path.Combine(directory, mode + ".lfxp"),
                 SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(snapshot)));
             File.WriteAllBytes(Path.Combine(directory, mode + ".json"),
                 GpuProgramDeliveryService.CreateExecutablePayload(scope.CreateCurrentSnapshot()));
@@ -375,7 +375,7 @@ internal static class Fluid2DAuthoringTests
             var package = SpawnableGroupPackage.Compile(snapshot);
             using var payload = JsonDocument.Parse(package.RootGpuPrograms);
             using var render = JsonDocument.Parse(package.RootRenderConfiguration);
-            Require(payload.RootElement.GetProperty("version").GetInt32() == 3 &&
+            Require(payload.RootElement.GetProperty("version").GetInt32() == 4 &&
                 payload.RootElement.GetProperty("generatedDrawBindings")[0].GetProperty("outputId").GetString() == "ColorOutput" &&
                 !payload.RootElement.GetProperty("fluidPrograms")[0].GetProperty("automaticPlane").GetBoolean() &&
                 render.RootElement.GetProperty("nodes").EnumerateArray().Single(node => node.GetProperty("nodeId").GetGuid() == draw.Id)
@@ -441,11 +441,11 @@ internal static class Fluid2DAuthoringTests
         using (var payload = JsonDocument.Parse(GpuProgramDeliveryService.CreateExecutablePayload(snapshot)))
         {
             var root = payload.RootElement;
-            Require(root.GetProperty("version").GetInt32() == 3 &&
+            Require(root.GetProperty("version").GetInt32() == 4 &&
                 !root.GetProperty("fluidPrograms")[0].GetProperty("automaticPlane").GetBoolean() &&
                 root.GetProperty("programs")[0].GetProperty("unreal").GetProperty("generatedResources")
                     .GetProperty("billboardTexture").GetProperty("producerNodeId").GetGuid() == producer.Id,
-                "Generated outputs must preserve producer identity and suppress the automatic plane in v3.");
+                "Generated outputs must preserve producer identity and suppress the automatic plane through current manifest fields.");
         }
         Require(graph.History.Undo() && graph.History.Redo() &&
             GraphSnapshot.ContentEquals(snapshot, graph.CreateSnapshot()), "Generated bindings must survive Undo/Redo.");

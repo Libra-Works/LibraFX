@@ -1,11 +1,7 @@
 using System.Collections;
-using System.Buffers.Binary;
 using System.Net;
 using System.Net.Sockets;
-using System.Net.WebSockets;
 using System.Reflection;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using System.Threading.Channels;
 using Avalonia.Automation;
@@ -20,7 +16,7 @@ using LiberaFx.ViewModels;
 using LiberaFx.Views;
 
 // Invoke Run() from the initialized, isolated Avalonia smoke runner.
-// Publication unit checks use in-memory clients; VerifySendTransportAsync uses real pinned TLS/native execution.
+// Publication checks use in-memory clients; GodotPackagePreviewTests covers pinned TLS package transport.
 internal static class PreviewSignalSendTests
 {
     private const BindingFlags PrivateInstance = BindingFlags.Instance | BindingFlags.NonPublic;
@@ -32,7 +28,6 @@ internal static class PreviewSignalSendTests
             "Set an absolute isolated LIBERAFX_DATA_ROOT for preview Send checks.");
         VerifyScopesAndTranslations();
         RunWithDispatcher(VerifyPublicationsAsync());
-        RunWithDispatcher(VerifySendTransportAsync());
         GodotPackagePreviewTests.Run();
     }
 
@@ -148,12 +143,12 @@ internal static class PreviewSignalSendTests
                     Require(ReferenceEquals(initial, Latest(host)) &&
                         graph.ConnectionStatus == LocalizationService.Shared.Get("Editor.SignalSend.CompiledClientRequired"),
                         "Send without a compiled client was silently accepted.");
-                    AddClient(2);
+                    AddClient(false);
                     Invoke(button);
                     Require(ReferenceEquals(initial, Latest(host)) &&
                         model.PreviewStatus == LocalizationService.Shared.Get("Editor.SignalSend.CompiledClientRequired"),
-                        "A legacy client incorrectly enabled Signal dispatch.");
-                    var compiled = AddClient(3);
+                        "A client without package preview incorrectly enabled Signal dispatch.");
+                    var compiled = AddClient(true);
                     var channel = (Channel<PreviewPublication>)compiled.GetType().GetProperty("Channel")!.GetValue(compiled)!;
                     var beforeGraph = graph.CreateSnapshot();
                     var beforeHistory = JsonSerializer.Serialize(graph.History.CreateSnapshot());
@@ -256,147 +251,13 @@ internal static class PreviewSignalSendTests
             });
         }
 
-        object AddClient(int version)
+        object AddClient(bool packagePreview)
         {
             var type = typeof(PreviewHost).GetNestedType("PreviewClient", BindingFlags.NonPublic)!;
-            var client = Activator.CreateInstance(type, [version, false, false])!;
+            var client = Activator.CreateInstance(type, [packagePreview])!;
             clients.Add(Guid.NewGuid(), client);
             return client;
         }
-    }
-
-    private static async Task VerifySendTransportAsync()
-    {
-        var probe = new TcpListener(IPAddress.Loopback, 0);
-        probe.Start();
-        var port = ((IPEndPoint)probe.LocalEndpoint).Port;
-        probe.Stop();
-        using var host = new PreviewHost(port);
-        var model = new MainViewModel();
-        Window? window = null;
-        using var socket = new ClientWebSocket();
-        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(25));
-        var token = cancellation.Token;
-        try
-        {
-            var graph = model.Graph;
-            graph.DeleteNodes(graph.Nodes.ToArray());
-            var signal = graph.CreateNode(GraphNodeKind.Signal);
-            var group = graph.CreateNode(GraphNodeKind.SpawnableGroup);
-            Require(graph.EnterGraph(group), "Cannot enter TLS Send fixture template.");
-            graph.DeleteNodes(graph.Nodes.ToArray());
-            var life = graph.CreateNode(new GraphNodeKind("LifeTime"));
-            graph.SetParameter(life, "seconds", JsonSerializer.SerializeToElement(0.5));
-            graph.NavigateToGraph(0);
-            signal = graph.GetNode(signal.Id);
-            group = graph.GetNode(group.Id);
-            Require(graph.TryConnectNodes(signal, group, out var error, "spawn"),
-                "Cannot connect TLS Send fixture: " + error);
-            model.Playback.Pause();
-            model.Playback.Frame = 0;
-            var snapshot = graph.CreateSnapshot();
-            var history = JsonSerializer.Serialize(graph.History.CreateSnapshot());
-            model.ActiveDocument!.MarkSaved("TLS Send fixture", "tls-send-fixture",
-                snapshot, graph.History.CreateSnapshot());
-            Require(!model.ActiveDocument.IsDirty, "TLS Send fixture must start clean.");
-            var paused = model.Playback.Snapshot;
-            var view = new GraphNodeView { DataContext = signal };
-            window = new Window { Width = 400, Height = 400, Content = view };
-            window.Show();
-            Pump(window);
-            var button = view.FindControl<Button>("PreviewSignalSendButton")!;
-
-            await host.StartAsync(model);
-            socket.Options.SetRequestHeader("X-LiberaFx-Preview-Token", host.AccessToken);
-            var fingerprint = Convert.FromHexString(host.Fingerprint);
-            socket.Options.RemoteCertificateValidationCallback = (_, certificate, _, _) =>
-                certificate is not null && CryptographicOperations.FixedTimeEquals(
-                    SHA256.HashData(certificate.GetRawCertData()), fingerprint);
-            await socket.ConnectAsync(new Uri($"wss://localhost:{port}/preview?protocol=3"), token);
-            await ReceiveCompiledAsync(socket, CompiledPreviewKind.Program, token);
-            await socket.SendAsync(Encoding.UTF8.GetBytes(
-                """{"type":"hello","engine":"LiberaFx Send regression","role":"editor","version":1,"capabilities":["rendering"]}"""),
-                WebSocketMessageType.Text, true, token);
-            var program = await ReceiveCompiledAsync(socket, CompiledPreviewKind.Program, token);
-            var programSequence = BinaryPrimitives.ReadUInt64LittleEndian(program.AsSpan(8));
-            await ExpectInstancesAsync(0);
-
-            await Dispatcher.UIThread.InvokeAsync(() =>
-            {
-                Require(button.IsEffectivelyEnabled && ReferenceEquals(button.Command, signal.SendPreviewSignalCommand),
-                    "Real TLS Send button lost its command binding or became disabled.");
-                Invoke(button);
-                VerifyAuthoredState();
-                Require(model.Playback.Snapshot == paused && !model.Playback.IsPlaying,
-                    "Real TLS Send advanced or changed paused playback.");
-            });
-            await ReceiveCompiledAsync(socket, CompiledPreviewKind.Playback, token);
-            await ExpectInstancesAsync(1);
-            await Dispatcher.UIThread.InvokeAsync(() =>
-            {
-                Require(model.Playback.Snapshot == paused, "Scene delivery changed the paused playhead.");
-                VerifyAuthoredState();
-                model.Playback.StepForwardCommand.Execute(null);
-                Require(model.Playback.Frame == 1 && !model.Playback.IsPlaying,
-                    "The first forward step did not advance exactly one paused frame.");
-            });
-            await ReceiveCompiledAsync(socket, CompiledPreviewKind.Playback, token);
-            await ExpectInstancesAsync(1);
-            await Dispatcher.UIThread.InvokeAsync(VerifyAuthoredState);
-            await socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Send regression complete", token);
-            Console.WriteLine("Preview Send TLS PASS: real button -> paused native spawn 0/1/1 across Send/first forward step; graph/history unchanged.");
-
-            void VerifyAuthoredState()
-            {
-                Require(GraphSnapshot.ContentEquals(snapshot, graph.CreateSnapshot()) &&
-                    history == JsonSerializer.Serialize(graph.History.CreateSnapshot()) &&
-                    !model.ActiveDocument!.IsDirty,
-                    "Real TLS Send or forward stepping changed project data/history.");
-            }
-
-            async Task ExpectInstancesAsync(int count)
-            {
-                var scene = await ReceiveCompiledAsync(socket, CompiledPreviewKind.Scene, token);
-                using var json = JsonDocument.Parse(scene.AsMemory(48));
-                var root = json.RootElement;
-                Require(root.GetProperty("executionOwner").GetString() == "editor-native" &&
-                    root.GetProperty("programSequence").GetUInt64() == programSequence &&
-                    root.GetProperty("activeInstances").GetInt32() == count &&
-                    root.GetProperty("nodes").GetArrayLength() == 0,
-                    $"Real TLS Send expected {count} native instances and no render assets: {root.GetRawText()}");
-            }
-        }
-        finally
-        {
-            socket.Abort();
-            await host.StopAsync();
-            await Dispatcher.UIThread.InvokeAsync(() =>
-            {
-                try { window?.Close(); }
-                finally { model.DisposeStorageFiles(); }
-            });
-        }
-    }
-
-    private static async Task<byte[]> ReceiveCompiledAsync(ClientWebSocket socket, CompiledPreviewKind expected,
-        CancellationToken token)
-    {
-        using var stream = new MemoryStream();
-        var buffer = new byte[8192];
-        ValueWebSocketReceiveResult result;
-        do
-        {
-            result = await socket.ReceiveAsync(buffer.AsMemory(), token);
-            Require(result.MessageType == WebSocketMessageType.Binary && stream.Length + result.Count <= 2 * 1024 * 1024,
-                "Invalid or oversized compiled preview frame in real Send regression.");
-            stream.Write(buffer, 0, result.Count);
-        } while (!result.EndOfMessage);
-        var bytes = stream.ToArray();
-        Require(bytes.Length >= 48, "Truncated compiled preview frame in real Send regression.");
-        var kind = (CompiledPreviewKind)BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(6));
-        Require(kind == expected, $"Real Send expected {expected}, received {kind}." +
-            (kind == CompiledPreviewKind.CompileError ? " " + Encoding.UTF8.GetString(bytes.AsSpan(48)) : ""));
-        return bytes;
     }
 
     private static PreviewPublication? LatestOrNull(PreviewHost host) =>

@@ -79,6 +79,8 @@ internal static class Program
         {
             InitializeIsolatedUi();
             McpAuthoringTransitionTests.Run();
+            GraphUxTests.Run();
+            GraphRerouteTests.Run();
             return;
         }
         if (args is ["--procedural-resources"])
@@ -200,6 +202,19 @@ internal static class Program
         {
             InitializeIsolatedUi();
             PreviewDebugDrawTests.Run(args.Length == 2 ? args[1] : null);
+            return;
+        }
+        if (args is ["--graph-ux"])
+        {
+            InitializeIsolatedUi();
+            GraphUxTests.Run();
+            GraphRerouteTests.Run();
+            return;
+        }
+        if (args is ["--graph-reroute"])
+        {
+            InitializeIsolatedUi();
+            GraphRerouteTests.Run();
             return;
         }
         if (args is ["--authoring-batch"])
@@ -605,14 +620,6 @@ internal static class Program
             Console.WriteLine("History-bearing Fireworks sample saved with End=240 instructions (existing node UUIDs preserved): " + fireworksSamplePath);
             return;
         }
-        if (args is ["--fireworks-native-preview", var fireworksPreviewOutput])
-        {
-            if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("LIBERAFX_DATA_ROOT")))
-                throw new ArgumentException("Set an isolated absolute LIBERAFX_DATA_ROOT for native preview verification.");
-            AppBuilder.Configure<App>().UsePlatformDetect().SetupWithoutStarting();
-            EditorNativePreviewTests.Run(fireworksPreviewOutput);
-            return;
-        }
         if (args is ["--spawnable-adapter-fixtures", var adapterFixturePath])
         {
             if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("LIBERAFX_DATA_ROOT")) ||
@@ -646,6 +653,12 @@ internal static class Program
                 throw new ArgumentException("Use an isolated LIBERAFX_DATA_ROOT and an absolute package output path.");
             AppBuilder.Configure<App>().UsePlatformDetect().SetupWithoutStarting();
             SpawnablePackageBinaryTests.Run(binaryPackagePath);
+            return;
+        }
+        if (args is ["--fireworks-fixtures", var fireworksFixtureOutput])
+        {
+            InitializeIsolatedUi();
+            FireworksLifecycleTests.Run(fireworksFixtureOutput, fixturesOnly: true);
             return;
         }
         if (args is ["--fireworks-lifecycle", var fireworksOutput])
@@ -734,11 +747,6 @@ internal static class Program
         {
             PreviewProtocolTests.Run();
             Console.WriteLine("Preview protocol checks passed.");
-            return;
-        }
-        if (args is ["--unreal-gpu-preview"])
-        {
-            CompiledPreviewProtocolTests.RunUnrealGpuPreview();
             return;
         }
         if (args is ["--unity-mapped-package"])

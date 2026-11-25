@@ -10,7 +10,8 @@ seed sequence, local clocks and captured input values deterministically.
 
 The --fireworks-lifecycle selector in CommentImageSmokeTests exports
 Fireworks.lfxproj (including editable child graphs and project history),
-Fireworks.package.json, actual compiled LFXB templates and a native test fixture.
+Fireworks.package.json, the compiled `.lfxp` package fixture and native test data.
+Embedded instruction blobs are not emitted as separate user-facing files.
 Use an absolute isolated output folder and LIBERAFX_DATA_ROOT; set
 LIBERAFX_NATIVE_TEST_LIBRARY to the native C ABI DLL. The standalone
 liberafx_fireworks_lifecycle_tests executable consumes that same output folder.
@@ -40,8 +41,8 @@ and connection teardown dispose native programs/pools; reset does not emit Destr
 
 The same instructions are visible as a prominent graph Comment in the sample.
 Tests --fireworks-native-preview <absolute isolated folder> exports individual
-frame-000 .. frame-004 UE CpuRootFixture directories with program.lfxb,
-render-config.json and expected.json. Their actual native lifecycles yield
+frame-000 .. frame-004 UE CpuRootFixture directories with `.lfxp` package data,
+render-config.json and expected.json. Internal instruction data stays embedded. Their actual native lifecycles yield
 1/1/12/12/0 renderers at 0/1/2/2.5/3.5 seconds. UE-owned standalone package,
 life and generator execution remain unsupported; this does not settle broader
 Life Time policies beyond the documented single-positive captured node contract.

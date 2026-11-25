@@ -6,10 +6,10 @@ namespace LiberaFx.Services.Compilation;
 
 public sealed partial class VfxProgram
 {
-    internal byte[] ToPackageBinary() => _version == 1
-        ? new VfxProgram(_instructions, _typedInstructions, _customInstructions, _curveInstructions,
-            2, _gameIoPorts).ToBinary()
-        : ToBinary();
+    internal byte[] ToPackageBinary() => new VfxProgram(
+        _instructions, _typedInstructions, _customInstructions, _curveInstructions, 11, _gameIoPorts,
+        _enumValueInstructions, _enumSelectInstructions, _branchGuards,
+        _logicalInstructions, _logicalSignalRoutes, _valueTypes).ToBinary();
 
     public byte[] ToBinary()
     {

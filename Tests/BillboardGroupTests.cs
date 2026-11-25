@@ -72,7 +72,7 @@ internal static class BillboardGroupTests
             }
             if (directory is null) return;
             var stem = Path.Combine(directory, $"{kind}-{name}");
-            File.WriteAllBytes(stem + ".lfxb", program.ToBinary());
+            File.WriteAllBytes(stem + ".lfxp", EffectBinary.Compile(graph));
             var lowered = GraphPolymorphism.LowerWithOutputs(GroupBoundaryLowering.Lower(GroupExposedItems.Materialize(graph)));
             using var writer = new StreamWriter(stem + ".checks");
             foreach (var (label, output) in new[] { ("World Matrix", world), ("Valid", new[] { valid ? 1d : 0 }) })

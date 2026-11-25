@@ -26,12 +26,12 @@ function Invoke-Stage([string]$Name, [scriptblock]$Body) {
 
 try {
     $fixtures = Join-Path $workRoot 'fixtures'
-    Invoke-Stage '1. LIBERA FX Authoring, Undo/Redo, Save/Reload & Mapped .lfxb Export' {
+    Invoke-Stage '1. LIBERA FX Authoring, Undo/Redo, Save/Reload & Mapped .lfxp Export' {
         $env:LIBERAFX_DATA_ROOT = Join-Path $workRoot 'data-root'
         [IO.Directory]::CreateDirectory($env:LIBERAFX_DATA_ROOT) | Out-Null
         & dotnet run --project (Join-Path $repository 'Tests') -- --issue71-e2e-fixtures $fixtures
         if ($LASTEXITCODE -ne 0) { throw "Issue71E2EFixtures failed (exit $LASTEXITCODE)." }
-        "Generated unreal.lfxb, unity.lfxb, godot.lfxb under $fixtures"
+        "Generated unreal.lfxp, unity.lfxp, godot.lfxp under $fixtures"
     }
 
     Invoke-Stage '2. Unity Isolated Project E2E (Auto-Resolve, Reimport, Play/Pause/Resume/Stop)' {
@@ -58,7 +58,7 @@ try {
             '{"dependencies":{"works.libra.liberafx":"file:works.libra.liberafx","com.unity.modules.jsonserialize":"1.0.0"}}', [Text.UTF8Encoding]::new($false))
         Copy-Item -LiteralPath (Join-Path $unityStage 'works.libra.liberafx') -Destination (Join-Path $proj 'Packages\works.libra.liberafx') -Recurse
 
-        # First pass: create TestMesh.asset, copy unity.lfxb, then reimport & test disconnected playback.
+        # First pass: create TestMesh.asset, copy unity.lfxp, then reimport & test disconnected playback.
         $checkCs = @'
 using System;
 using System.IO;
@@ -81,7 +81,7 @@ public static class Issue71E2ECheck
 
     public static void Run()
     {
-        var fxPath = "Assets/LibraTest/effect.lfxb";
+        var fxPath = "Assets/LibraTest/effect.lfxp";
         var asset = AssetDatabase.LoadAssetAtPath<LiberaFxSpawnableAsset>(fxPath);
         if (asset == null)
         {
@@ -137,7 +137,7 @@ public static class Issue71E2ECheck
         $metaPath = Join-Path $proj 'Assets\LibraTest\TestMesh.asset.meta'
         $meta = [IO.File]::ReadAllText($metaPath) -replace 'guid:\s*[0-9a-fA-F]{32}', 'guid: 0123456789ab4def8123456789abcdef'
         [IO.File]::WriteAllText($metaPath, $meta, [Text.UTF8Encoding]::new($false))
-        Copy-Item -LiteralPath (Join-Path $fixtures 'unity.lfxb') -Destination (Join-Path $proj 'Assets\LibraTest\effect.lfxb')
+        Copy-Item -LiteralPath (Join-Path $fixtures 'unity.lfxp') -Destination (Join-Path $proj 'Assets\LibraTest\effect.lfxp')
         $log = Join-Path $workRoot 'unity-e2e.log'
         $unityArgs = @(
             '-batchmode', '-quit', '-nographics', '-disable-assembly-updater',
@@ -178,7 +178,7 @@ public static class Issue71E2ECheck
         Copy-Item (Join-Path $repository 'Runtime\Integrations\Godot\plugin.cfg') $addonDir
         Copy-Item (Join-Path $repository 'Runtime\Integrations\Godot\liberafx.gdextension') $addonDir
         Copy-Item (Join-Path $repository 'Runtime\Integrations\Godot\icon.png') $addonDir
-        Copy-Item -LiteralPath (Join-Path $fixtures 'godot.lfxb') -Destination (Join-Path $proj 'effect.lfxb')
+        Copy-Item -LiteralPath (Join-Path $fixtures 'godot.lfxp') -Destination (Join-Path $proj 'effect.lfxp')
 
         @'
 config_version=5
@@ -194,8 +194,8 @@ enabled=PackedStringArray("res://addons/liberafx/plugin.cfg")
 '@ | Set-Content (Join-Path $proj 'test_mesh.tres') -Encoding UTF8
 
         & $GodotExe --headless --editor --quit --path $proj
-        if (-not (Test-Path -LiteralPath (Join-Path $proj 'effect.lfxb.import'))) {
-            throw "Godot EditorImportPlugin did not create effect.lfxb.import (exit $LASTEXITCODE)."
+        if (-not (Test-Path -LiteralPath (Join-Path $proj 'effect.lfxp.import'))) {
+            throw "Godot EditorImportPlugin did not create effect.lfxp.import (exit $LASTEXITCODE)."
         }
 
         @'
@@ -204,9 +204,9 @@ func _initialize() -> void:
 	call_deferred("_run_check")
 
 func _run_check() -> void:
-	var pkg := ResourceLoader.load("res://effect.lfxb")
+	var pkg := ResourceLoader.load("res://effect.lfxp")
 	if pkg == null:
-		push_error("Failed to load imported res://effect.lfxb")
+		push_error("Failed to load imported res://effect.lfxp")
 		quit(1)
 		return
 	var resolved: Variant = pkg.get("auto_resolved_resources")

@@ -33,26 +33,41 @@ internal static class WorkspaceNavigationTests
             Require(graph.MaximizeInlineGraph(graph.GetNode(gpuId)), "GPU Particle must maximize.");
             window.UpdateLayout(); Dispatcher.UIThread.RunJobs();
             var workspace = host.FindControl<ContentControl>("SpecializedWorkspace")!;
-            var breadcrumbs = host.FindControl<StackPanel>("SpecializedBreadcrumbs")!;
             Require(workspace is { IsVisible: true, Content: GpuWorkspaceView } && side.IsEffectivelyVisible &&
                 workspace.Bounds.Width <= host.Bounds.Width && workspace.Bounds.Height <= host.Bounds.Height &&
-                breadcrumbs.Children.OfType<Button>().Count() == 1 && graph.GraphPath.Count == 1,
+                graph.Breadcrumbs.Count == 3 && graph.Breadcrumbs.Last().IsSpecialized && graph.GraphPath.Count == 1,
                 "GPU must use the graph area and retain the parent hierarchy and preview.");
             var gpuView = (GpuWorkspaceView)workspace.Content!;
             gpuView.Workspace!.EnterKernel(gpuView.Workspace.State.Program.Kernels.First().Id);
-            Require(breadcrumbs.Children.OfType<Button>().Count() == 2, "GPU kernels must extend the common hierarchy.");
-            breadcrumbs.Children.OfType<Button>().First().RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-            Require(gpuView.Workspace.Kernel is null, "The GPU breadcrumb must return to its Flow.");
-            host.GetVisualDescendants().OfType<Button>().Single(b => b.Tag is int depth && depth == 1)
+            Require(graph.Breadcrumbs.Count == 4 && graph.Breadcrumbs.Last().IsKernel, "GPU kernels must extend the common hierarchy.");
+            graph.NavigateBack();
+            Require(((GpuWorkspaceView)workspace.Content!).Workspace!.Kernel is null, "Back must return from kernel to GPU flow.");
+            graph.NavigateForward();
+            Require(((GpuWorkspaceView)workspace.Content!).Workspace!.Kernel is not null, "Forward must reopen GPU kernel.");
+            gpuView = (GpuWorkspaceView)workspace.Content!;
+            window.UpdateLayout(); Dispatcher.UIThread.RunJobs();
+            host.GetVisualDescendants().OfType<Button>().Single(b => b.Tag is GraphBreadcrumb { IsSpecialized: true })
+                .RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Require(gpuView.Workspace!.Kernel is null, "The GPU breadcrumb must return to its Flow.");
+            window.UpdateLayout(); Dispatcher.UIThread.RunJobs();
+            host.GetVisualDescendants().OfType<Button>().Single(b => b.Tag is GraphBreadcrumb { Depth: 1, IsSpecialized: false, IsKernel: false })
                 .RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Require(!workspace.IsVisible && graph.GraphPath.Count == 1 && graph.History.CurrentNodeId == history,
                 "Parent navigation must close the specialized workspace without adding history.");
             Require(graph.MaximizeInlineGraph(graph.GetNode(proceduralId)), "Procedural texture must maximize.");
             window.UpdateLayout(); Dispatcher.UIThread.RunJobs();
             Require(workspace is { IsVisible: true, Content: ProceduralWorkspaceView } &&
-                breadcrumbs.Children.OfType<Button>().Count() == 1 && side.IsEffectivelyVisible &&
+                graph.Breadcrumbs.Last().IsSpecialized && side.IsEffectivelyVisible &&
                 workspace.Bounds.Width <= host.Bounds.Width && workspace.Bounds.Height <= host.Bounds.Height,
                 "Procedural textures must share GPU/CPU bounds and hierarchy.");
+            graph.NavigateBack();
+            Require(!workspace.IsVisible && graph.GraphPath.Count == 1, "Back from procedural must return to the parent graph.");
+            graph.NavigateBack();
+            Require(workspace.IsVisible && workspace.Content is GpuWorkspaceView, "Back must restore the prior GPU workspace.");
+            graph.NavigateForward();
+            graph.NavigateForward();
+            Require(workspace.IsVisible && workspace.Content is ProceduralWorkspaceView && graph.History.CurrentNodeId == history,
+                "Forward must restore procedural without editing the effect.");
             var other = new GraphWorkspaceViewModel(new UndoRedoManager());
             host.DataContext = other;
             Require(!workspace.IsVisible, "Switching documents must close the previous specialized workspace.");

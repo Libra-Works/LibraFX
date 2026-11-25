@@ -134,6 +134,16 @@ public static class GraphMatrixLowering
                         Emit("ComposeVector4", key, inputs: lanes.Select((source, index) =>
                             (new[] { "r", "g", "b", "a" }[index], source)));
 
+                    GraphRuntimeOutput[] MultiplyMatrices(GraphRuntimeOutput[] parent, GraphRuntimeOutput[] local, string prefix)
+                    {
+                        var columns = Enumerable.Range(0, 4).Select(column =>
+                            Compose(local.Select((source, row) => Lane(source, column, $"{prefix}local-{row}-{column}")).ToArray(),
+                                $"{prefix}column{column}")).ToArray();
+                        return Enumerable.Range(0, 4).Select(row => Compose(
+                            columns.Select((column, index) => Emit("DotVector4", $"{prefix}dot-{row}-{index}",
+                                inputs: [("a", parent[row]), ("b", column)])).ToArray(), $"{prefix}row{row}")).ToArray();
+                    }
+
                     void Output(string port, params GraphRuntimeOutput[] values) => outputs[(node.Id, port)] = values;
                     (string, GraphRuntimeOutput)[] RowInputs(GraphRuntimeOutput[] rows) =>
                         rows.Select((source, index) => ($"row{index}", source)).ToArray();
@@ -174,22 +184,22 @@ public static class GraphMatrixLowering
                                 var value = order?.Value.GetInt32() ?? 0;
                                 if (value != 0)
                                     inputs.Add(("order", Emit("Float", "order", [("value", "float", (double)value)])));
-                                Output("value", Enumerable.Range(0, 4).Select(row =>
+                                var local = Enumerable.Range(0, 4).Select(row =>
                                     Emit(value == 0 ? $"MatrixRuntimeTransformRow{row}" : $"MatrixRuntimeOrderedTransformRow{row}",
-                                        $"row{row}", inputs: inputs)).ToArray());
+                                        $"row{row}", inputs: inputs)).ToArray();
+                                var parent = Connected("parent", "Matrix");
+                                if (parent is not null && parent.Count != 4)
+                                {
+                                    throw new InvalidDataException("A Matrix requires four row values.");
+                                }
+                                Output("value", parent is null ? local : MultiplyMatrices(parent.ToArray(), local, "parented-"));
                                 break;
                             }
                         case "MatrixMultiply":
                             {
                                 var parent = Matrix("parent");
                                 var local = Matrix("local");
-                                var columns = Enumerable.Range(0, 4).Select(column =>
-                                    Compose(local.Select((source, row) => Lane(source, column, $"local-{row}-{column}")).ToArray(),
-                                        $"column{column}")).ToArray();
-                                var result = Enumerable.Range(0, 4).Select(row => Compose(
-                                    columns.Select((column, index) => Emit("DotVector4", $"dot-{row}-{index}",
-                                        inputs: [("a", parent[row]), ("b", column)])).ToArray(), $"row{row}")).ToArray();
-                                Output("value", result);
+                                Output("value", MultiplyMatrices(parent, local, ""));
                                 break;
                             }
                         case "TransformPoint":

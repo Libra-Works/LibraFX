@@ -1,3 +1,5 @@
 {
-  "TransformOrder.Parameter": "Product order (rightmost acts first)"
+  "TransformOrder.Parameter": "Product order (rightmost acts first)",
+  "TransformOrder.Parent": "Parent",
+  "TransformOrder.ParentHelp": "Optional parent matrix. Output is Parent × Local; disconnected uses Local unchanged."
 }

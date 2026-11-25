@@ -19,6 +19,7 @@ public partial class GraphEditorView
         {
             previous.GpuEditorRequested -= OpenGpuWorkspace;
             previous.ProceduralEditorRequested -= OpenProceduralWorkspace;
+            previous.SpecializedNavigationRequested -= RestoreSpecializedNavigation;
         }
         _specializedDocument = null;
         if (!subscribe)
@@ -30,6 +31,7 @@ public partial class GraphEditorView
         _specializedDocument = graph.Document;
         _specializedDocument.GpuEditorRequested += OpenGpuWorkspace;
         _specializedDocument.ProceduralEditorRequested += OpenProceduralWorkspace;
+        _specializedDocument.SpecializedNavigationRequested += RestoreSpecializedNavigation;
     }
 
     private bool PrepareSpecializedWorkspace(object? sender, Guid nodeId)
@@ -76,7 +78,38 @@ public partial class GraphEditorView
     {
         if (e.Property == IsVisibleProperty && sender is Control { IsVisible: false } &&
             SpecializedWorkspace.IsVisible && ReferenceEquals(SpecializedWorkspace.Content, sender))
+        {
             CloseSpecializedWorkspace();
+            _specializedDocument?.RecordGraphNavigation();
+        }
+    }
+
+    private void RestoreSpecializedNavigation(object? sender, (Guid? Node, string? Kernel) entry)
+    {
+        if (sender is not GraphWorkspaceViewModel graph || entry.Node is not { } id)
+        {
+            CloseSpecializedWorkspace();
+            return;
+        }
+        var node = graph.Nodes.FirstOrDefault(item => item.Id == id);
+        if (node is null)
+        {
+            CloseSpecializedWorkspace();
+            return;
+        }
+        if (node.IsGpuParticle)
+        {
+            OpenGpuWorkspace(graph, id);
+            if (entry.Kernel is { } kernel && _gpuWorkspace?.Workspace is { } workspace &&
+                workspace.State.Program.Kernels.Any(item => item.Id == kernel))
+            {
+                workspace.EnterKernel(kernel);
+            }
+        }
+        else if (node.IsProcedural)
+        {
+            OpenProceduralWorkspace(graph, id);
+        }
     }
 
     private void CloseSpecializedWorkspace()
@@ -85,7 +118,6 @@ public partial class GraphEditorView
         _specializedNodeId = null;
         SpecializedWorkspace.IsVisible = false;
         SpecializedWorkspace.Content = null;
-        SpecializedBreadcrumbs.Children.Clear();
         if (_gpuWorkspace?.Workspace is { } gpu) gpu.Refreshed -= RefreshSpecializedBreadcrumbs;
         _gpuWorkspace?.CloseWorkspace();
         _proceduralWorkspace?.CloseWorkspace();
@@ -93,27 +125,12 @@ public partial class GraphEditorView
 
     private void RefreshSpecializedBreadcrumbs(object? sender, EventArgs e)
     {
-        SpecializedBreadcrumbs.Children.Clear();
-        if (_specializedNodeId is not { } id || _specializedDocument?.Nodes.FirstOrDefault(node => node.Id == id) is not { } node)
+        if (_specializedNodeId is not { } id || _specializedDocument?.Nodes.FirstOrDefault(node => node.Id == id) is null)
         {
             CloseSpecializedWorkspace();
             return;
         }
-        void Add(string label, Action action)
-        {
-            var separator = new TextBlock { Text = "›", VerticalAlignment = VerticalAlignment.Center };
-            separator.Classes.Add("editor-heading");
-            SpecializedBreadcrumbs.Children.Add(separator);
-            var button = new Button { Content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6,
-                Children = { new EditorIconView { Icon = Models.Appearance.EditorIcon.Group },
-                    new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center } } }, Padding = new Thickness(8, 2) };
-            button.Classes.Add("editor-tool");
-            Avalonia.Automation.AutomationProperties.SetName(button, label);
-            button.Click += (_, _) => action();
-            SpecializedBreadcrumbs.Children.Add(button);
-        }
-        Add(node.DisplayName, () => _gpuWorkspace?.Workspace?.Back());
-        if (ReferenceEquals(SpecializedWorkspace.Content, _gpuWorkspace) && _gpuWorkspace?.Workspace?.Kernel is { } kernel)
-            Add(kernel.Id, () => { });
+        _specializedDocument.RecordSpecializedNavigation(id,
+            ReferenceEquals(SpecializedWorkspace.Content, _gpuWorkspace) ? _gpuWorkspace?.Workspace?.KernelId : null);
     }
 }

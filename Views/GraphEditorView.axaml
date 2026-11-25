@@ -15,6 +15,12 @@
                 IsVisible="{Binding !IsInlineWorkspace}">
             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
                 <StackPanel Orientation="Horizontal">
+                <views:IconButton Classes="editor-tool" Icon="Previous" IsEnabled="{Binding CanNavigateBack}"
+                                  Click="OnNavigateBackClick" ToolTip.Tip="{DynamicResource Text.Editor.NavigateBack}"
+                                  AutomationProperties.Name="{DynamicResource Text.Editor.NavigateBack}" />
+                <views:IconButton Classes="editor-tool" Icon="Next" IsEnabled="{Binding CanNavigateForward}"
+                                  Click="OnNavigateForwardClick" ToolTip.Tip="{DynamicResource Text.Editor.NavigateForward}"
+                                  AutomationProperties.Name="{DynamicResource Text.Editor.NavigateForward}" />
                 <ItemsControl ItemsSource="{Binding Breadcrumbs}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
@@ -25,10 +31,10 @@
                                 <TextBlock Classes="editor-heading" Text="›" IsVisible="{Binding HasSeparator}"
                                            VerticalAlignment="Center"
                                            Foreground="{DynamicResource EffectMutedForegroundBrush}" />
-                                <Button Classes="editor-tool" Tag="{Binding Depth}" AutomationProperties.Name="{Binding Name}"
+                                <Button Classes="editor-tool" Tag="{Binding}" AutomationProperties.Name="{Binding Name}"
                                         Click="OnBreadcrumbClick" Padding="8,2">
                                     <StackPanel Orientation="Horizontal" Spacing="6">
-                                        <views:EditorIconView Icon="Group" />
+                                        <views:EditorIconView Icon="{Binding Icon}" />
                                         <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
                                     </StackPanel>
                                 </Button>
@@ -36,7 +42,6 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
-                <StackPanel x:Name="SpecializedBreadcrumbs" Orientation="Horizontal" />
                 </StackPanel>
                 <views:IconButton Grid.Column="1" Classes="editor-tool" Icon="Settings"
                                   IsVisible="{Binding IsRootGraph}"
@@ -89,7 +94,7 @@
                                   AutomationProperties.Name="{DynamicResource Text.Inline.Disconnect}">
                     <Button.Flyout>
                         <Flyout>
-                            <ItemsControl ItemsSource="{Binding SelectedConnections}" MaxWidth="380">
+                            <ItemsControl ItemsSource="{Binding IncidentConnections}" MaxWidth="380">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate DataType="vm:GraphConnectionViewModel">
                                         <Button Content="{Binding Description}" Tag="{Binding}"
@@ -263,6 +268,7 @@
             </Grid>
             </Grid>
         </ScrollViewer>
+        <views:GraphInteractionOverlay x:Name="InteractionOverlay" Grid.Row="1" />
         <views:CpuParticleFlowView Grid.Row="1" IsVisible="{Binding IsCpuParticleOverview}" />
         <ContentControl x:Name="SpecializedWorkspace" Grid.Row="1" Grid.RowSpan="2" IsVisible="False"
                         Background="{DynamicResource EffectWindowBackgroundBrush}" />

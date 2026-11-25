@@ -13,7 +13,7 @@ internal static class MeshEmissionCompilationTests
         var invalid = graph with { Connections = graph.Connections.Where(edge => edge.TargetPortId != "emitterMesh").ToArray() };
         try { SpawnableGroupPackage.Compile(invalid); throw new Exception("Missing emitter mesh was accepted."); }
         catch (InvalidDataException error) when (error.Message.Contains("Emitter Mesh", StringComparison.Ordinal)) { }
-        var library = NativeLibrary.Load(EditorNativePreviewSession.ResolveLibraryPath());
+        var library = NativeLibrary.Load(PreviewNativeLibrary.ResolveLibraryPath());
         try
         {
             var create = Export<Create>("libra_spawnable_host_create");

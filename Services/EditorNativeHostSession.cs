@@ -6,6 +6,11 @@ namespace LiberaFx.Services;
 public sealed record EditorNativeGameIoEvent(Guid ContainerId, ulong InstanceId, string PortName,
     byte Kind, double[] Values);
 
+public sealed class NativeHostException(int result) : InvalidOperationException("Native preview host failed with result " + result + ".")
+{
+    public int Result { get; } = result;
+}
+
 public sealed class EditorNativeHostSession : IDisposable
 {
     private readonly nint _library;
@@ -28,15 +33,19 @@ public sealed class EditorNativeHostSession : IDisposable
         .SelectMany(template => _instances.Keys.Where(key => key.Container == template.ContainerId)
             .OrderBy(key => key.Instance)).ToArray();
 
-    public EditorNativeHostSession(SpawnableGroupPackage package, string library)
+    public EditorNativeHostSession(SpawnableGroupPackage package, string library, uint instructionBudget = 10000)
     {
         _package = package;
         _library = NativeLibrary.Load(library);
         try
         {
+            if (!NativeLibrary.TryGetExport(_library, "libra_spawnable_host_create", out _))
+            {
+                throw new NotSupportedException("The native runtime does not support LFXP package hosts.");
+            }
             var bytes = SpawnableGroupPackageBinary.Serialize(package);
             Check(Fn<Create>("libra_spawnable_host_create")(bytes, (ulong)bytes.Length,
-                32, 4 * 1024 * 1024, 128, 10000, out _handle));
+                32, 4 * 1024 * 1024, 128, instructionBudget, out _handle));
             _counted = true;
             Interlocked.Increment(ref _activeOwners);
         }
@@ -61,11 +70,41 @@ public sealed class EditorNativeHostSession : IDisposable
 
     public void SendSignal(Guid node)
     {
+        Check(TrySendSignal(node));
+    }
+
+    public int TrySendSignal(Guid node)
+    {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        Check(Fn<Dispatch>("libra_spawnable_host_dispatch_signal")(_handle, Id(node)));
+        var result = Fn<Dispatch>("libra_spawnable_host_dispatch_signal")(_handle, Id(node));
         Drain();
         Check(Fn<Finished>("libra_spawnable_host_root_finished")(_handle, out var finished));
         _finished = finished != 0;
+        return result;
+    }
+
+    public void Stop()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        Check(Fn<Release>("libra_spawnable_host_stop")(_handle));
+        Drain();
+        _finished = true;
+    }
+
+    public void End()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        Check(Fn<Release>("libra_spawnable_host_request_natural_end")(_handle));
+        Drain();
+        Check(Fn<Finished>("libra_spawnable_host_root_finished")(_handle, out var finished));
+        _finished = finished != 0;
+    }
+
+    public void ForceTerminate(Guid container, ulong instance)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        Check(Fn<Force>("libra_spawnable_host_force_terminate")(_handle, 1, Id(container), instance));
+        Drain();
     }
 
     private void Drain()
@@ -80,7 +119,14 @@ public sealed class EditorNativeHostSession : IDisposable
             _events.Add(new(container, item.Instance, item.Kind, item.Time, item.Seed,
                 new Guid(item.Signal, bigEndian: true)));
             if (item.Kind == 1) _instances.Add((container, item.Instance), item.Time);
-            else if (item.Kind is 2 or 3) _instances.Remove((container, item.Instance));
+            else if (item.Kind is 2 or 3 || (item.Kind == 5 && item.Instance != 0))
+            {
+                _instances.Remove((container, item.Instance));
+            }
+            else if (item.Kind == 5 && container == Guid.Empty && item.Instance == 0)
+            {
+                _instances.Clear();
+            }
         }
         while (true)
         {
@@ -128,7 +174,10 @@ public sealed class EditorNativeHostSession : IDisposable
     }
     private static void Check(int result)
     {
-        if (result != 0) throw new InvalidOperationException("Native preview host failed with result " + result + ".");
+        if (result != 0)
+        {
+            throw new NativeHostException(result);
+        }
     }
     public void Dispose()
     {
@@ -178,6 +227,8 @@ public sealed class EditorNativeHostSession : IDisposable
     private delegate int AdvanceHost(ulong handle, double time, double delta);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate int Dispatch(ulong handle, byte[] node);
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate int Force(ulong handle, uint scope, byte[] container, ulong instance);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate int NextEvent(ulong handle, out HostEvent item, out uint has);
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]

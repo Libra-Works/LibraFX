@@ -15,7 +15,7 @@ public sealed partial class VfxProgram
         CpuParticleSchema.ValidateContext(graph);
         if (CpuParticleCompilation.Contains(graph))
         {
-            throw new InvalidDataException("CPU Particle requires an effect package; export .lfxb with a matching updated SDK.");
+            throw new InvalidDataException("CPU Particle requires an effect package; export .lfxp with a matching updated SDK.");
         }
 #if LIBERAFX_CONVERTER
         if (Flatten(graph).Any(node => GpuParticleEditorService.IsGpu(node.Kind)))
@@ -26,16 +26,16 @@ public sealed partial class VfxProgram
         if (GpuProgramDeliveryService.Containers(graph).Any(node =>
                 GpuParticleEditorService.ReadState(node).Fluid2D is not null))
         {
-            throw new InvalidDataException("2D fluid requires an effect package; export .lfxb with matching updated SDK adapters.");
+            throw new InvalidDataException("2D fluid requires an effect package; export .lfxp with matching updated SDK adapters.");
         }
 #endif
         if (Flatten(graph).Any(node => GameIoSchema.IsInstanceNode(node.Kind)))
         {
-            throw new InvalidDataException("Instance Game I/O requires an effect package; export with EffectBinary to .lfxb.");
+            throw new InvalidDataException("Instance Game I/O requires an effect package; export with EffectBinary to .lfxp.");
         }
         if (Flatten(graph).Any(node => node.SignalKeys?.Any(key => key.Mode == SignalTimelineMode.Runtime) == true))
         {
-            throw new InvalidDataException("Runtime Signal timeline keys require an effect package; export with EffectBinary to .lfxb.");
+            throw new InvalidDataException("Runtime Signal timeline keys require an effect package; export with EffectBinary to .lfxp.");
         }
         var starts = graph.Nodes.Where(node => node.Kind.Value == "OnStart").ToArray();
         if (starts.Length == 1 && !graph.Connections.Any(edge => edge.SourceNodeId == starts[0].Id))
@@ -44,7 +44,7 @@ public sealed partial class VfxProgram
             throw new InvalidDataException("Compile Spawnable Groups with SpawnableGroupPackage so templates are not discarded.");
         if (RenderProgramBindings.HasGpuDrawMatrix(graph))
         {
-            throw new InvalidDataException("A GPU Draw Matrix requires an effect package; export with EffectBinary to .lfxb.");
+            throw new InvalidDataException("A GPU Draw Matrix requires an effect package; export with EffectBinary to .lfxp.");
         }
         if (SkeletalPoseSchema.ContainsSource(graph))
             throw new NotSupportedException(

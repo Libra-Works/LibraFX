@@ -47,7 +47,7 @@ public static class GameIoCompilationTests
         var metadataOffset = 16 + program.TypedInstructions.Count * 256;
         Require(BinaryPrimitives.ReadUInt16LittleEndian(binary.AsSpan(4)) == 7 &&
                 binary.AsSpan(metadataOffset, 4).SequenceEqual("LFIO"u8),
-            "Game I/O metadata must use the v7 extension after instruction data.");
+            "Standalone Game I/O metadata uses the legacy layout until the raw path is removed.");
         var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web)
         {
             Converters = { new JsonStringEnumConverter() }
@@ -61,7 +61,7 @@ public static class GameIoCompilationTests
 
         var package = SpawnableGroupPackage.Compile(graph);
         Require(package.GameIoPorts.Select(PortShape).SequenceEqual(program.GameIoPorts.Select(PortShape)) &&
-                BinaryPrimitives.ReadUInt16LittleEndian(package.ParentBytecode.AsSpan(4)) == 7,
+                BinaryPrimitives.ReadUInt16LittleEndian(package.ParentBytecode.AsSpan(4)) == 11,
             "Spawnable package output must preserve root Game I/O metadata.");
         if (Environment.GetEnvironmentVariable("LIBERAFX_INSTANCE_GAMEIO_FIXTURES") is { Length: > 0 } fixtureDirectory)
         {

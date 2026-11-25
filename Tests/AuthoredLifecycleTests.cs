@@ -76,7 +76,6 @@ internal static class AuthoredLifecycleTests
             throw new Exception("The lifecycle preset must expose its intervals without adding Spawnables or Life Time.");
         var package = SpawnableGroupPackage.Compile(graph.CreateSnapshot());
         File.WriteAllBytes(Path.Combine(directory, "PhasePreset.lfxp"), SpawnableGroupPackageBinary.Serialize(package));
-        File.WriteAllBytes(Path.Combine(directory, "PhasePreset.lfxb"), package.ParentBytecode);
         var phase = graph.CreateNode(new("CurrentPhase"));
         var selectorKind = GraphNodeDefinition.All.Single(definition =>
             GraphEnumBranchSchema.TryGetSelector(definition.Kind, out var type, out var output, out _) &&
@@ -163,7 +162,8 @@ internal static class AuthoredLifecycleTests
             var program = VfxProgram.Compile(snapshot);
             if (program.BinaryVersion != 11)
                 throw new Exception("Phase state must use explicitly typed bytecode.");
-            File.WriteAllBytes(Path.Combine(directory, "AuthoredPhases.lfxb"), program.ToBinary());
+            File.WriteAllBytes(Path.Combine(directory, "AuthoredPhases.lfxp"),
+                SpawnableGroupPackageBinary.Serialize(new SpawnableGroupPackage(program.ToPackageBinary(), [])));
             File.WriteAllBytes(Path.Combine(directory, "AuthoredPhases.ids"),
                 new[] { phase.Id, time.Id, selector.Id, clock.Id, enterLoop.Id, enterEnd.Id, enterStart.Id, arm.Id, reset.Id, reenterEnd.Id }
                     .SelectMany(id => id.ToByteArray(bigEndian: true)).ToArray());

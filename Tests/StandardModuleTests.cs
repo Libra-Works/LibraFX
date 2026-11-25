@@ -46,7 +46,7 @@ internal static class StandardModuleTests
         if (standard.Length != expectedIds.Count || standard.Any(asset =>
                 asset.Origin != GroupAssetOrigin.Standard || !asset.Locked || asset.Revision != 1) ||
             catalog.Warnings.Length != 0 || catalog.HasLibraryDirectory)
-            throw new InvalidOperationException("The read-only standard assets did not load into a fresh project catalog.");
+            throw new InvalidOperationException($"The read-only standard assets did not load into a fresh project catalog. Expected {expectedIds.Count}, loaded {standard.Length}; warnings: {catalog.Warnings}; has library: {catalog.HasLibraryDirectory}.");
         if (standard.Any(asset => asset.Graph.Nodes.Any(node => node.Kind.Value == "LifeTime")))
             throw new InvalidOperationException("A standard module silently introduced a particle LifeTime.");
         VerifyBillboardAssets(catalog);
@@ -381,7 +381,7 @@ internal static class StandardModuleTests
         var bindings = lowered.Outputs[(boundary.Id, outputPort)];
         if (bindings.Count == 0) throw new InvalidOperationException($"Native fixture output {boundary.Name} has no runtime binding.");
 
-        File.WriteAllBytes(Path.Combine(directory, name + ".lfxb"), program.ToBinary());
+        File.WriteAllBytes(Path.Combine(directory, name + ".lfxp"), EffectBinary.Compile(graph));
         using var writer = new StreamWriter(Path.Combine(directory, name + ".checks"));
         for (var row = 0; row < bindings.Count; row++)
         {

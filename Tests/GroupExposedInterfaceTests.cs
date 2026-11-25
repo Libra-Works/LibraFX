@@ -298,7 +298,7 @@ internal static class GroupExposedInterfaceTests
                 new ProjectFileService().SaveAsync(project, graph).GetAwaiter().GetResult();
                 project.Position = 0;
                 var reloaded = ProjectDocumentReader.LoadAsync(project).GetAwaiter().GetResult();
-                var bytecode = VfxProgram.Compile(reloaded.Graph).ToBinary();
+                var bytecode = VfxProgram.Compile(reloaded.Graph).ToPackageBinary();
                 VerifyNativeVector(bytecode, output.Id, [2, 3, 4]);
             }
             finally { curveWindow.Close(); }
@@ -306,37 +306,19 @@ internal static class GroupExposedInterfaceTests
         finally { inspectorWindow.Close(); }
     }
 
-    [StructLayout(LayoutKind.Sequential, Pack = 8)]
-    private struct NativeValue { public double X, Y, Z, W; public uint Count, Reserved; }
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int CreateProgram(byte[] bytes, ulong length, out ulong handle);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int CreateInstance(ulong program, out ulong instance);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int Release(ulong handle);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int Bind(ulong instance, byte[] id, out uint binding);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int EvaluateValue(ulong instance, double time, uint[] bindings, uint count, out NativeValue value);
-
     private static void VerifyNativeVector(byte[] bytes, Guid target, double[] expected)
     {
         var path = Environment.GetEnvironmentVariable("LIBERAFX_NATIVE_TEST_LIBRARY");
-        if (string.IsNullOrEmpty(path)) return;
-        var library = NativeLibrary.Load(path);
-        T Fn<T>(string name) where T : Delegate =>
-            Marshal.GetDelegateForFunctionPointer<T>(NativeLibrary.GetExport(library, name));
-        static void Check(int result) { if (result != 0) throw new InvalidOperationException($"Native runtime error {result}."); }
-        ulong program = 0, instance = 0;
-        try
+        if (string.IsNullOrEmpty(path))
         {
-            Check(Fn<CreateProgram>("libra_program_create")(bytes, (ulong)bytes.Length, out program));
-            Check(Fn<CreateInstance>("libra_instance_create")(program, out instance));
-            Check(Fn<Bind>("libra_bind_value")(instance, target.ToByteArray(true), out var binding));
-            Check(Fn<EvaluateValue>("libra_evaluate")(instance, 2, [binding], 1, out var value));
-            if (value.Count != 3 || !new[] { value.X, value.Y, value.Z }.SequenceEqual(expected))
-                throw new InvalidOperationException("The native runtime did not evaluate exposed XYZ curves.");
+            return;
         }
-        finally
+        using var host = new NativeSpawnableSession(new SpawnableGroupPackage(bytes, []) { AutoDestroyWhenIdle = false }, path);
+        host.Advance(2);
+        var value = host.ReadRoot(target);
+        if (value.Width != 3 || !value.Lanes.Take(3).SequenceEqual(expected))
         {
-            if (instance != 0) Fn<Release>("libra_instance_release")(instance);
-            if (program != 0) Fn<Release>("libra_program_release")(program);
-            NativeLibrary.Free(library);
+            throw new InvalidOperationException("The native runtime did not evaluate exposed XYZ curves.");
         }
     }
 

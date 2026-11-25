@@ -4,7 +4,7 @@ namespace LiberaFx.Services.Compilation;
 
 public static class EffectBinary
 {
-    public const string FileExtension = ".lfxb";
+    public const string FileExtension = ".lfxp";
 
     public static byte[] Compile(GraphSnapshot graph)
     {

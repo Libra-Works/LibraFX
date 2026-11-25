@@ -65,7 +65,7 @@ public static class QuaternionRandomCompilationTests
             "SampleIndex wiring and component-specific (including reversed/equal) ranges must survive lowering.");
         var package = SpawnableGroupPackageBinary.Deserialize(
             SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(randomGraph)));
-        Require(package.ParentBytecode.SequenceEqual(randomProgram.ToBinary()),
+        Require(package.ParentBytecode.SequenceEqual(randomProgram.ToPackageBinary()),
             "Effect packaging must retain deterministic random instructions.");
 
         // Existing real named outputs work on the XYZW representation, without another runtime ABI.
@@ -113,7 +113,7 @@ public static class QuaternionRandomCompilationTests
 
     // Optional INTERNAL compiler-to-native raw program fixtures, produced by VfxProgram.Compile.
     // These are not unified EffectBinary files and do not exercise the standalone converter.
-    // Caller supplies a NEW isolated temporary directory. Pass the two .lfxb paths to
+    // Caller supplies a NEW isolated temporary directory. Pass the two .lfxp paths to
     // QuaternionRandomTests in this order; that test reads raw bytecode using Program::load.
     public static void WriteNativeFixtures(string directory)
     {
@@ -122,8 +122,10 @@ public static class QuaternionRandomCompilationTests
             throw new ArgumentException("Supply an absolute, new temporary directory.", nameof(directory));
         }
         Directory.CreateDirectory(directory);
-        File.WriteAllBytes(Path.Combine(directory, "quaternion.lfxb"), VfxProgram.Compile(RotationGraph()).ToBinary());
-        File.WriteAllBytes(Path.Combine(directory, "random.lfxb"), VfxProgram.Compile(RandomGraph()).ToBinary());
+        File.WriteAllBytes(Path.Combine(directory, "quaternion.lfxp"),
+            SpawnableGroupPackageBinary.Serialize(new SpawnableGroupPackage(VfxProgram.Compile(RotationGraph()).ToPackageBinary(), [])));
+        File.WriteAllBytes(Path.Combine(directory, "random.lfxp"),
+            SpawnableGroupPackageBinary.Serialize(new SpawnableGroupPackage(VfxProgram.Compile(RandomGraph()).ToPackageBinary(), [])));
     }
 
     private static GraphSnapshot RotationGraph()

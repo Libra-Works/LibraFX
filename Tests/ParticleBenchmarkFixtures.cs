@@ -11,7 +11,7 @@ internal static class ParticleBenchmarkFixtures
             throw new ArgumentException("Use an absolute new isolated benchmark fixture directory.");
         Directory.CreateDirectory(directory);
         var meshGraph = ParticleSamples.Create("CpuMeshSurface");
-        File.WriteAllBytes(Path.Combine(directory, "CpuMesh-static.lfxb"),
+        File.WriteAllBytes(Path.Combine(directory, "CpuMesh-static.lfxp"),
             SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(meshGraph)));
         var animatedMesh = meshGraph with { Nodes = meshGraph.Nodes.Select(node =>
         {
@@ -31,7 +31,7 @@ internal static class ParticleBenchmarkFixtures
             }
             return node;
         }).ToArray() };
-        File.WriteAllBytes(Path.Combine(directory, "CpuMesh-animated.lfxb"),
+        File.WriteAllBytes(Path.Combine(directory, "CpuMesh-animated.lfxp"),
             SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(animatedMesh)));
         var referenceOptions = new VfxCompileOptions { OptimizeCpuParticleKernels = false };
         foreach (var count in new[] { 100, 512, 1000, 10000 })
@@ -52,12 +52,12 @@ internal static class ParticleBenchmarkFixtures
                     child with { Nodes = child.Nodes.Select(Transform).ToArray() } };
             }
             graph = graph with { Nodes = graph.Nodes.Select(Transform).ToArray() };
-            File.WriteAllBytes(Path.Combine(directory, "CpuFountain-" + count + ".lfxb"),
+            File.WriteAllBytes(Path.Combine(directory, "CpuFountain-" + count + ".lfxp"),
                 SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(graph, options: referenceOptions)));
-            File.WriteAllBytes(Path.Combine(directory, "CpuFountain-aot-" + count + ".lfxb"),
+            File.WriteAllBytes(Path.Combine(directory, "CpuFountain-aot-" + count + ".lfxp"),
                 SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(graph)));
-            File.WriteAllBytes(Path.Combine(directory, "CpuFountain-binary-" + count + ".lfxb"),
-                CpuParticleBinaryOptimizer.OptimizePackage(File.ReadAllBytes(Path.Combine(directory, "CpuFountain-" + count + ".lfxb"))));
+            File.WriteAllBytes(Path.Combine(directory, "CpuFountain-binary-" + count + ".lfxp"),
+                CpuParticleBinaryOptimizer.OptimizePackage(File.ReadAllBytes(Path.Combine(directory, "CpuFountain-" + count + ".lfxp"))));
             var systemId = new byte[16];
             graph.Nodes.Single(node => CpuParticleSchema.IsContainer(node.Kind)).Id.TryWriteBytes(systemId, true, out _);
             File.WriteAllBytes(Path.Combine(directory, "CpuFountain-" + count + ".id"), systemId);
@@ -80,7 +80,7 @@ internal static class ParticleBenchmarkFixtures
                 var owner = Port("OwnerMatrix", "owner");
                 var withGameIo = graph with { Nodes = [.. graph.Nodes, input, output, trigger, done, owner],
                     Connections = [.. graph.Connections, new(input.Id, output.Id, "value", "value"), new(trigger.Id, done.Id, "signal", "then")] };
-                File.WriteAllBytes(Path.Combine(directory, "CpuPool-gameio.lfxb"),
+                File.WriteAllBytes(Path.Combine(directory, "CpuPool-gameio.lfxp"),
                     SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(withGameIo)));
 
                 GraphNodeSnapshot ShortLived(GraphNodeSnapshot node)
@@ -97,20 +97,20 @@ internal static class ParticleBenchmarkFixtures
                         child with { Nodes = child.Nodes.Select(ShortLived).ToArray() } };
                 }
                 var shortLived = graph with { Nodes = graph.Nodes.Select(ShortLived).ToArray() };
-                File.WriteAllBytes(Path.Combine(directory, "CpuFountain-retirement.lfxb"),
+                File.WriteAllBytes(Path.Combine(directory, "CpuFountain-retirement.lfxp"),
                     SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(shortLived, options: referenceOptions)));
-                File.WriteAllBytes(Path.Combine(directory, "CpuFountain-aot-retirement.lfxb"),
+                File.WriteAllBytes(Path.Combine(directory, "CpuFountain-aot-retirement.lfxp"),
                     SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(shortLived)));
-                File.WriteAllBytes(Path.Combine(directory, "CpuFountain-binary-retirement.lfxb"),
-                    CpuParticleBinaryOptimizer.OptimizePackage(File.ReadAllBytes(Path.Combine(directory, "CpuFountain-retirement.lfxb"))));
-                File.WriteAllBytes(Path.Combine(directory, "CpuBatch-math.lfxb"),
+                File.WriteAllBytes(Path.Combine(directory, "CpuFountain-binary-retirement.lfxp"),
+                    CpuParticleBinaryOptimizer.OptimizePackage(File.ReadAllBytes(Path.Combine(directory, "CpuFountain-retirement.lfxp"))));
+                File.WriteAllBytes(Path.Combine(directory, "CpuBatch-math.lfxp"),
                     SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(MathVariant(graph), options: referenceOptions)));
-                File.WriteAllBytes(Path.Combine(directory, "CpuBatch-divide-zero.lfxb"),
+                File.WriteAllBytes(Path.Combine(directory, "CpuBatch-divide-zero.lfxp"),
                     SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(MathVariant(graph, divideByZero: true), options: referenceOptions)));
-                File.WriteAllBytes(Path.Combine(directory, "CpuBatch-error-order.lfxb"),
+                File.WriteAllBytes(Path.Combine(directory, "CpuBatch-error-order.lfxp"),
                     SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(MathVariant(graph, mixedError: true), options: referenceOptions)));
                 foreach (var mode in new[] { "divide", "mixed", "zero-life", "unsupported" })
-                    File.WriteAllBytes(Path.Combine(directory, "CpuBirth-" + mode + ".lfxb"),
+                    File.WriteAllBytes(Path.Combine(directory, "CpuBirth-" + mode + ".lfxp"),
                         SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(BirthVariant(graph, mode), options: referenceOptions)));
             }
         }

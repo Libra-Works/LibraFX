@@ -86,6 +86,13 @@ public static class GraphValidator
                 node.ChildGraph), node.ChildGraph));
         }
 
+        if (snapshot.Connections.Any(connection => connection is null ||
+            !nodes.ContainsKey(connection.SourceNodeId) || !nodes.ContainsKey(connection.TargetNodeId)))
+        {
+            throw new InvalidDataException("The project contains an invalid graph connection.");
+        }
+        effectiveDefinitions = GraphPolymorphism.Resolve(snapshot).ToDictionary(pair => pair.Key, pair => pair.Value);
+
         var connections = new HashSet<(Guid SourceId, string? SourcePortId, Guid TargetId, string? TargetPortId)>();
         var occupiedInputs = new HashSet<(Guid TargetId, string PortId)>();
         var occupiedSignalOutputs = new HashSet<(Guid SourceId, string? PortId)>();
@@ -104,7 +111,8 @@ public static class GraphValidator
                     ? connection.TargetPortId is not null
                     : connection.TargetPortId is not { } port ||
                       !effectiveDefinitions[target.Id].InputPorts!.Any(item => item.Id == port) ||
-                      effectiveDefinitions[target.Id].GetInputPortCategory(port) != GraphPortCategory.Signal &&
+                      (target.Kind.Value == "Reroute" ||
+                       effectiveDefinitions[target.Id].GetInputPortCategory(port) != GraphPortCategory.Signal) &&
                       !occupiedInputs.Add((target.Id, port))) ||
                 !connections.Add((source.Id, connection.SourcePortId, target.Id, connection.TargetPortId)))
                 throw new InvalidDataException($"The project contains an invalid graph connection: {connection?.SourceNodeId}/{connection?.SourcePortId} -> {connection?.TargetNodeId}/{connection?.TargetPortId}.");

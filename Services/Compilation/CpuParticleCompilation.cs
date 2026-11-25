@@ -74,8 +74,7 @@ public static class CpuParticleCompilation
         var types = new Dictionary<Guid, Guid>();
         using var stream = new MemoryStream();
         using var writer = new BinaryWriter(stream, Encoding.UTF8, true);
-        var hasMesh = graph.Connections.Any(edge => ids.Contains(edge.TargetNodeId) && edge.TargetPortId == "emitterMesh");
-        writer.Write(hasMesh ? 2u : 1u);
+        writer.Write(2u);
         writer.Write(systems.Length);
         foreach (var system in systems)
         {
@@ -198,24 +197,21 @@ public static class CpuParticleCompilation
                     "CpuParticleMeshPosition" or "CpuParticleMeshNormal" or "CpuParticleMeshUV" or "CpuParticleMeshColor");
             if (needsMesh && meshEdge is null)
                 throw new InvalidDataException("Connect a Procedural Model to CPU Particle's Emitter Mesh before using mesh sampling nodes.");
-            if (hasMesh)
+            byte[] definition = [];
+            if (meshEdge is not null)
             {
-                byte[] definition = [];
-                if (meshEdge is not null)
-                {
-                    var mesh = graph.Nodes.Single(node => node.Id == meshEdge.SourceNodeId);
-                    var modelDefinition = GraphNodeDefinition.Find(mesh.Kind)!;
-                    if (ProceduralResourceSchema.Name(mesh.Kind) != "ProceduralModel")
-                        throw new InvalidDataException("Emitter Mesh currently requires a Procedural Model.");
-                    if (graph.Connections.Any(edge => edge.TargetNodeId == mesh.Id))
-                        throw new InvalidDataException("Mesh emission currently supports procedural Flow settings and time animation; connected Flow parameters are not yet supported.");
-                    definition = Convert.FromBase64String(ProceduralDefinitionWriter.Encode("ProceduralModel",
-                        ProceduralResourceSchema.ReadEffective(modelDefinition, mesh.Parameters), mesh,
-                        graph.Connections.ToLookup(edge => edge.TargetNodeId)));
-                }
-                writer.Write(definition.Length);
-                writer.Write(definition);
+                var mesh = graph.Nodes.Single(node => node.Id == meshEdge.SourceNodeId);
+                var modelDefinition = GraphNodeDefinition.Find(mesh.Kind)!;
+                if (ProceduralResourceSchema.Name(mesh.Kind) != "ProceduralModel")
+                    throw new InvalidDataException("Emitter Mesh currently requires a Procedural Model.");
+                if (graph.Connections.Any(edge => edge.TargetNodeId == mesh.Id))
+                    throw new InvalidDataException("Mesh emission currently supports procedural Flow settings and time animation; connected Flow parameters are not yet supported.");
+                definition = Convert.FromBase64String(ProceduralDefinitionWriter.Encode("ProceduralModel",
+                    ProceduralResourceSchema.ReadEffective(modelDefinition, mesh.Parameters), mesh,
+                    graph.Connections.ToLookup(edge => edge.TargetNodeId)));
             }
+            writer.Write(definition.Length);
+            writer.Write(definition);
         }
         writer.Flush();
         return (graph with { Nodes = nodes, Connections = edges }, stream.ToArray(), types);

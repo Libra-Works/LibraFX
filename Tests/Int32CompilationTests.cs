@@ -32,7 +32,7 @@ public static class Int32CompilationTests
             Require(program.BinaryVersion == 10,
                 $"{kind} must use the explicitly typed bytecode version.");
             if (!string.IsNullOrWhiteSpace(fixtureDirectory))
-                File.WriteAllBytes(Path.Combine(fixtureDirectory, $"{kind}.lfxb"), bytes);
+                WriteNativeFixture(fixtureDirectory, $"{kind}.lfxp", program);
         }
 
         var floatNode = Node(Definition("Float"),
@@ -47,7 +47,7 @@ public static class Int32CompilationTests
         VerifyInt32TypeTable(conversion.ToBinary(),
             GraphValueType.Float, GraphValueType.Int32, GraphValueType.Float);
         if (!string.IsNullOrWhiteSpace(fixtureDirectory))
-            File.WriteAllBytes(Path.Combine(fixtureDirectory, "Conversions.lfxb"), conversion.ToBinary());
+            WriteNativeFixture(fixtureDirectory, "Conversions.lfxp", conversion);
 
         var absolute = Node(GraphNodeDefinition.Core.Single(item => item.Name == "Abs"));
         var mixed = VfxProgram.Compile(new GraphSnapshot([floatNode, toInt, toFloat, absolute],
@@ -59,7 +59,7 @@ public static class Int32CompilationTests
         VerifyInt32TypeTable(mixed.ToBinary(),
             GraphValueType.Float, GraphValueType.Int32, GraphValueType.Float, GraphValueType.Float);
         if (!string.IsNullOrWhiteSpace(fixtureDirectory))
-            File.WriteAllBytes(Path.Combine(fixtureDirectory, "Mixed.lfxb"), mixed.ToBinary());
+            WriteNativeFixture(fixtureDirectory, "Mixed.lfxp", mixed);
 
         var groupInput = Node(Definition("GroupInputInt32"));
         var groupOutput = Node(Definition("GroupOutputInt32"));
@@ -73,16 +73,17 @@ public static class Int32CompilationTests
         var multiplier = Node(int32,
             new NodeParameterSnapshot("value", "int", JsonSerializer.SerializeToElement(3)));
         var multiply = Node(Definition("Int32Multiply"));
-        var groupBytes = VfxProgram.Compile(new GraphSnapshot([source, grouped, multiplier, multiply],
+        var groupProgram = VfxProgram.Compile(new GraphSnapshot([source, grouped, multiplier, multiply],
         [
             new(source.Id, grouped.Id, GroupBoundarySchema.InputPortId(groupInput.Id)),
             new(grouped.Id, multiply.Id, "a", GroupBoundarySchema.OutputPortId(groupOutput.Id)),
             new(multiplier.Id, multiply.Id, "b")
-        ])).ToBinary();
+        ]));
+        var groupBytes = groupProgram.ToBinary();
         VerifyInt32TypeTable(groupBytes, GraphValueType.Int32, GraphValueType.Int32,
             GraphValueType.Int32, GraphValueType.Int32, GraphValueType.Int32);
         if (!string.IsNullOrWhiteSpace(fixtureDirectory))
-            File.WriteAllBytes(Path.Combine(fixtureDirectory, "GroupBoundary.lfxb"), groupBytes);
+            WriteNativeFixture(fixtureDirectory, "GroupBoundary.lfxp", groupProgram);
 
         var badTarget = Node(Definition("Int32Add"));
         var mismatched = new GraphSnapshot([floatNode, badTarget], [new(floatNode.Id, badTarget.Id, "a")]);
@@ -101,6 +102,12 @@ public static class Int32CompilationTests
             throw new InvalidOperationException("A fractional Int32 literal was accepted.");
         }
         catch (InvalidDataException) { }
+    }
+
+    private static void WriteNativeFixture(string directory, string name, VfxProgram program)
+    {
+        var package = new SpawnableGroupPackage(program.ToPackageBinary(), []);
+        File.WriteAllBytes(Path.Combine(directory, name), SpawnableGroupPackageBinary.Serialize(package));
     }
 
     private static void VerifyInt32TypeTable(byte[] bytes, params GraphValueType[] expectedTypes)

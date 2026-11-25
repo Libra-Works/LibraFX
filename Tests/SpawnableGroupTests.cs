@@ -85,7 +85,7 @@ internal static class SpawnableGroupTests
         var template = package.Templates.Single();
         if (template.ContainerId != group.Id || template.Inputs[0].TemplateNodeId != input.Id ||
             template.Inputs[0].Width != 3 || template.Inputs[1].TemplateNodeId != color.Id ||
-            !template.Inputs[1].IsColor || template.Inputs[2].TemplateNodeId != capturedTime.Id || package.ParentBytecode[4] != 3 ||
+            !template.Inputs[1].IsColor || template.Inputs[2].TemplateNodeId != capturedTime.Id || package.ParentBytecode[4] != 11 ||
             template.GpuContainers.Single().Id != gpu.Id ||
             template.Bytecode.AsSpan().IndexOf(gpu.Id.ToByteArray(bigEndian: true)) >= 0 ||
             template.Bytecode.AsSpan().IndexOf(input.Id.ToByteArray(bigEndian: true)) < 0 ||
@@ -202,114 +202,79 @@ internal static class SpawnableGroupTests
         _ = SpawnableGroupPackage.Compile(workspace.CreateSnapshot());
     }
 
-    [StructLayout(LayoutKind.Sequential, Pack = 8)]
-    private struct NativeBinding
-    {
-        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 16)] public byte[] Container;
-        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 16)] public byte[] Type;
-        public ulong Pool;
-        public uint Count, Reserved;
-        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 4)] public byte[] Widths;
-        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 4)] public byte[] Colors;
-        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 64)] public byte[] Nodes;
-    }
-    [StructLayout(LayoutKind.Sequential, Pack = 8)]
-    private struct NativeEvent
-    {
-        public uint Kind, Reserved;
-        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 16)] public byte[] Container;
-        public ulong Instance;
-        public double Start;
-        public ulong Seed;
-    }
-    [StructLayout(LayoutKind.Sequential, Pack = 8)]
-    private struct NativeValue { public double X, Y, Z, W; public uint Count, Reserved; }
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int CreateProgram(byte[] bytes, ulong size, out ulong handle);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int CreateParent(byte[] bytes, ulong size, [In] NativeBinding[] bindings, uint count, out ulong handle);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int CreatePool(ulong program, byte[] container, uint max, ulong budget, uint events, out ulong pool);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int CreateInstance(ulong program, out ulong instance);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int Release(ulong handle);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int EvaluateParent(ulong instance, double time, IntPtr bindings, uint count, IntPtr values);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int Dispatch(ulong instance, byte[] node, double time, uint budget);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int Process(ulong pool, uint max, out uint processed);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int Event(ulong pool, out NativeEvent value, out uint hasEvent);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int EvaluateChild(ulong pool, ulong instance, double time);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int ReadChild(ulong pool, ulong instance, byte[] node, out NativeValue value);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int Stop(ulong pool, ulong instance);
-
     private static void VerifyNative(SpawnableGroupPackage package, Guid signal, Guid input, Guid color, Guid capturedTime, Guid time)
     {
         var path = Environment.GetEnvironmentVariable("LIBERAFX_NATIVE_TEST_LIBRARY");
-        if (string.IsNullOrEmpty(path)) { Console.WriteLine("Native Spawnable Group check skipped; set LIBERAFX_NATIVE_TEST_LIBRARY."); return; }
-        var library = NativeLibrary.Load(path);
-        T Fn<T>(string name) where T : Delegate => Marshal.GetDelegateForFunctionPointer<T>(NativeLibrary.GetExport(library, name));
-        void Check(int result) { if (result != 0) throw new InvalidOperationException($"Native Spawnable Group error {result}."); }
+        if (string.IsNullOrEmpty(path))
+        {
+            Console.WriteLine("Native Spawnable Group check skipped; set LIBERAFX_NATIVE_TEST_LIBRARY.");
+            return;
+        }
         var template = package.Templates.Single();
-        ulong child = 0, pool = 0, parent = 0, instance = 0;
+        var inputs = template.Inputs.ToArray();
+        inputs[0] = inputs[0] with { Width = 2 };
+        var mismatched = package with { Templates = [template with { Inputs = inputs }] };
+        var rejected = false;
         try
         {
-            Check(Fn<CreateProgram>("libra_program_create")(template.Bytecode, (ulong)template.Bytecode.Length, out child));
-            Check(Fn<CreatePool>("libra_generator_pool_create")(child, template.ContainerId.ToByteArray(true), 2, 65536, 8, out pool));
-            var nodes = new byte[64]; input.TryWriteBytes(nodes.AsSpan(0, 16), true, out _);
-            color.TryWriteBytes(nodes.AsSpan(16, 16), true, out _);
-            capturedTime.TryWriteBytes(nodes.AsSpan(32, 16), true, out _);
-            var binding = new NativeBinding { Container = template.ContainerId.ToByteArray(true), Type = template.SignalTypeId.ToByteArray(true),
-                Pool = pool, Count = 3, Widths = [3, 4, 1, 0], Colors = [0, 1, 0, 0], Nodes = nodes };
-            var createParent = Fn<CreateParent>("libra_program_create_spawnable");
-            var mismatched = binding;
-            mismatched.Widths = [2, 4, 1, 0];
-            if (createParent(package.ParentBytecode, (ulong)package.ParentBytecode.Length, [mismatched], 1, out var rejected) == 0 || rejected != 0)
-                throw new InvalidOperationException("Mismatched package descriptors were accepted.");
-            Check(createParent(package.ParentBytecode, (ulong)package.ParentBytecode.Length, [binding], 1, out parent));
-            Check(Fn<CreateInstance>("libra_instance_create")(parent, out instance));
-            var evaluateParent = Fn<EvaluateParent>("libra_evaluate");
-            var dispatch = Fn<Dispatch>("libra_dispatch_signal");
-            Check(evaluateParent(instance, 10, IntPtr.Zero, 0, IntPtr.Zero));
-            Check(dispatch(instance, signal.ToByteArray(true), 10, 4));
-            Check(evaluateParent(instance, 12, IntPtr.Zero, 0, IntPtr.Zero));
-            Check(dispatch(instance, signal.ToByteArray(true), 12, 4));
-            Check(Fn<Process>("libra_generator_process_spawns")(pool, 2, out var processed));
-            if (processed != 2) throw new InvalidOperationException("Native signal did not create two runtime instances.");
-            var next = Fn<Event>("libra_generator_next_event");
-            Check(next(pool, out var first, out var has)); if (has == 0) throw new InvalidOperationException("Missing spawn event.");
-            Check(next(pool, out var second, out has)); if (has == 0 || first.Instance == second.Instance || first.Seed == second.Seed) throw new InvalidOperationException("Missing distinct instance or seed.");
-            var evaluate = Fn<EvaluateChild>("libra_generator_evaluate");
-            var read = Fn<ReadChild>("libra_generator_value");
-            Check(evaluate(pool, first.Instance, 15)); Check(evaluate(pool, second.Instance, 15));
-            Check(read(pool, first.Instance, input.ToByteArray(true), out var vector));
-            Check(read(pool, first.Instance, color.ToByteArray(true), out var rgba));
-            Check(read(pool, first.Instance, capturedTime.ToByteArray(true), out var firstCapture));
-            Check(read(pool, second.Instance, capturedTime.ToByteArray(true), out var secondCapture));
-            Check(read(pool, first.Instance, time.ToByteArray(true), out var firstTime));
-            Check(read(pool, second.Instance, time.ToByteArray(true), out var secondTime));
-            if (vector.Count != 3 || vector.X != 1 || vector.Y != 2 || vector.Z != 3 ||
-                rgba.Count != 4 || rgba.X != 1 || rgba.Y != 1 || rgba.Z != 1 || rgba.W != 1 ||
-                firstCapture.X != 10 || secondCapture.X != 12 ||
-                firstTime.X != 5 || secondTime.X != 3)
-                throw new InvalidOperationException("Captured typed input or local elapsed time is incorrect.");
-            Check(Fn<Stop>("libra_generator_stop")(pool, first.Instance));
-            if (evaluate(pool, first.Instance, 15) != 13) throw new InvalidOperationException("Stopped handle was not invalidated.");
-            Check(evaluate(pool, second.Instance, 16));
-            Check(dispatch(instance, signal.ToByteArray(true), 12, 4));
-            Check(Fn<Process>("libra_generator_process_spawns")(pool, 1, out processed));
-            Check(next(pool, out var stopped, out has));
-            if (has == 0 || stopped.Kind != 2) throw new InvalidOperationException("Missing stop event.");
-            Check(next(pool, out var third, out has));
-            if (has == 0 || third.Instance == first.Instance || third.Instance == second.Instance || third.Start != second.Start)
-                throw new InvalidOperationException("Repeated same-frame signals did not create independent instances.");
-            Check(evaluate(pool, third.Instance, 16));
-            Check(read(pool, third.Instance, time.ToByteArray(true), out var thirdTime));
-            if (thirdTime.X != 4) throw new InvalidOperationException("Same-frame instance time is incorrect.");
-            if (Fn<Release>("libra_generator_pool_release")(pool) != 5)
-                throw new InvalidOperationException("An attached pool handle was released prematurely.");
+            using var invalid = new NativeSpawnableSession(mismatched, path);
         }
-        finally
+        catch (InvalidOperationException)
         {
-            if (instance != 0) Fn<Release>("libra_instance_release")(instance);
-            if (parent != 0) Fn<Release>("libra_program_release")(parent);
-            if (pool != 0) Fn<Release>("libra_generator_pool_release")(pool);
-            if (child != 0) Fn<Release>("libra_program_release")(child);
-            NativeLibrary.Free(library);
+            rejected = true;
+        }
+        if (!rejected)
+        {
+            throw new InvalidOperationException("Mismatched package descriptors were accepted.");
+        }
+        using var host = new NativeSpawnableSession(package with { AutoDestroyWhenIdle = false }, path);
+        host.Advance(10);
+        host.DispatchSignal(signal);
+        host.Advance(12);
+        host.DispatchSignal(signal);
+        host.DispatchSignal(signal);
+        var spawns = host.Events.Where(item => item.Kind == 1).ToArray();
+        if (spawns.Length != 3 || spawns.Select(item => item.InstanceId).Distinct().Count() != 3 ||
+            spawns.Select(item => item.Seed).Distinct().Count() != 3 || spawns[1].Time != spawns[2].Time)
+        {
+            throw new InvalidOperationException("Repeated signals did not create distinct independent instances.");
+        }
+        host.Advance(15);
+        var first = spawns[0].InstanceId;
+        var second = spawns[1].InstanceId;
+        var third = spawns[2].InstanceId;
+        var vector = host.Read(template.ContainerId, first, input);
+        var rgba = host.Read(template.ContainerId, first, color);
+        var firstCapture = host.Read(template.ContainerId, first, capturedTime);
+        var secondCapture = host.Read(template.ContainerId, second, capturedTime);
+        var firstTime = host.Read(template.ContainerId, first, time);
+        var secondTime = host.Read(template.ContainerId, second, time);
+        if (vector.Width != 3 || !vector.Lanes.Take(3).SequenceEqual([1d, 2d, 3d]) ||
+            rgba.Width != 4 || !rgba.Lanes.SequenceEqual([1d, 1d, 1d, 1d]) ||
+            firstCapture.Lanes[0] != 10 || secondCapture.Lanes[0] != 12 ||
+            firstTime.Lanes[0] != 5 || secondTime.Lanes[0] != 3)
+        {
+            throw new InvalidOperationException("Captured typed input or local elapsed time is incorrect.");
+        }
+        host.ForceTerminate(template.ContainerId, first);
+        var invalidated = false;
+        try
+        {
+            _ = host.Read(template.ContainerId, first, time);
+        }
+        catch (InvalidOperationException)
+        {
+            invalidated = true;
+        }
+        if (!invalidated || !host.Events.Any(item => item.Kind == 5 && item.InstanceId == first))
+        {
+            throw new InvalidOperationException("Terminated instance was not invalidated and reported.");
+        }
+        host.Advance(16);
+        if (host.Read(template.ContainerId, second, time).Lanes[0] != 4 ||
+            host.Read(template.ContainerId, third, time).Lanes[0] != 4)
+        {
+            throw new InvalidOperationException("Same-frame instance time is incorrect.");
         }
     }
 }

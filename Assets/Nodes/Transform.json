@@ -7,7 +7,8 @@
   "inputPorts": [
     { "id": "position", "name": "Position", "portType": "FloatX3" },
     { "id": "rotation", "name": "Rotation", "portType": "FloatX3" },
-    { "id": "scale", "name": "Scale", "portType": "FloatX3" }
+    { "id": "scale", "name": "Scale", "portType": "FloatX3" },
+    { "id": "parent", "name": "Parent", "displayNameKey": "TransformOrder.Parent", "portType": "Matrix" }
   ],
   "outputPorts": [{ "id": "value", "name": "Matrix", "portType": "Matrix" }],
   "parameters": [

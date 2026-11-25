@@ -62,9 +62,9 @@ internal static class Issue71E2EFixtures
 
         var targets = new (string FileName, string Engine, string Format, string Value)[]
         {
-            ("unreal.lfxb", "Unreal", "unreal.object-path", "/Engine/BasicShapes/Cube.Cube"),
-            ("unity.lfxb", "Unity", "unity.asset-guid-local-id.v1", "01234567-89ab-4def-8123-456789abcdef:10202"),
-            ("godot.lfxb", "Godot", "godot.res-path.v1", "res://test_mesh.tres")
+            ("unreal.lfxp", "Unreal", "unreal.object-path", "/Engine/BasicShapes/Cube.Cube"),
+            ("unity.lfxp", "Unity", "unity.asset-guid-local-id.v1", "01234567-89ab-4def-8123-456789abcdef:10202"),
+            ("godot.lfxp", "Godot", "godot.res-path.v1", "res://test_mesh.tres")
         };
 
         foreach (var (fileName, engine, format, value) in targets)
@@ -85,8 +85,8 @@ internal static class Issue71E2EFixtures
             AssertReject(() => ResourceIdentityExport.CompileMappedBinary(reloaded, map, project, wrongKindProbe),
                 "Type mismatch must be rejected.");
 
-            var lfxb = ResourceIdentityExport.CompileMappedBinary(reloaded, map, project, probe);
-            File.WriteAllBytes(Path.Combine(outputDirectory, fileName), lfxb);
+            var packageBytes = ResourceIdentityExport.CompileMappedBinary(reloaded, map, project, probe);
+            File.WriteAllBytes(Path.Combine(outputDirectory, fileName), packageBytes);
         }
         Console.WriteLine("ISSUE71_FIXTURES_PASS: " + outputDirectory);
     }

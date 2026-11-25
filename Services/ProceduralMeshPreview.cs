@@ -14,7 +14,7 @@ internal static class ProceduralMeshPreview
         var recipe = ProceduralResourceSchema.ReadEffective(definition, node.Parameters);
         var bytes = Convert.FromBase64String(ProceduralDefinitionWriter.Encode("ProceduralModel", recipe, node,
             Array.Empty<GraphConnectionSnapshot>().ToLookup(edge => edge.TargetNodeId)));
-        var library = NativeLibrary.Load(EditorNativePreviewSession.ResolveLibraryPath());
+        var library = NativeLibrary.Load(PreviewNativeLibrary.ResolveLibraryPath());
         var memory = Marshal.AllocHGlobal(bytes.Length);
         var view = Marshal.AllocHGlobal(88);
         nint instance = 0;

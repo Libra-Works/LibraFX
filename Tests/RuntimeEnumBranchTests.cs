@@ -82,7 +82,8 @@ internal static class RuntimeEnumBranchTests
             if (!Path.IsPathFullyQualified(fixtureDirectory))
                 throw new ArgumentException("Enum branch fixture output must be an absolute path.", nameof(fixtureDirectory));
             Directory.CreateDirectory(fixtureDirectory);
-            File.WriteAllBytes(Path.Combine(fixtureDirectory, "enum-branch-divide.lfxb"), binary);
+            File.WriteAllBytes(Path.Combine(fixtureDirectory, "enum-branch-divide.lfxp"),
+                SpawnableGroupPackageBinary.Serialize(new SpawnableGroupPackage(program.ToPackageBinary(), [])));
             var index = program.TypedInstructions.ToList().FindIndex(item => item.NodeId == select.Id);
             if (index < 0) throw new InvalidOperationException("The selected Enum output has no runtime binding.");
             File.WriteAllText(Path.Combine(fixtureDirectory, "enum-branch-divide.checks"),

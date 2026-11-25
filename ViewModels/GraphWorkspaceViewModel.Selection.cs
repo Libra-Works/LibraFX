@@ -20,11 +20,24 @@ public sealed partial class GraphWorkspaceViewModel
 
         SetSelection(_selectedNodes.Contains(node)
             ? _selectedNodes.Where(selected => selected != node).ToArray()
-            : _selectedNodes.Append(node).ToArray());
+            : _selectedNodes.Append(node).ToArray(), SelectedConnections.ToArray());
     }
 
-    public void SetSelection(IEnumerable<GraphNodeViewModel> nodes)
+    public void SetSelection(IEnumerable<GraphNodeViewModel> nodes) => SetSelection(nodes, []);
+
+    public void SetSelection(IEnumerable<GraphNodeViewModel> nodes, IEnumerable<GraphConnectionViewModel> connections)
     {
+        var wireSelection = connections.Where(Connections.Contains).Distinct().ToArray();
+        foreach (var old in SelectedConnections)
+        {
+            old.IsSelected = false;
+        }
+        SelectedConnections.Clear();
+        foreach (var connection in wireSelection)
+        {
+            connection.IsSelected = true;
+            SelectedConnections.Add(connection);
+        }
         var selection = nodes.Where(Nodes.Contains).Distinct().ToArray();
         if (SelectedNode is not null)
         {
@@ -50,6 +63,40 @@ public sealed partial class GraphWorkspaceViewModel
         }
 
         OnPropertyChanged(nameof(SelectionCount));
+        OnPropertyChanged(nameof(HasAnySelection));
+        DeleteSelectedNodeCommand.NotifyCanExecuteChanged();
+    }
+
+    public void SelectConnection(GraphConnectionViewModel connection, bool toggle = false)
+    {
+        if (!Connections.Contains(connection))
+        {
+            return;
+        }
+        if (!toggle)
+        {
+            SetSelection([], [connection]);
+            return;
+        }
+        var wires = SelectedConnections.Contains(connection)
+            ? SelectedConnections.Where(item => item != connection).ToArray()
+            : SelectedConnections.Append(connection).ToArray();
+        SetSelection(_selectedNodes.ToArray(), wires);
+    }
+
+    public void DeleteSelection()
+    {
+        var nodes = _selectedNodes.Where(Nodes.Contains).ToArray();
+        var wires = SelectedConnections.Where(Connections.Contains)
+            .Where(edge => !nodes.Contains(edge.Source) && !nodes.Contains(edge.Target)).ToArray();
+        if (nodes.Length == 0 && wires.Length == 0)
+        {
+            return;
+        }
+        var commands = wires.Select(edge => (IUndoableCommand)new RemoveGraphConnectionCommand(this, edge)).ToList();
+        commands.AddRange(nodes.Select(node => new DeleteGraphNodeCommand(this, node)));
+        ExecuteEdit(new CompositeUndoableCommand(LocalizationService.Shared.Get("Messages.History.DeleteSelection"), commands),
+            updatedResourceIdentities: RemoveSelectedResourceUses(nodes.Select(node => node.Id).ToHashSet()));
     }
 
     public GraphSnapshot CreateSelectionSnapshot()
@@ -175,7 +222,7 @@ public sealed partial class GraphWorkspaceViewModel
 
     private void DeleteSelectedNode()
     {
-        DeleteNodes(_selectedNodes.ToArray());
+        DeleteSelection();
     }
 
     private void OnSelectedNodePropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)

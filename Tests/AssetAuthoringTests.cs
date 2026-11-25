@@ -26,6 +26,11 @@ internal static class AssetAuthoringTests
     private static void VerifyParticleDrawMaterialAssignment(string typeName)
     {
         var graph = new GraphWorkspaceViewModel(new UndoRedoManager());
+        var container = graph.CreateNode(new GraphNodeKind("CpuParticle"));
+        if (!graph.EnterGraph(container))
+        {
+            throw new InvalidOperationException("Cannot enter the CPU particle fixture.");
+        }
         var definition = GraphNodeDefinition.All.Single(item => item.TypeName == typeName);
         var node = graph.CreateNode(definition.Kind);
         var id = node.Id;

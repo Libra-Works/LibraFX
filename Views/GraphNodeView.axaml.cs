@@ -544,6 +544,9 @@ public partial class GraphNodeView : UserControl
         {
             item.Node.PreviewMoveTo(item.X + dx, item.Y + dy);
         }
+        var dragged = _dragNodes.Select(item => item.Node).ToHashSet();
+        _dragEditor.ShowInteractionWires(_dragNode.Workspace,
+            _dragNode.Workspace.Connections.Where(edge => dragged.Contains(edge.Source) || dragged.Contains(edge.Target)));
         e.Handled = true;
     }
 
@@ -594,6 +597,7 @@ public partial class GraphNodeView : UserControl
 
     private void ResetDrag()
     {
+        _dragEditor?.ClearInteractionWires();
         _dragEditor = null;
         _dragNode = null;
         _dragNodes = [];
@@ -741,6 +745,7 @@ public partial class GraphNodeView : UserControl
             if (target is { } snap && snap.Pin.TranslatePoint(new Point(snap.Pin.Bounds.Width / 2, snap.Pin.Bounds.Height / 2), canvas) is { } anchor)
                 position = anchor;
             source.Workspace.PreviewConnection(editor?.ToGraphPoint(position) ?? position);
+            editor?.ShowInteractionWires(source.Workspace, [], pending: true);
         }
 
         e.Handled = true;
@@ -753,6 +758,7 @@ public partial class GraphNodeView : UserControl
             return;
         }
 
+        this.FindAncestorOfType<GraphEditorView>()?.ClearInteractionWires();
         var moved = _connectionMoved;
         var position = e.GetPosition(canvas);
         var target = moved ? FindInputAt(canvas, position) : null;
@@ -820,6 +826,7 @@ public partial class GraphNodeView : UserControl
 
     private void OnOutputPointerCaptureLost(object? sender, PointerCaptureLostEventArgs e)
     {
+        this.FindAncestorOfType<GraphEditorView>()?.ClearInteractionWires();
         _connectionFeedback.Dispose();
         _connectionTargets = [];
         _connectionSource?.Workspace.CancelConnection();

@@ -23,6 +23,7 @@ public sealed class GraphSceneLayer : Control
     private static readonly IBrush SignalOrderForeground = ThemeSettingsService.EditorBrush("GraphSignal");
     private static readonly IBrush DebugBrush = ThemeSettingsService.EditorBrush("GraphSignal");
     private static readonly Pen DebugFlowPen = new(DebugBrush, 5);
+    private static readonly Pen SelectedConnectionPen = new(ThemeSettingsService.EditorBrush("SelectionBorder"), 5);
 
     private readonly HashSet<GraphConnectionViewModel> _observedConnections = [];
     private GraphWorkspaceViewModel? _workspace;
@@ -165,7 +166,7 @@ public sealed class GraphSceneLayer : Control
                 other.Target == connection.Target &&
                 (other.Source.Definition.GetOutputPortCategory(other.SourcePortId) == Models.Graph.GraphPortCategory.Signal) == isSignal) == 1;
         DrawConnection(context, connection.StartPoint + _graphOrigin, connection.EndPoint + _graphOrigin,
-            connection.Source.Definition.GetOutputPortCategory(connection.SourcePortId), active);
+            connection.Source.Definition.GetOutputPortCategory(connection.SourcePortId), active, connection.IsSelected);
     }
 
     private static Point EvaluateCubicBezier(Point start, Point end, double t)
@@ -214,6 +215,48 @@ public sealed class GraphSceneLayer : Control
         return best;
     }
 
+    internal static bool IntersectsConnection(GraphConnectionViewModel connection, Rect rect)
+    {
+        var previous = connection.StartPoint;
+        for (var step = 1; step <= 32; step++)
+        {
+            var current = EvaluateCubicBezier(connection.StartPoint, connection.EndPoint, step / 32.0);
+            if (rect.Contains(previous) || rect.Contains(current) || SegmentIntersectsRect(previous, current, rect))
+            {
+                return true;
+            }
+            previous = current;
+        }
+        return false;
+    }
+
+    private static bool SegmentIntersectsRect(Point a, Point b, Rect rect)
+    {
+        var dx = b.X - a.X;
+        var dy = b.Y - a.Y;
+        var low = 0.0;
+        var high = 1.0;
+        bool Clip(double p, double q)
+        {
+            if (Math.Abs(p) < 1e-12)
+            {
+                return q >= 0;
+            }
+            var r = q / p;
+            if (p < 0)
+            {
+                low = Math.Max(low, r);
+            }
+            else
+            {
+                high = Math.Min(high, r);
+            }
+            return low <= high;
+        }
+        return Clip(-dx, a.X - rect.Left) && Clip(dx, rect.Right - a.X) &&
+            Clip(-dy, a.Y - rect.Top) && Clip(dy, rect.Bottom - a.Y);
+    }
+
     private void DrawSignalOrder(DrawingContext context, GraphConnectionViewModel connection)
     {
         var start = connection.StartPoint + _graphOrigin;
@@ -232,8 +275,8 @@ public sealed class GraphSceneLayer : Control
         context.DrawText(text, new Point(point.X - text.Width / 2, point.Y - text.Height / 2));
     }
 
-    private static void DrawConnection(DrawingContext context, Point start, Point end, Models.Graph.GraphPortCategory category,
-        bool debugFlow = false)
+    internal static void DrawConnection(DrawingContext context, Point start, Point end, Models.Graph.GraphPortCategory category,
+        bool debugFlow = false, bool selected = false)
     {
         var controlOffset = Math.Max(48, Math.Abs(end.X - start.X) * 0.5);
         var geometry = new StreamGeometry();
@@ -251,7 +294,7 @@ public sealed class GraphSceneLayer : Control
         var pen = category == Models.Graph.GraphPortCategory.Signal
             ? SignalConnectionPen
             : ParameterConnectionPen;
-        context.DrawGeometry(null, debugFlow ? DebugFlowPen : pen, geometry);
+        context.DrawGeometry(null, selected ? SelectedConnectionPen : debugFlow ? DebugFlowPen : pen, geometry);
     }
 
     private void OnWorkspacePropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -290,7 +333,8 @@ public sealed class GraphSceneLayer : Control
     private void OnConnectionPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(GraphConnectionViewModel.StartPoint) or
-            nameof(GraphConnectionViewModel.EndPoint) or nameof(GraphConnectionViewModel.SignalOrder))
+            nameof(GraphConnectionViewModel.EndPoint) or nameof(GraphConnectionViewModel.SignalOrder) or
+            nameof(GraphConnectionViewModel.IsSelected))
         {
             InvalidateVisual();
         }

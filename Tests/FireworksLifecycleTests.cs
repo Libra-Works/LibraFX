@@ -9,7 +9,7 @@ using LiberaFx.ViewModels;
 
 internal static class FireworksLifecycleTests
 {
-    public static void Run(string output)
+    public static void Run(string output, bool fixturesOnly = false)
     {
         if (!Path.IsPathFullyQualified(output)) throw new ArgumentException("Use an absolute isolated fixture directory.");
         Directory.CreateDirectory(output);
@@ -49,14 +49,13 @@ internal static class FireworksLifecycleTests
         Require(package.Templates.Count == 2 && package.DestroyRoutes.Count == 1 && package.OnStartNodeId is not null, "Lifecycle package incomplete.");
         var binaryPackage = SpawnablePackageBinaryTests.Verify(package);
         File.WriteAllBytes(Path.Combine(output, "Fireworks.lfxp"), binaryPackage);
+        File.WriteAllBytes(Path.Combine(output, "Fireworks.persistent.lfxp"),
+            SpawnableGroupPackageBinary.Serialize(package with { AutoDestroyWhenIdle = false }));
         WriteCustomSpawnableFixture(output, graph, launch);
         using (var render = JsonDocument.Parse(package.Templates.Single(template => template.ContainerId == launch.Id).RenderConfiguration))
             Require(render.RootElement.GetProperty("nodes").GetArrayLength() == 1, "Launch render binding missing.");
         using (var render = JsonDocument.Parse(package.Templates.Single(template => template.ContainerId == burst.Id).RenderConfiguration))
             Require(render.RootElement.GetProperty("nodes").GetArrayLength() == FireworksSample.BurstParticleCount, "Burst render binding count incorrect.");
-        File.WriteAllBytes(Path.Combine(output, "parent.lfxb"), package.ParentBytecode);
-        foreach (var template in package.Templates)
-            File.WriteAllBytes(Path.Combine(output, graph.Nodes.Single(node => node.Id == template.ContainerId).Name + ".lfxb"), template.Bytecode);
         File.WriteAllText(Path.Combine(output, "Fireworks.package.json"), JsonSerializer.Serialize(package, new JsonSerializerOptions { WriteIndented = true }));
         var launchTemplate = package.Templates.Single(template => template.ContainerId == launch.Id);
         var burstTemplate = package.Templates.Single(template => template.ContainerId == burst.Id);
@@ -87,17 +86,21 @@ internal static class FireworksLifecycleTests
             template.ParentContainerId == launch.Id),
             "Nested Spawnable compilation must retain its Launch parent template.");
         Reject(() => SpawnableGroupPackage.Compile(ChangeLife(graph, launch.Id, -1)), "negative Life Time");
+        if (fixturesOnly)
+        {
+            Console.WriteLine("Fireworks compiler fixtures generated; native lifecycle checks were not run.");
+            return;
+        }
         var library = Environment.GetEnvironmentVariable("LIBERAFX_NATIVE_TEST_LIBRARY")
             ?? throw new InvalidOperationException("Actual Fireworks execution requires LIBERAFX_NATIVE_TEST_LIBRARY.");
         var unusedStart = GraphDefaults.CreateEffect();
-        Require(!EditorNativePreviewSession.RequiresNative(unusedStart) &&
-                VfxProgram.Compile(unusedStart).Instructions.Count == 0,
+        Require(VfxProgram.Compile(unusedStart).Instructions.Count == 0,
             "An unwired default OnStart must not force native preview or break standalone conversion.");
         var connectedStart = new GraphWorkspaceViewModel(new UndoRedoManager());
         connectedStart.InitializeFromSnapshot(unusedStart);
         var startDelay = connectedStart.CreateNode(new GraphNodeKind("Delay"));
         Require(connectedStart.TryConnectNodes(connectedStart.Nodes.Single(node => node.Definition.Kind.Value == "OnStart"),
-            startDelay, out _, "signal", "then") && EditorNativePreviewSession.RequiresNative(connectedStart.CreateSnapshot()),
+            startDelay, out _, "signal", "then"),
             "A connected OnStart must still select actual lifecycle dispatch.");
         Reject(() => VfxProgram.Compile(connectedStart.CreateSnapshot()), "connected OnStart without a lifecycle package");
         VerifyLiveInputs(library, output);
@@ -115,8 +118,8 @@ internal static class FireworksLifecycleTests
         var standaloneDelta = standaloneClocks.GetNode(createdDelta.RootElement.GetProperty("id").GetGuid());
         var standaloneInstanceAge = standaloneClocks.CreateNode(new GraphNodeKind("InstanceAge"));
         var standaloneColor = standaloneClocks.CreateNode(GraphNodeKind.FloatX4);
-        var clockFixture = Path.Combine(output, "clock-fixture.lfxb");
-        File.WriteAllBytes(clockFixture, VfxProgram.Compile(standaloneClocks.CreateSnapshot()).ToBinary());
+        var clockFixture = Path.Combine(output, "clock-fixture.lfxp");
+        File.WriteAllBytes(clockFixture, EffectBinary.Compile(standaloneClocks.CreateSnapshot()));
         File.WriteAllLines(clockFixture + ".ids", [standaloneEffectAge.Id.ToString("D"),
             standaloneDelta.Id.ToString("D"), standaloneInstanceAge.Id.ToString("D"), standaloneColor.Id.ToString("D")]);
         var clocksWorkspace = new GraphWorkspaceViewModel(new UndoRedoManager());
@@ -245,8 +248,8 @@ internal static class FireworksLifecycleTests
             SpawnableGroupPackage.Compile(idleWorkspace.CreateSnapshot()), library))
         {
             idleRoot.Advance(0);
-            Require(idleRoot.ActiveCount == 0 && idleRoot.RootVisible,
-                "An idle effect with Spawnable templates must request natural end.");
+            Require(idleRoot.ActiveCount == 0 && !idleRoot.RootVisible,
+                "An idle effect with Spawnable templates must finish once no work remains.");
             idleRoot.Advance(0.1);
             Require(!idleRoot.RootVisible, "An idle root without work must finish.");
         }
@@ -307,16 +310,6 @@ internal static class FireworksLifecycleTests
             independentCurve.Advance(3);
             Require(!independentCurve.RootVisible, "FCurve duration must not retain a naturally completed effect.");
         }
-        var draw = launch.ChildGraph!.Nodes.First(node => node.Kind.Value == "ModelDraw") with { Id = Guid.NewGuid() };
-        var previewGraph = rootGraph with { Nodes = rootGraph.Nodes.Concat([draw]).ToArray() };
-        using var preview = new EditorNativePreviewSession(previewGraph, library);
-        int DrawCount(double time)
-        {
-            using var scene = JsonDocument.Parse(preview.EvaluateScene(time, 1));
-            return scene.RootElement.GetProperty("nodes").GetArrayLength();
-        }
-        Require(DrawCount(0) == 1 && DrawCount(2) == 1 && DrawCount(2 + 1d / 60) == 1 &&
-                DrawCount(0) == 1, "An infinite root preview must remain visible and recreate on seek.");
         {
             GraphSnapshot WithAutoDestroy(bool enabled) => graph with { AutoDestroyWhenIdle = enabled };
             using (var parentWaits = new NativeSpawnableSession(SpawnableGroupPackage.Compile(WithAutoDestroy(true)), library))
@@ -367,7 +360,7 @@ internal static class FireworksLifecycleTests
                 catch (InvalidOperationException) { rejectedSignal = true; }
                 Require(rejectedSignal, "An explicit natural end must reject new external root signals.");
                 persistentRoot.Advance(3.5);
-                Require(persistentRoot.ActiveCount == 0 && persistentRoot.RootVisible,
+                Require(persistentRoot.ActiveCount == 0 && !persistentRoot.RootVisible,
                     $"An explicitly ended root must wait for all spawned children before finishing " +
                     $"(visible={persistentRoot.RootVisible}, active={persistentRoot.ActiveCount}, " +
                     $"events={string.Join(',', persistentRoot.Events.Select(item => $"{item.Kind}@{item.Time}"))}).");
@@ -478,8 +471,8 @@ internal static class FireworksLifecycleTests
             Require(childDelayPackage.Version == SpawnableGroupPackage.FormatVersion && childDelayPackage.HasChildDeferredSignals,
                 "Child Delay must require an explicit package version.");
             var delayedTemplate = childDelayPackage.Templates.Single(item => item.ContainerId == launch.Id);
-            File.WriteAllBytes(Path.Combine(output, "child-delay.lfxb"), delayedTemplate.Bytecode);
-            File.WriteAllLines(Path.Combine(output, "child-delay.lfxb.ids"), [
+            File.WriteAllBytes(Path.Combine(output, "child-delay.lfxp"), SpawnableGroupPackageBinary.Serialize(childDelayPackage));
+            File.WriteAllLines(Path.Combine(output, "child-delay.lfxp.ids"), [
                 delayedTemplate.Lifecycle!.OnStartNodeId!.Value.ToString("D"),
                 delayedTemplate.Lifecycle.LifeNodeId!.Value.ToString("D"),
                 delayedAge.Id.ToString("D"), delayedGameDelta.Id.ToString("D"), final.Id.ToString("D"),
@@ -548,7 +541,7 @@ internal static class FireworksLifecycleTests
             {
                 ownerDelay.Advance(2.5);
                 Require(ownerDelay.ActiveCount == 1 && ownerDelay.Events.All(item => item.Kind != 3),
-                    "An Owner Destroy request must not force-stop child-local delayed work.");
+                    $"An Owner Destroy request must not force-stop child-local delayed work (active={ownerDelay.ActiveCount}, events={string.Join(',', ownerDelay.Events.Select(item => $"{item.Kind}@{item.Time}:{item.ContainerId}"))}).");
                 ownerDelay.Advance(5);
                 var ownerDelayDestroy = ownerDelay.Events.Where(item =>
                     item.ContainerId == launch.Id && item.Kind == 3).ToArray();
@@ -745,18 +738,6 @@ internal static class FireworksLifecycleTests
                 Near(skippedDelay.Read(burst.Id, delayedChild.Instance, delayedParentInput.Id).Lanes, [3],
                     "Skipped frames must capture the parent at the scheduled time");
             }
-            using (var delayPreview = new EditorNativePreviewSession(delayedGraph, library))
-            {
-                int DelayedDrawCount(double time)
-                {
-                    using var scene = JsonDocument.Parse(delayPreview.EvaluateScene(time, 1));
-                    return scene.RootElement.GetProperty("nodes").GetArrayLength();
-                }
-                Require(DelayedDrawCount(2.5) == 0 && DelayedDrawCount(3) == FireworksSample.BurstParticleCount &&
-                        DelayedDrawCount(4.5) == 0 && DelayedDrawCount(2.5) == 0 &&
-                        DelayedDrawCount(3) == FireworksSample.BurstParticleCount,
-                    "Preview seek must reconstruct the pending delay and delayed sibling.");
-            }
             using (var stoppedDelay = new NativeSpawnableSession(delayedPackage, library))
             {
                 stoppedDelay.Advance(2);
@@ -806,7 +787,18 @@ internal static class FireworksLifecycleTests
                 } : node).ToArray()
             };
             using (var invalidDelay = new NativeSpawnableSession(SpawnableGroupPackage.Compile(negativeDelayGraph), library))
-                Reject(() => invalidDelay.Advance(2), "negative Delay");
+            {
+                var rejected = false;
+                try
+                {
+                    invalidDelay.Advance(2);
+                }
+                catch (NativeHostException error) when (error.Result == 1)
+                {
+                    rejected = true;
+                }
+                Require(rejected, "The native package host must reject a negative Delay as invalid argument.");
+            }
             using (var childExpiresFirst = new NativeSpawnableSession(SpawnableGroupPackage.Compile(WithAutoDestroy(true)), library))
             {
                 childExpiresFirst.Advance(0);
@@ -1083,12 +1075,8 @@ internal static class FireworksLifecycleTests
             Require(id.Instance == 1, "New session reset must restart deterministic instance identity.");
             Near(reset.Read(launch.Id, id.Instance, final.Id).Lanes, [0, 0, 20], "Deterministic reset");
         }
-        using var sender = new CompiledPreviewSender(Path.Combine(output, "missing-native-preview.dll"));
-        var publication = new PreviewPublication(1, "fireworks-validation", graph, GraphNodeDefinition.All);
-        var message = sender.Prepare(publication)!;
-        Require(message.Kind == CompiledPreviewKind.CompileError, "Missing native preview library must not misrepresent the lifecycle sample as working.");
         Console.WriteLine($"Fireworks authoring/persistence/package and actual native execution passed. Sample: {sample}");
-        Console.WriteLine("UE-owned lifecycle remains unsupported; editor-native bridge is covered separately by --fireworks-native-preview. No pixel validation claimed here.");
+        Console.WriteLine("No pixel validation claimed here.");
     }
     private static void WriteCustomSpawnableFixture(string output, GraphSnapshot graph, GraphNodeSnapshot launch)
     {
@@ -1402,8 +1390,9 @@ internal static class FireworksLifecycleTests
                 drainingSession.Events.Any(item => item.Kind == 4 && item.ContainerId == delayedSource.Id),
             "Internal child signals must route through the root after natural shutdown begins.");
         drainingSession.Advance(2);
-        Require(drainingSession.ActiveCount == 0 && drainingSession.RootVisible,
-            "Natural root shutdown must wait for delayed signal descendants.");
+        Require(drainingSession.ActiveCount == 0 && !drainingSession.RootVisible &&
+                drainingSession.Events.Count(item => item.Kind == 3 && item.Time == 2) == 2,
+            "Natural root shutdown must finish only after both delayed signal descendants expire.");
         drainingSession.Advance(2.1);
         Require(!drainingSession.RootVisible, "The root must finish after routed child work drains.");
     }

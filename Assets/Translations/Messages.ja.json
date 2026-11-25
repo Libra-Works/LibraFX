@@ -1,4 +1,9 @@
 {
+  "Messages.History.InsertReroutes": "ルーターを追加",
+  "Messages.History.DeleteSelection": "選択項目を削除",
+  "Messages.History.InsertReroute": "{0} と {1} の間にルーターを追加",
+  "Messages.RerouteUnavailable": "この接続にルーターを追加できません。",
+  "Messages.History.RemoveReroute": "ルーターを削除して接続を復元",
   "Messages.Starting": "起動中",
   "Messages.Ready": "準備完了",
   "Messages.ConnectedClients": "接続中のクライアント: {0}",
@@ -136,7 +141,7 @@
   "Messages.Error.AlreadyConnected": "これらのポートは既に接続されています。",
   "Messages.Error.ConnectionCycle": "循環する接続は作成できません。",
   "Messages.Error.InvalidParameterValue": "このパラメーターに指定できない値です。",
-  "Messages.Error.ChooseBinaryFile": "開いているプロジェクト以外の .lfxb ファイルを選んでください。",
+  "Messages.Error.ChooseBinaryFile": "開いているプロジェクト以外の .lfxp ファイルを選んでください。",
   "Messages.Error.SelectGroup": "保存する Graph Group を 1 つ選んでください。",
   "Messages.Error.SelectSavedGroup": "保存済みのグループアセットを選んでください。",
   "Messages.Error.GroupLibraryUnavailable": "グループライブラリを利用できません。",

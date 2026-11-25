@@ -21,7 +21,7 @@ internal static class MessageLocalization
             "These ports are already connected." => "Messages.Error.AlreadyConnected",
             "Connections cannot create a cycle." => "Messages.Error.ConnectionCycle",
             var value when value.StartsWith("The value is invalid for this parameter.", StringComparison.Ordinal) => "Messages.Error.InvalidParameterValue",
-            "Choose a .lfxb file that is not an open project." => "Messages.Error.ChooseBinaryFile",
+            "Choose a .lfxp file that is not an open project." => "Messages.Error.ChooseBinaryFile",
             "Select one Graph Group to save." => "Messages.Error.SelectGroup",
             "Select a saved group asset." => "Messages.Error.SelectSavedGroup",
             "The group library is unavailable." => "Messages.Error.GroupLibraryUnavailable",

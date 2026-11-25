@@ -1,4 +1,9 @@
 {
+  "Messages.History.InsertReroutes": "Insert reroutes",
+  "Messages.History.DeleteSelection": "Delete selection",
+  "Messages.History.InsertReroute": "Insert reroute between {0} and {1}",
+  "Messages.RerouteUnavailable": "Cannot insert a reroute on this connection.",
+  "Messages.History.RemoveReroute": "Remove reroute and reconnect",
   "Messages.Starting": "Starting",
   "Messages.Ready": "Ready",
   "Messages.ConnectedClients": "Connected clients: {0}",
@@ -136,7 +141,7 @@
   "Messages.Error.AlreadyConnected": "These ports are already connected.",
   "Messages.Error.ConnectionCycle": "Connections cannot create a cycle.",
   "Messages.Error.InvalidParameterValue": "The value is invalid for this parameter.",
-  "Messages.Error.ChooseBinaryFile": "Choose a .lfxb file that is not an open project.",
+  "Messages.Error.ChooseBinaryFile": "Choose a .lfxp file that is not an open project.",
   "Messages.Error.SelectGroup": "Select one Graph Group to save.",
   "Messages.Error.SelectSavedGroup": "Select a saved group asset.",
   "Messages.Error.GroupLibraryUnavailable": "The group library is unavailable.",

@@ -234,39 +234,16 @@ public static class PolymorphicMathTests
             Console.WriteLine("Native broadcast checks skipped: set LIBERAFX_NATIVE_TEST_LIBRARY to the interop library.");
             return;
         }
-        var library = NativeLibrary.Load(path);
-        T Function<T>(string name) where T : Delegate =>
-            Marshal.GetDelegateForFunctionPointer<T>(NativeLibrary.GetExport(library, name));
-        var create = Function<ProgramCreate>("libra_program_create");
-        var releaseProgram = Function<Release>("libra_program_release");
-        var createInstance = Function<InstanceCreate>("libra_instance_create");
-        var releaseInstance = Function<Release>("libra_instance_release");
-        var bind = Function<Bind>("libra_bind_value");
-        var evaluate = Function<Evaluate>("libra_evaluate");
-        try
+        double[] Run(GraphWorkspaceViewModel graph, GraphNodeViewModel op)
         {
-            double[] Run(GraphWorkspaceViewModel graph, GraphNodeViewModel op)
+            using var host = new NativeSpawnableSession(SpawnableGroupPackage.Compile(graph.CreateSnapshot()), path);
+            host.Advance(0);
+            return host.ReadRoot(op.Id).Lanes;
+        }
+        for (var width = 2; width <= 4; width++)
+        {
+            foreach (var kind in new[] { GraphNodeKind.Multiply, GraphNodeKind.Subtract, GraphNodeKind.Divide, new GraphNodeKind("Min") })
             {
-                var binary = VfxProgram.Compile(graph.CreateSnapshot()).ToBinary();
-                Require(create(binary, (ulong)binary.Length, out var program) == 0, "Native program creation failed.");
-                try
-                {
-                    Require(createInstance(program, out var instance) == 0, "Native instance creation failed.");
-                    try
-                    {
-                        var id = new byte[16];
-                        op.Id.TryWriteBytes(id, bigEndian: true, out _);
-                        Require(bind(instance, id, out var binding) == 0, "Native output binding failed.");
-                        var values = new NativeValue[1];
-                        Require(evaluate(instance, 0, [binding], 1, values) == 0, "Native evaluation failed.");
-                        return [values[0].X, values[0].Y, values[0].Z, values[0].W];
-                    }
-                    finally { releaseInstance(instance); }
-                }
-                finally { releaseProgram(program); }
-            }
-            for (var width = 2; width <= 4; width++)
-                foreach (var kind in new[] { GraphNodeKind.Multiply, GraphNodeKind.Subtract, GraphNodeKind.Divide, new GraphNodeKind("Min") })
                 foreach (var scalarFirst in new[] { true, false })
                 {
                     var graph = new GraphWorkspaceViewModel(new UndoRedoManager());
@@ -294,38 +271,25 @@ public static class PolymorphicMathTests
                         Require(Math.Abs(actual[lane] - expected) < 1e-9, $"Native broadcast lane {lane} failed.");
                     }
                 }
-            var dotGraph = new GraphWorkspaceViewModel(new UndoRedoManager());
-            var vector3 = dotGraph.CreateNode(GraphNodeKind.FloatX3);
-            var dot = dotGraph.CreateNode(new GraphNodeKind("DotVector2"), isPolymorphic: true);
-            dotGraph.SetParameter(vector3, "value", JsonSerializer.SerializeToElement(new[] { 1.0, 2.0, 3.0 }));
-            dotGraph.SetParameter(dot, "b", JsonSerializer.SerializeToElement(new[] { 7.0, 9.0 }));
-            Require(dotGraph.TryConnectNodes(vector3, dot, out _, "a"), "Dot input must infer Vector3.");
-            Require(Math.Abs(Run(dotGraph, dot)[0] - 25.0) < 1e-9,
-                "Vector-only default migration must preserve lanes and use the new variant's extra default.");
-            var defaultGraph = new GraphWorkspaceViewModel(new UndoRedoManager());
-            var defaultVector = defaultGraph.CreateNode(GraphNodeKind.FloatX3);
-            var multiply = defaultGraph.CreateNode(GraphNodeKind.Multiply, isPolymorphic: true);
-            defaultGraph.SetParameter(defaultVector, "value", JsonSerializer.SerializeToElement(new[] { 1.0, 2.0, 3.0 }));
-            defaultGraph.SetParameter(multiply, "a", JsonSerializer.SerializeToElement(2.5));
-            Require(defaultGraph.TryConnectNodes(defaultVector, multiply, out _, "b"), "Default test must infer Vector3.");
-            Require(Run(defaultGraph, multiply).Take(3).SequenceEqual(new[] { 2.5, 5.0, 7.5 }),
-                "Unconnected scalar defaults must migrate to every vector lane.");
+            }
         }
-        finally { NativeLibrary.Free(library); }
+        var dotGraph = new GraphWorkspaceViewModel(new UndoRedoManager());
+        var vector3 = dotGraph.CreateNode(GraphNodeKind.FloatX3);
+        var dot = dotGraph.CreateNode(new GraphNodeKind("DotVector2"), isPolymorphic: true);
+        dotGraph.SetParameter(vector3, "value", JsonSerializer.SerializeToElement(new[] { 1.0, 2.0, 3.0 }));
+        dotGraph.SetParameter(dot, "b", JsonSerializer.SerializeToElement(new[] { 7.0, 9.0 }));
+        Require(dotGraph.TryConnectNodes(vector3, dot, out _, "a"), "Dot input must infer Vector3.");
+        Require(Math.Abs(Run(dotGraph, dot)[0] - 25.0) < 1e-9,
+            "Vector-only default migration must preserve lanes and use the new variant's extra default.");
+        var defaultGraph = new GraphWorkspaceViewModel(new UndoRedoManager());
+        var defaultVector = defaultGraph.CreateNode(GraphNodeKind.FloatX3);
+        var multiply = defaultGraph.CreateNode(GraphNodeKind.Multiply, isPolymorphic: true);
+        defaultGraph.SetParameter(defaultVector, "value", JsonSerializer.SerializeToElement(new[] { 1.0, 2.0, 3.0 }));
+        defaultGraph.SetParameter(multiply, "a", JsonSerializer.SerializeToElement(2.5));
+        Require(defaultGraph.TryConnectNodes(defaultVector, multiply, out _, "b"), "Default test must infer Vector3.");
+        Require(Run(defaultGraph, multiply).Take(3).SequenceEqual(new[] { 2.5, 5.0, 7.5 }),
+            "Unconnected scalar defaults must migrate to every vector lane.");
     }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct NativeValue { public double X, Y, Z, W; public uint Count, Reserved; }
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-    private delegate int ProgramCreate(byte[] data, ulong count, out ulong program);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-    private delegate int InstanceCreate(ulong program, out ulong instance);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-    private delegate int Release(ulong handle);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-    private delegate int Bind(ulong instance, byte[] id, out uint binding);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-    private delegate int Evaluate(ulong instance, double time, uint[] bindings, uint count, [Out] NativeValue[] values);
 
     private static void Require(bool condition, string message)
     {

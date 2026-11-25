@@ -119,7 +119,7 @@ public sealed partial class GraphWorkspaceViewModel
                 error = "The target input port does not exist.";
                 return false;
             }
-            if (target.Definition.GetInputPortCategory(targetPortId) != GraphPortCategory.Signal &&
+            if ((target.IsReroute || target.Definition.GetInputPortCategory(targetPortId) != GraphPortCategory.Signal) &&
                 Connections.Any(connection => connection.Target == target && connection.TargetPortId == targetPortId))
             {
                 error = "The target input is already connected.";
@@ -210,7 +210,14 @@ public sealed partial class GraphWorkspaceViewModel
 
     private void RefreshSelectedConnections()
     {
-        SelectedConnections.Clear();
+        foreach (var stale in SelectedConnections.Where(connection => !Connections.Contains(connection)).ToArray())
+        {
+            stale.IsSelected = false;
+            SelectedConnections.Remove(stale);
+        }
+        OnPropertyChanged(nameof(HasAnySelection));
+        DeleteSelectedNodeCommand?.NotifyCanExecuteChanged();
+        IncidentConnections.Clear();
         if (SelectedNode is null)
         {
             return;
@@ -219,7 +226,7 @@ public sealed partial class GraphWorkspaceViewModel
         foreach (var connection in Connections.Where(connection =>
                      connection.Source == SelectedNode || connection.Target == SelectedNode))
         {
-            SelectedConnections.Add(connection);
+            IncidentConnections.Add(connection);
         }
     }
 
@@ -253,9 +260,17 @@ public sealed partial class GraphWorkspaceViewModel
 
     public GraphNodeViewModel? InsertRerouteOnConnection(GraphConnectionViewModel connection, double x, double y)
     {
-        if (IsReadOnly || !Connections.Contains(connection)) return null;
+        if (IsReadOnly || !Connections.Contains(connection))
+        {
+            SetConnectionStatus("Messages.RerouteUnavailable");
+            return null;
+        }
         var definition = AvailableNodeDefinitions.FirstOrDefault(item => item.Kind.Value == "Reroute");
-        if (definition is null) return null;
+        if (definition is null)
+        {
+            SetConnectionStatus("Messages.RerouteUnavailable");
+            return null;
+        }
 
         var reroute = new GraphNodeViewModel(
             this,
@@ -269,6 +284,53 @@ public sealed partial class GraphWorkspaceViewModel
         ExecuteEdit(new InsertRerouteCommand(this, connection, reroute, first, second));
         SelectNode(reroute);
         return reroute;
+    }
+
+    public void InsertReroutesOnConnections(IEnumerable<GraphConnectionViewModel> connections)
+    {
+        var selected = connections.Where(Connections.Contains).Distinct().ToArray();
+        if (selected.Length == 0)
+        {
+            return;
+        }
+        var definition = AvailableNodeDefinitions.FirstOrDefault(item => item.Kind.Value == "Reroute")
+            ?? throw new InvalidOperationException(LocalizationService.Shared.Get("Messages.RerouteUnavailable"));
+        var commands = new List<IUndoableCommand>();
+        var created = new List<GraphNodeViewModel>();
+        foreach (var connection in selected)
+        {
+            var midpoint = new Point((connection.StartX + connection.EndX) / 2,
+                (connection.StartY + connection.EndY) / 2);
+            var reroute = new GraphNodeViewModel(this, definition, definition.Name, midpoint.X - 43, midpoint.Y - 22);
+            created.Add(reroute);
+            commands.Add(new InsertRerouteCommand(this, connection, reroute,
+                new GraphConnectionViewModel(connection.Source, reroute, "in", connection.SourcePortId),
+                new GraphConnectionViewModel(reroute, connection.Target, connection.TargetPortId, "out")));
+        }
+        ExecuteEdit(new CompositeUndoableCommand(LocalizationService.Shared.Get("Messages.History.InsertReroutes"), commands));
+        SetSelection(created);
+    }
+
+    public void RemoveRerouteAndReconnect(GraphNodeViewModel reroute)
+    {
+        if (IsReadOnly || !Nodes.Contains(reroute) || !reroute.IsReroute)
+        {
+            throw new InvalidOperationException("An editable reroute in the current graph is required.");
+        }
+        var incoming = Connections.Where(edge => edge.Target == reroute).ToArray();
+        var outgoing = Connections.Where(edge => edge.Source == reroute).ToArray();
+        if (incoming.Length != 1 || outgoing.Length == 0)
+        {
+            throw new InvalidOperationException("The reroute must have one input and at least one output to reconnect.");
+        }
+        var source = incoming[0];
+        var commands = new List<IUndoableCommand> { new DeleteGraphNodeCommand(this, reroute) };
+        foreach (var edge in outgoing)
+        {
+            commands.Add(new AddGraphConnectionCommand(this, source.Source, edge.Target,
+                targetPortId: edge.TargetPortId, sourcePortId: source.SourcePortId));
+        }
+        ExecuteEdit(new CompositeUndoableCommand(LocalizationService.Shared.Get("Messages.History.RemoveReroute"), commands));
     }
 
     private (GraphPortCategory Category, string PortType)? ResolveReroutePort(
@@ -308,7 +370,8 @@ public sealed partial class GraphWorkspaceViewModel
         GraphConnectionViewModel second) : IUndoableCommand
     {
         private int _originalIndex;
-        public string Description => $"Insert reroute between {original.Source.Name} and {original.Target.Name}";
+        public string Description => LocalizationService.Shared.Get("Messages.History.InsertReroute",
+            original.Source.Name, original.Target.Name);
 
         public void Execute()
         {

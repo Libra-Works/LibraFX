@@ -160,7 +160,7 @@ internal static class TimelineTests
         if (program.BinaryVersion != 4 || colorInstruction.Opcode != VfxOpcode.Vector3ToVector4)
             throw new InvalidOperationException("The Unreal render fixture did not compile the FCurve value path.");
         Directory.CreateDirectory(directory);
-        File.WriteAllBytes(Path.Combine(directory, "program.lfxb"), program.ToBinary());
+        File.WriteAllBytes(Path.Combine(directory, "program.lfxp"), EffectBinary.Compile(snapshot));
         File.WriteAllBytes(Path.Combine(directory, "render-config.json"),
             RenderProgramBindings.CreateScene(snapshot, 1));
         File.WriteAllText(Path.Combine(directory, "expected.json"), JsonSerializer.Serialize(new

@@ -124,6 +124,7 @@ public sealed record GraphNodeDefinition(
         [Guid.Parse("0a613e91-1039-478e-9ca7-b8555a67f988")] = "FloatX4",
         [Guid.Parse("c7410281-9b6e-46f0-9bb7-334cc3b40767")] = "Int32",
         [Guid.Parse("b102696d-6e2b-4b90-b5be-fafc9df53cf6")] = "Bool",
+        [Guid.Parse("c1a7f310-8e40-4b88-9000-000000000001")] = "Reroute",
         [Guid.Parse("a40e6f94-c2c1-48ed-9a7b-2087c422ad5a")] = "Signal",
         [Guid.Parse("48f83fc4-4030-4b67-8cb6-11198f4b1701")] = "Sequence",
         [Guid.Parse("f54171ee-4aa3-498b-b2ff-8c9983fc1501")] = "FloatFCurve",
@@ -805,6 +806,10 @@ public sealed record GraphNodeDefinition(
 
 public sealed record GraphInputPortDefinition(
     string Id, string Name, string? PortType = null, GraphPortCategory? Category = null,
-    JsonElement? DefaultValue = null);
+    JsonElement? DefaultValue = null)
+{
+    private readonly string? _toolTip;
+    public string ToolTip { get => _toolTip ?? Name; init => _toolTip = value; }
+}
 public sealed record GraphOutputPortDefinition(
     string Id, string Name, string? PortType = null, GraphPortCategory? Category = null);

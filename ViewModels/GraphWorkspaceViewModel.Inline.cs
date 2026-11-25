@@ -160,14 +160,23 @@ public sealed partial class GraphWorkspaceViewModel
         }
 
         var path = _graphPath.ToArray();
-        _document.NavigateToGraph(0);
-        foreach (var id in path.Append(node.Id))
+        _document._restoringNavigation = true;
+        try
         {
-            var target = _document.Nodes.FirstOrDefault(candidate => candidate.Id == id);
-            if (target is null || !_document.EnterGraphCore(target, inspectLocked: true))
+            _document.NavigateToGraph(0);
+            foreach (var id in path.Append(node.Id))
             {
-                return false;
+                var target = _document.Nodes.FirstOrDefault(candidate => candidate.Id == id);
+                if (target is null || !_document.EnterGraphCore(target, inspectLocked: true))
+                {
+                    return false;
+                }
             }
+        }
+        finally
+        {
+            _document._restoringNavigation = false;
+            _document.RecordGraphNavigation();
         }
         _document.ActivateEditingWorkspace();
         return true;

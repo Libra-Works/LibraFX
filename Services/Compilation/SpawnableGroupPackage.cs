@@ -31,10 +31,8 @@ public sealed record SpawnableTemplate(Guid ContainerId, Guid SignalTypeId, byte
 }
 public sealed record SpawnableGroupPackage(byte[] ParentBytecode, IReadOnlyList<SpawnableTemplate> Templates)
 {
-    public const int FormatVersion = 11;
-    public int Version => Templates.Any(template =>
-        template.ParentContainerId is not null || template.CpuPrograms.Length > 0)
-        ? 13 : CpuPrograms.Length == 0 ? FormatVersion : 12;
+    public const int FormatVersion = 13;
+    public int Version => FormatVersion;
     public byte[] CpuPrograms { get; init; } = [];
     public bool AutoDestroyWhenIdle { get; init; } = true;
     public bool HasLiveInputs => Templates.Any(template => template.Inputs.Any(input => input.IsLive));

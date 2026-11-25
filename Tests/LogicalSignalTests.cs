@@ -206,8 +206,8 @@ internal static class LogicalSignalTests
 
         var binary = VfxProgram.Compile(graph).ToBinary();
         Require(binary.Length >= 16 && binary.AsSpan(0, 4).SequenceEqual("LFXB"u8) &&
-            binary[4] == 9,
-            "Logical operations must compile to versioned LFXB v9.");
+            binary[4] == 11,
+            "Logical operations must compile to current internal bytecode v11.");
         Require(binary.AsSpan().IndexOf("LFLE"u8) >= 0,
             "Compiled logical nodes are missing their LFLE routing metadata.");
         using var renderConfig = JsonDocument.Parse(RenderProgramBindings.CreateScene(graph, 1));
@@ -219,7 +219,7 @@ internal static class LogicalSignalTests
         var groupGraph = BuildGroupIsolationGraph();
         GraphValidator.Validate(groupGraph);
         var groupBinary = VfxProgram.Compile(groupGraph).ToBinary();
-        Require(groupBinary[4] == 9,
+        Require(groupBinary[4] == 11,
             "Logical instructions inside Group instances must use the versioned logical bytecode format.");
         var groupWorkspace = new GraphWorkspaceViewModel(new UndoRedoManager());
         groupWorkspace.InitializeFromSnapshot(groupGraph);
@@ -241,7 +241,7 @@ internal static class LogicalSignalTests
         var guardedGraph = BuildGuardedLogicalGraph();
         GraphValidator.Validate(guardedGraph);
         var guardedBinary = VfxProgram.Compile(guardedGraph).ToBinary();
-        Require(guardedBinary[4] == 9 && guardedBinary.AsSpan().IndexOf("LFEB"u8) >= 0 &&
+        Require(guardedBinary[4] == 11 && guardedBinary.AsSpan().IndexOf("LFEB"u8) >= 0 &&
             guardedBinary.AsSpan().IndexOf("LFLE"u8) >= 0,
             "Enum-guarded logical instructions must preserve both branch and logical routing metadata.");
         var guardedWorkspace = new GraphWorkspaceViewModel(new UndoRedoManager());
@@ -251,7 +251,7 @@ internal static class LogicalSignalTests
         var hostGraph = BuildHostIntegrationGraph();
         GraphValidator.Validate(hostGraph);
         var hostBinary = VfxProgram.Compile(hostGraph).ToBinary();
-        Require(hostBinary[4] == 9 && hostBinary.AsSpan().IndexOf("LFLE"u8) >= 0,
+        Require(hostBinary[4] == 11 && hostBinary.AsSpan().IndexOf("LFLE"u8) >= 0,
             "The host integration fixture must compile logical routing metadata.");
         var hostWorkspace = new GraphWorkspaceViewModel(new UndoRedoManager());
         hostWorkspace.InitializeFromSnapshot(hostGraph);
@@ -261,7 +261,7 @@ internal static class LogicalSignalTests
         var matrixGraph = BuildMatrixDependentGraph();
         GraphValidator.Validate(matrixGraph);
         var matrixBinary = VfxProgram.Compile(matrixGraph).ToBinary();
-        Require(matrixBinary[4] == 9 && matrixBinary.AsSpan().IndexOf("LFLE"u8) >= 0,
+        Require(matrixBinary[4] == 11 && matrixBinary.AsSpan().IndexOf("LFLE"u8) >= 0,
             "The Signal To Number → Transform → Decompose graph must compile to logical bytecode.");
         using var matrixScene = JsonDocument.Parse(RenderProgramBindings.CreateScene(matrixGraph, 1));
         var drawBinding = matrixScene.RootElement.GetProperty("nodes").EnumerateArray().Single()
@@ -282,14 +282,19 @@ internal static class LogicalSignalTests
             throw new ArgumentException("Logical native fixtures require an absolute isolated directory.",
                 nameof(fixtureDirectory));
         Directory.CreateDirectory(fixtureDirectory);
-        File.WriteAllBytes(Path.Combine(fixtureDirectory, "logical-runtime-managed.lfxb"), binary);
-        File.WriteAllBytes(Path.Combine(fixtureDirectory, "logical-groups-managed.lfxb"), groupBinary);
+        File.WriteAllBytes(Path.Combine(fixtureDirectory, "logical-runtime.lfxp"),
+            SpawnableGroupPackageBinary.Serialize(new SpawnableGroupPackage(VfxProgram.Compile(graph).ToPackageBinary(), [])));
+        File.WriteAllBytes(Path.Combine(fixtureDirectory, "logical-groups.lfxp"),
+            SpawnableGroupPackageBinary.Serialize(new SpawnableGroupPackage(VfxProgram.Compile(groupGraph).ToPackageBinary(), [])));
         File.WriteAllBytes(Path.Combine(fixtureDirectory, "logical-groups.lfxproj"), groupProjectBytes);
-        File.WriteAllBytes(Path.Combine(fixtureDirectory, "logical-guards-managed.lfxb"), guardedBinary);
+        File.WriteAllBytes(Path.Combine(fixtureDirectory, "logical-guards.lfxp"),
+            SpawnableGroupPackageBinary.Serialize(new SpawnableGroupPackage(VfxProgram.Compile(guardedGraph).ToPackageBinary(), [])));
         File.WriteAllBytes(Path.Combine(fixtureDirectory, "logical-guards.lfxproj"), guardedProject.ToArray());
-        File.WriteAllBytes(Path.Combine(fixtureDirectory, "logical-host-managed.lfxb"), hostBinary);
+        File.WriteAllBytes(Path.Combine(fixtureDirectory, "logical-host.lfxp"),
+            SpawnableGroupPackageBinary.Serialize(new SpawnableGroupPackage(VfxProgram.Compile(hostGraph).ToPackageBinary(), [])));
         File.WriteAllBytes(Path.Combine(fixtureDirectory, "logical-host.lfxproj"), hostProject.ToArray());
-        File.WriteAllBytes(Path.Combine(fixtureDirectory, "logical-matrix-managed.lfxb"), matrixBinary);
+        File.WriteAllBytes(Path.Combine(fixtureDirectory, "logical-matrix.lfxp"),
+            SpawnableGroupPackageBinary.Serialize(new SpawnableGroupPackage(VfxProgram.Compile(matrixGraph).ToPackageBinary(), [])));
         File.WriteAllBytes(Path.Combine(fixtureDirectory, "logical-matrix.lfxproj"), matrixProject.ToArray());
         File.WriteAllBytes(Path.Combine(fixtureDirectory, "logical-matrix-render-config.json"),
             RenderProgramBindings.CreateScene(matrixGraph, 1));

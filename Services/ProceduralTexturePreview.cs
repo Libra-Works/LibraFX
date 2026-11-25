@@ -20,7 +20,7 @@ internal static class ProceduralTexturePreview
         var recipe = ProceduralPixelCompilation.Prune(ProceduralResourceSchema.ReadEffective(definition, node.Parameters));
         var bytes = Convert.FromBase64String(ProceduralDefinitionWriter.Encode(kind, recipe, node,
             Array.Empty<GraphConnectionSnapshot>().ToLookup(edge => edge.TargetNodeId)));
-        var library = NativeLibrary.Load(EditorNativePreviewSession.ResolveLibraryPath());
+        var library = NativeLibrary.Load(PreviewNativeLibrary.ResolveLibraryPath());
         var memory = Marshal.AllocHGlobal(bytes.Length);
         try
         {

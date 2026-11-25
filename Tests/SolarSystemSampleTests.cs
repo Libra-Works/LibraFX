@@ -70,16 +70,17 @@ internal static class SolarSystemSampleTests
         Export("solar-bundled", bundledGraph, VfxProgram.Compile(bundledGraph), 2.4);
         Export("solar", graph, program, 2.4);
         Export("solar-spin-changed", changed, changedProgram, -3);
-        File.WriteAllBytes(Path.Combine(fixtureDirectory, "matrix.lfxb"), matrixProgram.ToBinary());
-        var index = matrixProgram.TypedInstructions.ToList().FindIndex(item => item.NodeId == position.NodeId);
-        File.WriteAllText(Path.Combine(fixtureDirectory, "matrix.checks"), $"0 {index} 3 10 23 30\n");
+        File.WriteAllBytes(Path.Combine(fixtureDirectory, "matrix.lfxp"), EffectBinary.Compile(matrixGraph.Snapshot));
+        if (!matrixProgram.TypedInstructions.Any(item => item.NodeId == position.NodeId))
+            throw new InvalidOperationException("The matrix output must remain addressable in the compiled program.");
+        File.WriteAllText(Path.Combine(fixtureDirectory, "matrix.checks"), $"0 {position.NodeId:N} 3 10 23 30\n");
 
         void Export(string name, GraphSnapshot snapshot, VfxProgram compiled, double earthSpin)
         {
-            File.WriteAllBytes(Path.Combine(fixtureDirectory, name + ".lfxb"), compiled.ToBinary());
+            File.WriteAllBytes(Path.Combine(fixtureDirectory, name + ".lfxp"), EffectBinary.Compile(snapshot));
             var nativeFixture = Path.Combine(fixtureDirectory, name);
             Directory.CreateDirectory(nativeFixture);
-            File.WriteAllBytes(Path.Combine(nativeFixture, "program.lfxb"), compiled.ToBinary());
+            File.WriteAllBytes(Path.Combine(nativeFixture, "program.lfxp"), EffectBinary.Compile(snapshot));
             File.WriteAllBytes(Path.Combine(nativeFixture, "render-config.json"), RenderProgramBindings.CreateScene(snapshot, 1));
             var frames = new List<object>();
             using var checks = new StreamWriter(Path.Combine(fixtureDirectory, name + ".checks"));

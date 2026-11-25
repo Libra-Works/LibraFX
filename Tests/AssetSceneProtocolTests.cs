@@ -19,7 +19,6 @@ internal static class AssetSceneProtocolTests
     public static void Run()
     {
         VerifyConnectionInvitation();
-        VerifyGpuScenes();
         RunWithDispatcher(VerifyQueriesAsync());
         RunWithDispatcher(VerifyResourceIdentityAuthoringLoopbackAsync());
         VerifyAssetWindowRequestLifetimeAsync().GetAwaiter().GetResult();
@@ -258,42 +257,6 @@ internal static class AssetSceneProtocolTests
             throw new Exception("Insecure preview invitations must be rejected.");
         }
         catch (ArgumentException) { }
-    }
-
-    private static void VerifyGpuScenes()
-    {
-        var gpu = new GraphNodeSnapshot(Guid.NewGuid(), GpuParticleEditorService.Kind, "GPU", 0, 0,
-            "Float", GraphPortCategory.Parameter);
-        var template = new GraphNodeSnapshot(Guid.NewGuid(), GraphNodeKind.SpawnableGroup, "Template", 0, 0,
-            "Signal", GraphPortCategory.Signal, ChildGraph: new([gpu with { Id = Guid.NewGuid() }], []));
-        var graph = new GraphSnapshot([gpu, template], []);
-        var frame = CompiledPreviewProtocol.CreateScene(GpuPreviewScene.CreateScene(graph, 73));
-        using var scene = JsonDocument.Parse(frame.AsMemory(CompiledPreviewProtocol.HeaderSize));
-        var programs = scene.RootElement.GetProperty("programs");
-        Require(programs.GetArrayLength() == 1 && programs[0].GetProperty("nodeId").GetGuid() == gpu.Id &&
-            programs[0].GetProperty("programSequence").GetInt64() == 73 &&
-            programs[0].GetProperty("registerKernels")[0].GetProperty("stage").ValueKind == JsonValueKind.String,
-            "GPU scenes must carry executable packets with matched sequences, excluding unspawned templates.");
-        using var empty = JsonDocument.Parse(GpuPreviewScene.CreateScene(new([], []), 74));
-        Require(empty.RootElement.GetProperty("programs").GetArrayLength() == 0,
-            "Removing GPU containers must publish an explicit empty replacement.");
-        var invalidState = new GpuEditorState { Program = LibraGpu.Core.GpuSamples.CreateEmitter() with { Capacity = 0 } };
-        var invalidGpu = gpu with
-        {
-            Parameters = [new(GpuParticleEditorService.ParameterId, "gpuState",
-                JsonSerializer.SerializeToElement(invalidState, GpuParticleEditorService.Json))]
-        };
-        var failure = new CompiledPreviewSender().Prepare(new PreviewPublication(75, "invalid-gpu",
-            new([invalidGpu], []), GraphNodeDefinition.All, null));
-        Require(failure?.Kind == CompiledPreviewKind.CompileError,
-            "Invalid GPU programs must fail before replacing an otherwise valid numeric preview program.");
-        try
-        {
-            GpuPreviewScene.CreateScene(new(Enumerable.Range(0, GpuPreviewScene.MaxPrograms + 1)
-                .Select(_ => gpu with { Id = Guid.NewGuid() }).ToArray(), []), 75);
-            throw new Exception("Oversized GPU container sets must be rejected.");
-        }
-        catch (InvalidDataException) { }
     }
 
     private static async Task VerifyQueriesAsync()

@@ -61,7 +61,7 @@ internal static class SpriteEditorTests
             var animated = SpriteEditorAuthoring.Apply(fixtureGraph, null, texture, new(4, 2, 6, 0, true));
             var snapshot = fixtureGraph.CreateSnapshot();
             Directory.CreateDirectory(fixtureDirectory);
-            File.WriteAllBytes(Path.Combine(fixtureDirectory, "program.lfxb"), VfxProgram.Compile(snapshot).ToBinary());
+            File.WriteAllBytes(Path.Combine(fixtureDirectory, "program.lfxp"), EffectBinary.Compile(snapshot));
             File.WriteAllBytes(Path.Combine(fixtureDirectory, "render-config.json"), RenderProgramBindings.CreateScene(snapshot, 1));
             var frames = new[] { 0d, 0.5, 1d, 0d }.Select(time =>
             {
@@ -166,7 +166,7 @@ internal static class SpriteEditorTests
                 "Arbitrary atlas fixture", "texture", "Unreal");
             var animated = SpriteEditorAuthoring.Apply(fixtureGraph, null, texture, new(3, 1, 10, 1, true), data);
             var snapshot = fixtureGraph.CreateSnapshot();
-            File.WriteAllBytes(Path.Combine(directory, "program.lfxb"), VfxProgram.Compile(snapshot).ToBinary());
+            File.WriteAllBytes(Path.Combine(directory, "program.lfxp"), EffectBinary.Compile(snapshot));
             File.WriteAllBytes(Path.Combine(directory, "render-config.json"), RenderProgramBindings.CreateScene(snapshot, 1));
             var frames = new[] { 0d, 0.4, 2d, 0d }.Select(time =>
             {

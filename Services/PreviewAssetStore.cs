@@ -294,7 +294,7 @@ public sealed class PreviewAssetStore(PreviewTelemetryStore telemetry)
                     root.GetProperty("programSequence").GetInt64() < 0 ||
                     root.GetProperty("runtimeExecuted").ValueKind is not (JsonValueKind.True or JsonValueKind.False) ||
                     root.GetProperty("mode").GetString() != "GpuRegisterInterpreter" ||
-                    root.GetProperty("programs").GetArrayLength() > GpuPreviewScene.MaxPrograms ||
+                    root.GetProperty("programs").GetArrayLength() > 16 ||
                     root.GetProperty("errors").GetArrayLength() > 128) return false;
                 var ids = new HashSet<Guid>();
                 foreach (var program in root.GetProperty("programs").EnumerateArray())

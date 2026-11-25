@@ -171,10 +171,26 @@ public sealed partial class LiberaFxMcpTools
 
     private static void AddTypes(GraphSnapshot graph, JsonArray nodes)
     {
+        var resolved = GraphPolymorphism.Resolve(graph);
         for (var index = 0; index < graph.Nodes.Count; index++)
         {
-            AddType(graph.Nodes[index], nodes[index]!.AsObject());
+            var snapshot = graph.Nodes[index];
+            var node = nodes[index]!.AsObject();
+            AddType(snapshot, node);
+            AddRerouteType(snapshot, node, resolved);
         }
+    }
+
+    private static void AddRerouteType(GraphNodeSnapshot snapshot, JsonObject node,
+        IReadOnlyDictionary<Guid, GraphNodeDefinition> resolved)
+    {
+        if (snapshot.Kind.Value != "Reroute")
+        {
+            return;
+        }
+        var definition = resolved[snapshot.Id];
+        node["effectivePortType"] = definition.PortType;
+        node["effectivePortCategory"] = definition.PortCategory.ToString();
     }
 
     private static void AddType(GraphNodeSnapshot snapshot, JsonObject node)

@@ -41,7 +41,7 @@ public static class CpuParticleBinaryOptimizer
         }
         void WriteBlob(byte[] blob) { writer.Write(blob.Length); writer.Write(blob); }
         var version = Integer();
-        if (version is not (1 or 2)) return bytes;
+        if (version != 2) throw new InvalidDataException("Unsupported CPU particle payload version.");
         var count = Integer();
         if (count < 0 || count > 1024) throw new InvalidDataException("Invalid CPU system count.");
         writer.Write(version); writer.Write(count);
@@ -58,7 +58,7 @@ public static class CpuParticleBinaryOptimizer
                 WriteBlob(ioCount == 0 ? VfxProgram.OptimizeCpuKernelBinary(code) : code);
                 writer.Write(ioCount); writer.Write(io);
             }
-            if (version == 2) WriteBlob(Blob(4096));
+            WriteBlob(Blob(4096));
         }
         if (input.Position != input.Length) throw new InvalidDataException("Unexpected CPU particle payload tail.");
         return output.ToArray();

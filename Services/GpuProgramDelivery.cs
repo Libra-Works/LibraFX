@@ -266,11 +266,10 @@ public static class GpuProgramDeliveryService
             return new GpuExecutableProgram(node.Id, unreal,
                 compiled.ExportMetadataJson(ShaderFormat.UnityCompute), unityShader.Text);
         }).ToArray();
-        var version = generatedBindings || drawBindings.Count != 0 || fluids.Any(fluid => fluid.AutomaticPlane is not null) ? 3 : fluids.Length == 0 ? 1 : 2;
-        if (programs.Any(p => p.Unreal.RendererBindingsVersion >= 2)) version=4;
+        const int version = 4;
         return JsonSerializer.SerializeToUtf8Bytes(new GpuExecutablePayload(version, programs)
         {
-            FluidPrograms = fluids.Length == 0 && version!=4 ? null : fluids,
+            FluidPrograms = fluids.Length == 0 ? null : fluids,
             GeneratedDrawBindings = drawBindings.Count == 0 ? null : drawBindings
         }, PayloadJson);
     }

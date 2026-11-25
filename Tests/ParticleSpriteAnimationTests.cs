@@ -148,7 +148,7 @@ internal static class ParticleSpriteAnimationTests
                 if (directory is not null)
                 {
                     var name = $"{(gpu ? "gpu" : "cpu")}-{(layered ? "composition" : "sequence")}";
-                    File.WriteAllBytes(Path.Combine(directory, name + ".lfxb"), SpawnableGroupPackageBinary.Serialize(package));
+                    File.WriteAllBytes(Path.Combine(directory, name + ".lfxp"), SpawnableGroupPackageBinary.Serialize(package));
                     File.WriteAllBytes(Path.Combine(directory, name + ".json"), gpu ? package.RootGpuPrograms : package.RootRenderConfiguration);
                 }
                 if (gpu)
@@ -161,12 +161,15 @@ internal static class ParticleSpriteAnimationTests
                     var legacyPackage = SpawnableGroupPackage.Compile(graph.CreateSnapshot());
                     using (var legacy = JsonDocument.Parse(legacyPackage.RootGpuPrograms))
                     {
-                        Require(legacy.RootElement.GetProperty("version").GetInt32() != 4,
-                            "Disabling Sprite animation did not restore ordinary GPU delivery.");
+                        var manifest = legacy.RootElement;
+                        var renderer = manifest.GetProperty("programs")[0].GetProperty("unreal").GetProperty("rendererBindings")[0];
+                        Require(manifest.GetProperty("version").GetInt32() == 4 &&
+                            !renderer.TryGetProperty("spriteAnimation", out _),
+                            "Disabling Sprite animation must omit it from the current GPU manifest.");
                     }
                     if (directory is not null && !layered)
                     {
-                        File.WriteAllBytes(Path.Combine(directory, "gpu-disabled.lfxb"), SpawnableGroupPackageBinary.Serialize(legacyPackage));
+                        File.WriteAllBytes(Path.Combine(directory, "gpu-disabled.lfxp"), SpawnableGroupPackageBinary.Serialize(legacyPackage));
                         File.WriteAllBytes(Path.Combine(directory, "gpu-disabled.json"), legacyPackage.RootGpuPrograms);
                     }
                     Require(graph.History.Undo() && GraphSnapshot.ContentEquals(after, graph.CreateSnapshot()), "GPU animation toggle did not undo.");

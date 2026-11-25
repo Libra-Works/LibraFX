@@ -59,6 +59,7 @@ public partial class GraphEditorView : UserControl
     private bool _isSelecting;
     private Point _selectionStart;
     private GraphNodeViewModel[] _selectionBefore = [];
+    private GraphConnectionViewModel[] _wireSelectionBefore = [];
     private Point _pastePosition = new(80, 80);
     private Point? _lastGraphPointer;
     private Point _nodeSearchPosition;
@@ -84,10 +85,10 @@ public partial class GraphEditorView : UserControl
                 {
                     Focus();
                     _pastePosition = ToGraphPoint(e.GetPosition(GraphCanvas));
-                    _contextMenuConnection = GraphSceneLayer.HitTestConnection(graph, _pastePosition);
+                    _contextMenuConnection = GraphSceneLayer.HitTestConnection(graph, _pastePosition, WireHitTolerance());
                     NewGraphGroupMenu.IsVisible = graph.CanCreateNode(GraphNodeKind.GraphGroup, out string? _);
                     NewSpawnableGroupMenu.IsVisible = true;
-                    AddRerouteMenu.IsVisible = _contextMenuConnection is not null;
+                    AddRerouteMenu.IsVisible = _contextMenuConnection is not null || graph.SelectedConnections.Count > 0;
                     BeginViewportPan(e, MouseButton.Right,
                         ShortcutService.Shared.GraphPanButton is "Right" or "Right + Middle");
                 }
@@ -155,6 +156,33 @@ public partial class GraphEditorView : UserControl
 
     internal Point ToGraphPoint(Point canvasPoint) =>
         new(canvasPoint.X - _graphOrigin.X, canvasPoint.Y - _graphOrigin.Y);
+
+    internal Point? GraphPointToOverlay(Point point, GraphInteractionOverlay overlay) =>
+        GraphCanvas.TranslatePoint(new Point(point.X + _graphOrigin.X, point.Y + _graphOrigin.Y), overlay);
+
+    internal void ShowInteractionWires(GraphWorkspaceViewModel graph,
+        IEnumerable<GraphConnectionViewModel> connections, bool pending = false)
+    {
+        var root = this.GetSelfAndVisualAncestors().OfType<GraphEditorView>().Last();
+        root.InteractionOverlay.Show(this, graph, connections, pending);
+    }
+
+    internal void ClearInteractionWires()
+    {
+        var root = this.GetSelfAndVisualAncestors().OfType<GraphEditorView>().LastOrDefault();
+        root?.InteractionOverlay.Clear(this);
+    }
+
+    private double WireHitTolerance()
+    {
+        var root = TopLevel.GetTopLevel(this);
+        if (root is not null && GraphCanvas.TranslatePoint(new Point(0, 0), root) is { } origin &&
+            GraphCanvas.TranslatePoint(new Point(1, 0), root) is { } unit)
+        {
+            return 10.0 / Math.Max(0.001, ((Vector)(unit - origin)).Length);
+        }
+        return 10.0 / Math.Max(0.001, _zoom);
+    }
 
     internal double DebugZoom => _zoom;
     private bool OwnsInput(object? source) =>
@@ -391,10 +419,17 @@ public partial class GraphEditorView : UserControl
             Focus();
             var clickPoint = ToGraphPoint(e.GetPosition(GraphCanvas));
             if (e.ClickCount >= 2 &&
-                GraphSceneLayer.HitTestConnection(graph, clickPoint) is { } hitConnection)
+                GraphSceneLayer.HitTestConnection(graph, clickPoint, WireHitTolerance()) is { } hitConnection)
             {
                 graph.CancelConnection();
-                graph.InsertRerouteOnConnection(hitConnection, clickPoint.X, clickPoint.Y);
+                graph.RunAuthoringAction(() => graph.InsertRerouteOnConnection(hitConnection, clickPoint.X, clickPoint.Y));
+                e.Handled = true;
+                return;
+            }
+            if (GraphSceneLayer.HitTestConnection(graph, clickPoint, WireHitTolerance()) is { } wire)
+            {
+                graph.CancelConnection();
+                graph.SelectConnection(wire, e.KeyModifiers.HasFlag(KeyModifiers.Control));
                 e.Handled = true;
                 return;
             }
@@ -403,6 +438,9 @@ public partial class GraphEditorView : UserControl
             _selectionStart = e.GetPosition(GraphCanvas);
             _selectionBefore = e.KeyModifiers.HasFlag(KeyModifiers.Control)
                 ? graph.SelectedNodes.ToArray()
+                : [];
+            _wireSelectionBefore = e.KeyModifiers.HasFlag(KeyModifiers.Control)
+                ? graph.SelectedConnections.ToArray()
                 : [];
             _pastePosition = clickPoint;
             e.Pointer.Capture(background);
@@ -435,6 +473,7 @@ public partial class GraphEditorView : UserControl
 
         var rect = MakeSelectionRect(_selectionStart, e.GetPosition(GraphCanvas));
         var selected = _selectionBefore.AsEnumerable();
+        var selectedWires = _wireSelectionBefore.AsEnumerable();
         if (rect.Width >= 3 || rect.Height >= 3)
         {
             var matches = GraphCanvas.GetVisualDescendants().OfType<GraphNodeView>()
@@ -444,12 +483,17 @@ public partial class GraphEditorView : UserControl
                                rect.Intersects(new Rect(origin, view.Bounds.Size)))
                 .Select(view => (GraphNodeViewModel)view.DataContext!);
             selected = selected.Concat(matches);
+            var topLeft = ToGraphPoint(rect.TopLeft);
+            var bottomRight = ToGraphPoint(rect.BottomRight);
+            var graphRect = MakeSelectionRect(topLeft, bottomRight);
+            selectedWires = selectedWires.Concat(graph.Connections.Where(edge =>
+                GraphSceneLayer.IntersectsConnection(edge, graphRect)));
         }
 
         _isSelecting = false;
         SelectionBox.IsVisible = false;
         e.Pointer.Capture(null);
-        graph.SetSelection(selected.ToArray());
+        graph.SetSelection(selected.ToArray(), selectedWires.ToArray());
         e.Handled = true;
     }
 
@@ -475,10 +519,10 @@ public partial class GraphEditorView : UserControl
         _pastePosition = ToGraphPoint(e.GetPosition(GraphCanvas));
         var hitNode = FindHitNode(e.Source);
         var blankCanvasOrComment = hitNode is null || hitNode.IsBlankCommentArea(e);
-        _contextMenuConnection = blankCanvasOrComment ? GraphSceneLayer.HitTestConnection(graph, _pastePosition) : null;
+        _contextMenuConnection = blankCanvasOrComment ? GraphSceneLayer.HitTestConnection(graph, _pastePosition, WireHitTolerance()) : null;
         NewGraphGroupMenu.IsVisible = hitNode is null && graph.CanCreateNode(GraphNodeKind.GraphGroup, out string? _);
         NewSpawnableGroupMenu.IsVisible = hitNode is null;
-        AddRerouteMenu.IsVisible = _contextMenuConnection is not null;
+        AddRerouteMenu.IsVisible = _contextMenuConnection is not null || graph.SelectedConnections.Count > 0;
         PopulateAddNodeMenu(graph);
         if (hitNode?.DataContext is GraphNodeViewModel node && !node.IsSelected && graph.SelectedNodes.Count < 2)
         {
@@ -549,12 +593,17 @@ public partial class GraphEditorView : UserControl
     private void OnAddRerouteClick(object? sender, RoutedEventArgs e)
     {
         if (DataContext is not GraphWorkspaceViewModel graph) return;
-        var connection = _contextMenuConnection ?? GraphSceneLayer.HitTestConnection(graph, _pastePosition);
+        var connection = _contextMenuConnection ?? GraphSceneLayer.HitTestConnection(graph, _pastePosition, WireHitTolerance());
         _contextMenuConnection = null;
-        if (connection is not null)
+        if (graph.SelectedConnections.Count > 0 && (connection is null || graph.SelectedConnections.Contains(connection)))
         {
-            graph.InsertRerouteOnConnection(connection, _pastePosition.X, _pastePosition.Y);
+            graph.RunAuthoringAction(() => graph.InsertReroutesOnConnections(graph.SelectedConnections.ToArray()));
         }
+        else if (connection is not null)
+        {
+            graph.RunAuthoringAction(() => graph.InsertRerouteOnConnection(connection, _pastePosition.X, _pastePosition.Y));
+        }
+        Focus();
     }
     private void OnAddCommentClick(object? sender, RoutedEventArgs e)
     {
@@ -589,11 +638,38 @@ public partial class GraphEditorView : UserControl
 
     private void OnBreadcrumbClick(object? sender, RoutedEventArgs e)
     {
-        if (sender is Button { Tag: int depth } && DataContext is GraphWorkspaceViewModel graph)
+        if (sender is not Button { Tag: GraphBreadcrumb breadcrumb } || DataContext is not GraphWorkspaceViewModel graph)
         {
-            CloseSpecializedWorkspace();
-            graph.NavigateToGraph(depth);
-            graph.Document.ActivateEditingWorkspace();
+            return;
+        }
+        if (breadcrumb.IsKernel)
+        {
+            return;
+        }
+        if (breadcrumb.IsSpecialized)
+        {
+            _gpuWorkspace?.Workspace?.Back();
+            return;
+        }
+        CloseSpecializedWorkspace();
+        graph.NavigateToGraph(breadcrumb.Depth);
+        graph.RecordGraphNavigation();
+        graph.Document.ActivateEditingWorkspace();
+    }
+
+    private void OnNavigateBackClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is GraphWorkspaceViewModel graph)
+        {
+            graph.NavigateBack();
+        }
+    }
+
+    private void OnNavigateForwardClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is GraphWorkspaceViewModel graph)
+        {
+            graph.NavigateForward();
         }
     }
 
@@ -661,7 +737,7 @@ public partial class GraphEditorView : UserControl
         }
         else if (shortcuts.Matches("graph.delete", e))
         {
-            graph.RunAuthoringAction(() => graph.DeleteNodes(graph.SelectedNodes.ToArray()));
+            graph.RunAuthoringAction(graph.DeleteSelection);
             e.Handled = true;
         }
         else if (shortcuts.Matches("graph.search", e))
@@ -866,7 +942,7 @@ public partial class GraphEditorView : UserControl
 
     private GraphConnectionViewModel? FindHitConnection(Point point, GraphWorkspaceViewModel graph)
     {
-        var threshold = 10.0 / Math.Max(0.25, _zoom);
+        var threshold = WireHitTolerance();
         var thresholdSq = threshold * threshold;
         GraphConnectionViewModel? best = null;
         var bestDistSq = thresholdSq;

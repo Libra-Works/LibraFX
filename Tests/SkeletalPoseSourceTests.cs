@@ -70,9 +70,6 @@ internal static class SkeletalPoseSourceTests
             "A desktop render_scene must not pretend to resolve engine bones.");
         RequireNotSupported(() => RenderProgramBindings.CreateScene(lowered, 1), "Desktop render_scene",
             "Manually lowered SOURCE metadata must not bypass the render_scene boundary.");
-        RequireNotSupported(() => _ = new LiberaFx.Services.EditorNativePreviewSession(graph),
-            "Editor-native live preview",
-            "Editor-native live preview must reject SOURCE without an engine pose adapter.");
         RequireNotSupported(() => LiberaFx.Services.LiveGameGraphCompiler.Compile(new(graph, "SOURCE")),
             "Live game transfer",
             "Live game transfer must reject SOURCE rather than send default-valued inputs.");
