@@ -33,6 +33,7 @@ the editor with bundled sample data, not engine rendering.
 | --- | --- | --- |
 | Main window and document tabs | **File → New / Open** | Open multiple graphs, switch tabs, save the current document, and use **Save As** for an experimental copy. Docking a tool elsewhere does not change the document. |
 | Graph canvas | Open a document | Place nodes, connect compatible pins, and enter a Group to see its child graph. Use the breadcrumb to return to the parent. See [Graph authoring](authoring.md). |
+| Reroute | Right-click a connection → **Add reroute** | Insert a routing point without changing the connection semantics. Signal outputs still allow only one destination. Undo restores the original connection. |
 | Search anything | **Edit → Search anything** or `Ctrl+P` by default | Search across commands, nodes, and assets. Use the arrow keys to select a result and Enter to run or open it. |
 | Outliner | **Window → Outliner** | Browse graph nodes and select one without locating it manually on the canvas. |
 | Node List | **Window → Node List** | Search and drag nodes onto the graph. The catalog includes built-ins and definitions from the active project, not every known project definition. |
@@ -47,6 +48,22 @@ the editor with bundled sample data, not engine rendering.
 | Sprite Animation | **Window → Sprite Animation** | Author sprite animation and composition data using the atlas, cells, and timeline. Previewing a composition in this pane is different from drawing a compiled package in an engine. |
 | Graph Problems | **Window → Graph problems** | Review graph diagnostics while editing. Resolve missing or incompatible definitions and connections before retrying compilation. |
 | History | **Window → History** | Browse the edit history as a branching tree, select a state to navigate, and pin useful states. Editing after moving back creates a branch; this does not create a Git commit. |
+
+Select a connection by clicking its wire; Ctrl-click toggles individual wires and
+nodes. Drag a selection box across nodes or wires to select them; hold Ctrl to
+extend the selection. Delete removes the selected nodes and wires in one undoable
+edit. Right-click a selected wire and choose **Add reroute** to insert a routing
+point on each selected wire. During a drag, affected wires are drawn above the
+nodes, including outside an expanded child canvas; settled wires stay below nodes.
+
+The breadcrumb bar shows the document and its graph or workspace path. Use
+**Back** and **Forward** to revisit graph, GPU and procedural locations, or click
+a segment to return to it. Navigation does not add an edit to History.
+
+For MCP, `libera_graph_read` lists node IDs and connection port IDs.
+`libera_graph_insert_reroute` inserts a point on the specified connection;
+`libera_graph_remove_reroute` removes a connected point and reconnects its source
+and destinations. Both edits can be undone. Use the exact IDs returned by the graph.
 
 ## Projects, assets, and shared groups
 
@@ -86,7 +103,7 @@ the editor with bundled sample data, not engine rendering.
 | Settings → Inspectors / Extensions | **Edit → Settings** | Manage extensions, inspector providers, default inspectors, and plugin commands. Review the trust prompt before enabling third-party code. |
 | Window layouts | **Window → Window layouts** | Save, select, or manage docking presets, or restore the default layout from the layout menu. Layout changes do not edit the effect graph. |
 | Startup setup | During initial setup | Choose the initial editor settings when prompted. These can be reviewed later in Settings. The splash screen only indicates startup. |
-| Unsaved changes | Closing a modified document or workspace | Choose whether to save changes, discard them, or cancel the close. File open/save/export dialogs select the destination or source; the editor's VFX export creates `.lfxb`. |
+| Unsaved changes | Closing a modified document or workspace | Choose whether to save changes, discard them, or cancel the close. File open/save/export dialogs select the destination or source; the editor's VFX export creates an `.lfxp` package. |
 | Getting started / About | **Help** menu | Open built-in help or check application details. See [Engine integration](engine-integration.md) for installing the current release SDK. |
 
 Specialized confirmation dialogs appear inside these workflows, for example when

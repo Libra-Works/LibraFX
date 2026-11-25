@@ -72,9 +72,6 @@ SOURCE snapshot publication is supported only for the root of a compiled
   does not resolve bones.
 * Unreal `ULibraSpawnableComponent` publishes them on the game thread in its
   post-pose tick before the first and each subsequent native advance.
-  `ULibraEffectComponent` uses this path only when playing a package, by
-  delegating to `ULibraSpawnableComponent`. The core `SpawnableHost` alone
-  does not resolve bones.
 
 This is not a general raw-CPU program feature. `VfxProgram.Compile` rejects
 SOURCE rather than producing a program whose hidden input defaults may be

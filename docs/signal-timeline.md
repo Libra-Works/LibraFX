@@ -48,7 +48,7 @@ Sendは、接続中のコンパイル済みプレビューへ送る一時入力�
 ## 書き出しと対応範囲
 
 実行用キーは既存のC++ランタイムの開始・Delay・Sequence処理へ変換します。
-実行用キーのあるグラフを生の `.lfxb` に書き出そうとすると、欠落を防ぐためエラーにします。
+実行用キーを含むグラフは、キーを保持するコンパイル済み `.lfxp` パッケージとして出力します。
 スタンドアロンConverterでも、出力拡張子を `.lfxp` にするとパッケージを生成します。
 
 ```text
@@ -56,7 +56,7 @@ LiberaFxConverter convert effect.lfxproj effect.lfxp --embedded-groups
 ```
 
 最新の参照Groupを解決する場合は、既存どおり `--groups` でライブラリを指定します。
-Converterのバッチ既定出力は `.lfxb` のままです。
+Converterのバッチ既定出力は `.lfxp` のままです。
 GPUを含むグラフは、このCPU用Converterでは書き出せません。
 
 現在のライフサイクル・Signalプレビューはエディター側のネイティブ実行結果を
@@ -84,7 +84,7 @@ GPUを含むグラフは、このCPU用Converterでは書き出せません。
   名前付きGame I/O、ネイティブ由来のインスタンスローカルSignal、再開始・停止を確認します。
 - Unreal: `LibraSignalTimelineFixtures=<出力ディレクトリ>` を指定し、
   Automationの `Libra.Runtime.Spawnable.SignalTimeline` を実行します。
-  組み込みC++ホストの出力イベントと、`ULibraEffectComponent` の
+  組み込みC++ホストの出力イベントと、`ULibraSpawnableComponent` の
   Play／Tick／完了／再開始／停止を確認します。
 
 2026-11-17にUnity 7000.0.0a16の実Play ModeとUE5.7で上記を確認しました。

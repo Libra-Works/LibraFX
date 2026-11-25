@@ -76,7 +76,7 @@ internal static class Converter
             if (args[0] == "convert" && export is null &&
                 !Path.GetExtension(output).Equals(EffectBinary.FileExtension, StringComparison.OrdinalIgnoreCase))
             {
-                throw new InvalidDataException("Compiled effects use .lfxb. Legacy .lfxp files remain readable; choose a .lfxb output path.");
+                throw new InvalidDataException("Compiled effects use .lfxp; choose a .lfxp output path.");
             }
             var resolver = new GroupCompilationResolver(libraries, embedded);
             if (args[0] == "convert")
@@ -117,19 +117,18 @@ internal static class Converter
 
     private static void Usage(TextWriter writer)
     {
-        writer.WriteLine("Usage: LiberaFxConverter convert <input.lfxproj> <output.lfxb|output.lfxrm> [options]");
+        writer.WriteLine("Usage: LiberaFxConverter convert <input.lfxproj> <output.lfxp|output.lfxrm> [options]");
         writer.WriteLine("       LiberaFxConverter batch <input-directory> <output-directory> [options]");
-        writer.WriteLine("       LiberaFxConverter optimize <input.lfxb> <output.lfxb> [--force]");
+        writer.WriteLine("       LiberaFxConverter optimize <input.lfxp> <output.lfxp> [--force]");
         writer.WriteLine("Optimize: precompile supported CPU kernels from an existing package; use the matching updated native runtime.");
         writer.WriteLine("       LiberaFxConverter batch --list <effects.txt> <output-directory> [options]");
         writer.WriteLine("       LiberaFxConverter batch-list <effects.txt> <output-directory> [options]");
-        writer.WriteLine("List: one input project per line, optionally TAB + relative output.lfxb. Input paths are relative to the list file. Blank lines and # comments are ignored.");
+        writer.WriteLine("List: one input project per line, optionally TAB + relative output.lfxp. Input paths are relative to the list file. Blank lines and # comments are ignored.");
         writer.WriteLine("Spawnable Groups, CPU/GPU particles and Fluid2D use the same executable package compiler as the editor.");
         writer.WriteLine("Options: --force  --groups <directory> (repeatable)  --nodes <directory> (repeatable)  --embedded-groups");
         writer.WriteLine("Linked groups use the latest library versions by default. --embedded-groups explicitly uses frozen embedded versions.");
         writer.WriteLine("Source projects and group libraries are never modified.");
-        writer.WriteLine("All effect exports use .lfxb packages, including simple graphs, lifecycle and runtime Signal timeline keys.");
-        writer.WriteLine("Legacy .lfxp and raw .lfxb remain runtime inputs; raw bytecode is no longer a converter output.");
+        writer.WriteLine("All effect exports use .lfxp packages, including simple graphs, lifecycle and runtime Signal timeline keys.");
         writer.WriteLine("Mapped .lfxrm: [--resource-map <file>] --binding-snapshot <file> --target-engine <engine> --target-project <guid>");
         writer.WriteLine("The project identity document is used unless an identical --resource-map is supplied. Snapshot assertions are not live verification.");
     }
@@ -138,8 +137,11 @@ internal static class Converter
     {
         if (string.Equals(input, output, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
             throw new IOException("Input and output must be different files.");
-        if (!Path.GetExtension(output).Equals(EffectBinary.FileExtension, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidDataException("Optimized effects use .lfxb.");
+        if (!Path.GetExtension(input).Equals(EffectBinary.FileExtension, StringComparison.OrdinalIgnoreCase) ||
+            !Path.GetExtension(output).Equals(EffectBinary.FileExtension, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidDataException("Optimized effect input and output must use .lfxp.");
+        }
         if (!force && File.Exists(output)) throw new IOException($"Output already exists: {output}");
         if (new FileInfo(input).Length > 512 * 1024 * 1024) throw new InvalidDataException("The input package exceeds 512 MiB.");
         var source = await File.ReadAllBytesAsync(input);
@@ -191,7 +193,7 @@ internal static class Converter
             if (!target.StartsWith(rootPrefix, comparison) ||
                 !Path.GetExtension(target).Equals(EffectBinary.FileExtension, StringComparison.OrdinalIgnoreCase) ||
                 !targets.Add(target))
-                throw new InvalidDataException($"Line {lineNumber}: output escapes its directory, is not .lfxb, or duplicates an earlier output.");
+                throw new InvalidDataException($"Line {lineNumber}: output escapes its directory, is not .lfxp, or duplicates an earlier output.");
             jobs.Add((source, target));
         }
         if (jobs.Count == 0) throw new InvalidDataException("The input list contains no projects.");
@@ -219,11 +221,11 @@ internal static class Converter
             var project = await ProjectDocumentReader.LoadAsync(stream);
             if (export is null && (project.Graph.ResourceIdentities is not null ||
                                    ResourceIdentityExport.HasEmbeddedMetadata(project.Graph)))
-                throw new InvalidDataException("This project contains portable resource identities; use explicit .lfxrm mapping export. Mapped .lfxb export is not implemented.");
+                throw new InvalidDataException("This project contains portable resource identities; use explicit .lfxrm mapping export. Mapped .lfxp export is not implemented.");
             var graph = resolver.Resolve(project.Graph);
             if (export is null && (graph.ResourceIdentities is not null ||
                                    ResourceIdentityExport.HasEmbeddedMetadata(graph)))
-                throw new InvalidDataException("This project contains portable resource identities; use explicit .lfxrm mapping export. Mapped .lfxb export is not implemented.");
+                throw new InvalidDataException("This project contains portable resource identities; use explicit .lfxrm mapping export. Mapped .lfxp export is not implemented.");
             byte[] bytes;
             if (export is not null)
             {

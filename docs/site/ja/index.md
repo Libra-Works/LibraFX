@@ -48,6 +48,7 @@ LIBERA FXは、**Unity・Unreal Engine・Godotで再生するエフェクト**�
 - ノードや言葉の意味を調べる：[標準ノード図鑑](node-reference.md)・[用語集](glossary.md)
 - 表示されない、接続できない：[困ったときの確認](troubleshooting.md)
 - 更新内容や対応条件を確認する：[リリースノート](release-notes.md)。エディターとSDKは同じリリースから導入します。
+- AI クライアントを接続する：[MCP クライアント接続ガイド](mcp-guide.md)。
 
 [Previewをダウンロード](https://github.com/Libra-Works/LibraFX/releases) ·
 [ソースリポジトリ](https://github.com/Libra-Works/LibraFX) ·

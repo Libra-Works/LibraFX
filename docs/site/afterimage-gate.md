@@ -37,7 +37,7 @@ Install the [Unreal SDK](production-workflow.md#unreal). Open
 Frame the ring face-on.
 
 The live preview uses Unreal's stock Sphere and an explicit preview material.
-Offline `.lfxb` playback needs engine asset bindings; the transient preview material
+Offline `.lfxp` playback needs engine asset bindings; the transient preview material
 is not an exported Unreal asset.
 
 Continue with [Graph fundamentals](authoring.md) or [Connect and deliver](production-workflow.md).

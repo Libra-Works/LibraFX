@@ -60,10 +60,9 @@ its definition, not the exposed values you set on a particular instance.
 ## Move from graph to engine
 
 Save source projects as `.lfxproj`. The editor's **Export VFX...** produces a
-`.lfxb` effect package, also used by the converter for simple and Spawnable
+`.lfxp` effect package, also used by the converter for simple and Spawnable
 graphs alike. Bind actual textures, materials, and meshes in the engine project.
-Use an engine SDK from the same release as the editor. Legacy `.lfxp` packages and old raw
-`.lfxb` files remain supported inputs, not alternative new export choices.
+Use an engine SDK from the same release as the editor. The compiled `.lfxp` package is the single supported format for production playback and Live Preview.
 Named root or instance Game I/O is distinct from internal graph connections.
 See [Engine integration](engine-integration.md) for installation, output events,
 and extending your effect with script actions or C++ nodes.

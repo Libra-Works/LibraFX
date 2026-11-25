@@ -134,12 +134,7 @@ Source verification includes JSON/UUID/translation checks and new compilation
 and native outcome test sources. Builds, execution, UI interaction, Undo/Redo,
 copy/paste and engine pixels remain to be verified with the updated application.
 
-The optional `QuaternionRandomCompilationTests.WriteNativeFixtures` helper
-produces **internal compiler-to-native raw program fixtures** using
-`VfxProgram.Compile(...).ToBinary()`. Despite their `.lfxb` filenames, they are
-not unified `EffectBinary` containers. The native test reads them with
-`Program::load`. This helper does not invoke the standalone converter executable;
-neither fixture execution nor executable-converter integration has been verified.
+The optional `QuaternionRandomCompilationTests.WriteNativeFixtures` helper produces internal compiler-to-native program data for native tests using `VfxProgram.Compile(...).ToBinary()`. These bytes are an implementation detail, not a standalone user file or an `.lfxp` package. The helper does not invoke the Converter executable; neither fixture execution nor executable-Converter integration has been verified.
 
 ## Re-exporting older binaries
 

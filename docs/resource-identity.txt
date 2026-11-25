@@ -102,12 +102,12 @@ It is separate from the Unity Live Game path. GPU resource mappings and Godot pa
 preview mappings are not enabled by this path.
 
 Headless path (after the owner adds the source links and builds):
-  LiberaFxConverter convert effect.lfxproj effect.lfxb
+  LiberaFxConverter convert effect.lfxproj effect.lfxp
     --binding-snapshot snapshot.json --target-engine Unreal --target-project <guid>
   (or output effect.lfxrm for the diagnostic JSON manifest)
 Add --resource-map mapping.json only when the project does not already store the same
 identity document. .lfxproj is the editable authoring source and history (including portable
-Resource Identity mappings); .lfxb is the self-contained compiled runtime package for engine
+Resource Identity mappings); .lfxp is the self-contained compiled runtime package for engine
 import and disconnected playback; .lfxrm is a diagnostic JSON manifest containing the original
 Libera IDs, exact opaque project bindings, material definitions, compiled bytecode, and
 resolved render_config. Spawnable projects also carry the compiled .lfxp package bytes in
@@ -115,7 +115,7 @@ resolved render_config. Spawnable projects also carry the compiled .lfxp package
 Legacy resource paths are never used as mapped resources; every nonempty asset/material/
 texture path needs an explicit use except the supported builtin material. An unassigned
 texture is allowed; material parameters must also have explicit parameter uses. Graph Groups
-and Spawnable packages retain instance scope. No fallback to an unmapped .lfxb/.lfxp occurs,
+and Spawnable packages retain instance scope. No fallback to an unmapped .lfxp package occurs,
 and failed exports never publish partial files (staged via temporary file + atomic replace).
 Even without mapping options, the converter rejects portable identity metadata rather than
 silently exporting the legacy path. Source graph/map/snapshot are not rewritten.

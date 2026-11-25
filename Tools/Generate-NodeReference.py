@@ -86,7 +86,7 @@ NOTES = {
     "MatrixMultiply": ("Multiply two matrices in input order.", "入力順に二つの行列を掛け合わせます。"),
     "RotatePoint": ("Rotate a point about the origin.", "点を原点の周りに回転します。"),
     "TranslatePoint": ("Offset a point by a translation.", "点に平行移動を加えます。"),
-    "Transform": ("Build a matrix from position, rotation and scale.", "位置・回転・スケールから行列を作ります。"),
+    "Transform": ("Build a local matrix from position, rotation and scale. Optional Parent produces Parent × Local (rightmost acts first); disconnected leaves Local unchanged.", "位置・回転・スケールからローカル行列を作ります。親を接続すると親 × ローカル（右から作用）、未接続ならローカルのままです。"),
     "TransformPoint": ("Transform a point, including translation.", "平行移動を含めて点を変換します。"),
     "TransformDirection": ("Transform a direction without translation.", "平行移動を除いて方向を変換します。"),
     "Reroute": ("Pass a wire through a compact waypoint without changing its value.", "値を変えずに配線を中継するコンパクトな経由ノードです。"),

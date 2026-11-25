@@ -22,7 +22,7 @@ Fluid2D shares the GPU Particle workspace but simulates grid cells rather than i
 2. Select **Simulation model / preset**. Changing model loads that preset's settings and clears its previous force nodes; Undo restores them.
 3. Adjust the grid, domain, source and model settings. Start with a small grid. Source coordinates are normalized; radius and depth use simulation-domain distance units.
 4. Leave **Output plane: Auto / On / Off** at Auto to use the dedicated renderer. For a continuous root effect, disable **End automatically when idle**. A Spawnable template needs a Spawn Signal and an appropriate **Life Time**.
-5. Export the entire effect as `.lfxb` and play it through the matching engine SDK. The standalone converter also exports Fluid2D effects. Validate / compile and source export do not execute the GPU.
+5. Export the entire effect as `.lfxp` and play it through the matching engine SDK. The standalone converter also exports Fluid2D effects. Validate / compile and source export do not execute the GPU.
 
 ![Resource declarations and simulation passes in the editor](images/editor/fluid-2d-flow-en.png)
 ![Output and renderer settings in the editor](images/editor/fluid-2d-output-en.png)

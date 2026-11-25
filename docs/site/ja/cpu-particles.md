@@ -288,11 +288,7 @@ Flipbook使用時の描画メタデータは`cpuParticleVersion:3`、Draw Matrix
   無関係な既存 Spawnable 処理全体が allocation-free という主張ではありません。
 * 時刻は単調増加です。逆方向 seek は再生を作り直します。自然終了は放出停止後に
   生存粒子を排出し、Stop・Force は粒子と CPU 通知を消去します。
-* root のみの CPU を含む `.lfxb` は既存 `LFXP` envelope の **format 4 / package 12** と、
-  little-endian の CPU payload v1 を使います。テンプレート内 CPU または Spawnable の
-  ネストには **format 5 / package 13** を使います。CPU もネストもない場合は
-  format 3 / package 11 を維持します。更新版 reader は旧形式を読み、
-  旧 reader は新形式の内容を黙って捨てず非対応として拒否します。
+* CPU 粒子を含むデータも、通常再生・ライブプレビュー共通の `.lfxp` パッケージに格納します。パッケージと CPU payload のバージョンは SDK 互換性契約に従い、対応しない reader は内容を黙って捨てず拒否します。
 * 描画 metadata に `cpuParticleVersion:1` と `cpuParticles` を追加します。
   native snapshot は80バイト、scoped event は88バイトです。既存 UUID・値 ABI は変えません。
 

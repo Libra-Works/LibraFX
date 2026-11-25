@@ -59,8 +59,9 @@ jobs:
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
           $env:LIBERAFX_DATA_ROOT = Join-Path $env:RUNNER_TEMP 'cpu-batch-data'
-          $fixtures = Join-Path $env:RUNNER_TEMP 'cpu-batch-fixtures'
-          $fallback = Join-Path $env:RUNNER_TEMP 'cpu-batch-fallback'
+          $fixtureRoot = Join-Path $env:RUNNER_TEMP 'runtime-fixtures'
+          $fixtures = Join-Path $fixtureRoot 'batch'
+          $fallback = Join-Path $fixtureRoot 'fallback'
           $nested = Join-Path $env:RUNNER_TEMP 'prepared-nested-fixtures'
           $nestedExtra = Join-Path $env:RUNNER_TEMP 'prepared-nested-extra-fixtures'
           $sprite = Join-Path $env:RUNNER_TEMP 'particle-sprite-fixtures'
@@ -71,53 +72,61 @@ jobs:
           dotnet run --project Tests/CommentImageSmokeTests.csproj -c Release --no-build -- --spawnable-hierarchy-fixtures $nested
           dotnet run --project Tests/CommentImageSmokeTests.csproj -c Release --no-build -- --spawnable-hierarchy-extra-fixtures $nestedExtra
           dotnet run --project Tests/CommentImageSmokeTests.csproj -c Release --no-build -- --particle-sprite $sprite
+          $env:LIBERAFX_INT32_FIXTURE_DIR = Join-Path $fixtureRoot 'int32'
+          $env:LIBERAFX_INSTANCE_GAMEIO_FIXTURES = Join-Path $fixtureRoot 'gameio'
+          dotnet run --project Tests/CommentImageSmokeTests.csproj -c Release --no-build -- --int32
+          dotnet run --project Tests/CommentImageSmokeTests.csproj -c Release --no-build -- --debugger-fixtures (Join-Path $fixtureRoot 'debugger')
+          dotnet run --project Tests/CommentImageSmokeTests.csproj -c Release --no-build -- --game-io
+          dotnet run --project Tests/CommentImageSmokeTests.csproj -c Release --no-build -- --live-game-fixtures (Join-Path $fixtureRoot 'live')
+          dotnet run --project Tests/CommentImageSmokeTests.csproj -c Release --no-build -- --fireworks-fixtures (Join-Path $fixtureRoot 'fireworks')
+          dotnet run --project Tests/CommentImageSmokeTests.csproj -c Release --no-build -- --spawnable-adapter-fixtures (Join-Path $fixtureRoot 'adapter')
           # Instrument only this disposable test build; exported SDKs remain normal Release builds.
-          cmake -S Runtime -B $build -DLIBERAFX_BUILD_TESTS=ON -DLIBERAFX_BUILD_INTEROP=ON '-DCMAKE_CXX_FLAGS=/fsanitize=address /Zi /EHsc' '-DCMAKE_EXE_LINKER_FLAGS=/DEBUG /INCREMENTAL:NO'
-          cmake --build $build --config Release --target liberafx_cpu_particle_batch_tests liberafx_interop_tests liberafx_spawnable_host_pool_tests liberafx_interop_host_pool_tests liberafx_effect_world_tests liberafx_prepared_execution_tests liberafx_nested_spawnable_tests liberafx_particle_sprite_tests --parallel 2
+          cmake -S Runtime -B $build -DLIBERAFX_BUILD_TESTS=ON -DLIBERAFX_BUILD_INTEROP=ON "-DLIBERAFX_RUNTIME_FIXTURE_ROOT=$fixtureRoot" '-DCMAKE_CXX_FLAGS=/fsanitize=address /Zi /EHsc' '-DCMAKE_EXE_LINKER_FLAGS=/DEBUG /INCREMENTAL:NO'
+          cmake --build $build --config Release --target liberafx_cpu_particle_batch_tests liberafx_interop_package_tests liberafx_int32_tests liberafx_execution_debugger_runtime_tests liberafx_live_package_tests liberafx_instance_game_io_tests liberafx_interop_scoped_termination_tests liberafx_spawnable_host_pool_tests liberafx_interop_host_pool_tests liberafx_effect_world_tests liberafx_prepared_execution_tests liberafx_nested_spawnable_tests liberafx_particle_sprite_tests --parallel 2
           $compilerInfo = Get-ChildItem (Join-Path $build 'CMakeFiles') -Filter CMakeCXXCompiler.cmake -Recurse | Select-Object -First 1
           $compilerPath = [regex]::Match((Get-Content $compilerInfo.FullName -Raw), 'set\(CMAKE_CXX_COMPILER "([^"]+)"\)').Groups[1].Value
           $asanRuntime = Join-Path (Split-Path $compilerPath) 'clang_rt.asan_dynamic-x86_64.dll'
           if (-not (Test-Path $asanRuntime)) { throw 'The selected compiler must provide the AddressSanitizer runtime.' }
           $env:PATH = (Split-Path $asanRuntime) + [IO.Path]::PathSeparator + $env:PATH
           $env:ASAN_OPTIONS = 'halt_on_error=1:alloc_dealloc_mismatch=1'
+          ctest --test-dir $build -C Release --output-on-failure --timeout 90 -R '^liberafx_(cpu_particle_batch|int32|execution_debugger_runtime|live_package|instance_game_io|interop_scoped_termination|interop_package_(cpu|debug))_tests$'
           & (Join-Path $build 'Release/liberafx_particle_sprite_tests.exe') (Join-Path $sprite 'sequence.bin') (Join-Path $sprite 'composition.bin')
           & (Join-Path $build 'Release/liberafx_cpu_particle_batch_tests.exe') `
-            --aot (Join-Path $fixtures 'CpuFountain-1000.lfxb') (Join-Path $fixtures 'CpuFountain-aot-1000.lfxb') `
-            --aot (Join-Path $fixtures 'CpuFountain-retirement.lfxb') (Join-Path $fixtures 'CpuFountain-aot-retirement.lfxb') `
-            --aot (Join-Path $fixtures 'CpuFountain-1000.lfxb') (Join-Path $fixtures 'CpuFountain-binary-1000.lfxb') `
-            --aot (Join-Path $fixtures 'CpuFountain-retirement.lfxb') (Join-Path $fixtures 'CpuFountain-binary-retirement.lfxb') `
-            --fused (Join-Path $fixtures 'CpuFountain-1000.lfxb') `
-            (Join-Path $fixtures 'CpuFountain-retirement.lfxb') `
-            --unfused (Join-Path $fixtures 'CpuBatch-math.lfxb') `
-            (Join-Path $fixtures 'CpuBirth-zero-life.lfxb') `
-            --birth-divide (Join-Path $fixtures 'CpuBirth-divide.lfxb') `
-            --birth-mixed (Join-Path $fixtures 'CpuBirth-mixed.lfxb') `
-            --spawn-fallback (Join-Path $fixtures 'CpuBirth-unsupported.lfxb') `
-            --divide-zero (Join-Path $fixtures 'CpuBatch-divide-zero.lfxb') `
-            --mixed-error (Join-Path $fixtures 'CpuBatch-error-order.lfxb') `
-            (Join-Path $fallback 'cpu-particles.lfxb')
-          $env:LIBERAFX_CPU_READ_FIXTURE_DIR = $fixtures
-          & (Join-Path $build 'Release/liberafx_interop_tests.exe')
+            --aot (Join-Path $fixtures 'CpuFountain-1000.lfxp') (Join-Path $fixtures 'CpuFountain-aot-1000.lfxp') `
+            --aot (Join-Path $fixtures 'CpuFountain-retirement.lfxp') (Join-Path $fixtures 'CpuFountain-aot-retirement.lfxp') `
+            --aot (Join-Path $fixtures 'CpuFountain-1000.lfxp') (Join-Path $fixtures 'CpuFountain-binary-1000.lfxp') `
+            --aot (Join-Path $fixtures 'CpuFountain-retirement.lfxp') (Join-Path $fixtures 'CpuFountain-binary-retirement.lfxp') `
+            --fused (Join-Path $fixtures 'CpuFountain-1000.lfxp') `
+            (Join-Path $fixtures 'CpuFountain-retirement.lfxp') `
+            --unfused (Join-Path $fixtures 'CpuBatch-math.lfxp') `
+            (Join-Path $fixtures 'CpuBirth-zero-life.lfxp') `
+            --birth-divide (Join-Path $fixtures 'CpuBirth-divide.lfxp') `
+            --birth-mixed (Join-Path $fixtures 'CpuBirth-mixed.lfxp') `
+            --spawn-fallback (Join-Path $fixtures 'CpuBirth-unsupported.lfxp') `
+            --divide-zero (Join-Path $fixtures 'CpuBatch-divide-zero.lfxp') `
+            --mixed-error (Join-Path $fixtures 'CpuBatch-error-order.lfxp') `
+            (Join-Path $fallback 'cpu-particles.lfxp')
+          & (Join-Path $build 'Release/liberafx_interop_package_tests.exe') --cpu $fixtures
           & (Join-Path $build 'Release/liberafx_spawnable_host_pool_tests.exe') `
             --hierarchy (Join-Path $nested 'nested-cpu-retention.lfxp') `
             --hierarchy (Join-Path $nestedExtra 'nested-cpu-only-retention.lfxp') `
-            (Join-Path $fixtures 'CpuFountain-binary-100.lfxb') `
-            (Join-Path $fixtures 'CpuFountain-binary-retirement.lfxb') `
-            (Join-Path $fixtures 'CpuPool-gameio.lfxb') `
-            (Join-Path $fallback 'cpu-particles.lfxb')
+            (Join-Path $fixtures 'CpuFountain-binary-100.lfxp') `
+            (Join-Path $fixtures 'CpuFountain-binary-retirement.lfxp') `
+            (Join-Path $fixtures 'CpuPool-gameio.lfxp') `
+            (Join-Path $fallback 'cpu-particles.lfxp')
           & (Join-Path $build 'Release/liberafx_interop_host_pool_tests.exe') `
-            (Join-Path $fixtures 'CpuFountain-binary-100.lfxb') `
-            (Join-Path $fixtures 'CpuPool-gameio.lfxb')
+            (Join-Path $fixtures 'CpuFountain-binary-100.lfxp') `
+            (Join-Path $fixtures 'CpuPool-gameio.lfxp')
           & (Join-Path $build 'Release/liberafx_effect_world_tests.exe') `
-            (Join-Path $fixtures 'CpuFountain-binary-100.lfxb') `
-            (Join-Path $fixtures 'CpuFountain-binary-retirement.lfxb')
+            (Join-Path $fixtures 'CpuFountain-binary-100.lfxp') `
+            (Join-Path $fixtures 'CpuFountain-binary-retirement.lfxp')
           & (Join-Path $build 'Release/liberafx_prepared_execution_tests.exe') `
             (Join-Path $nested 'nested-cpu-retention.lfxp') `
             (Join-Path $nested 'nested-capture-isolation.lfxp') `
             (Join-Path $nestedExtra 'same-parent-template-capture.lfxp') `
             (Join-Path $nestedExtra 'nested-cpu-only-retention.lfxp') `
-            (Join-Path $fixtures 'CpuMesh-static.lfxb') `
-            (Join-Path $fixtures 'CpuMesh-animated.lfxb')
+            (Join-Path $fixtures 'CpuMesh-static.lfxp') `
+            (Join-Path $fixtures 'CpuMesh-animated.lfxp')
           & (Join-Path $build 'Release/liberafx_nested_spawnable_tests.exe') `
             (Join-Path $nested 'nested-cpu-retention.lfxp') `
             (Join-Path $nested 'nested-capture-isolation.lfxp') `

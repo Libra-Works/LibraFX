@@ -129,13 +129,7 @@ modulo-2^32 算術でハッシュします。**グローバル乱数・隠れた
 テストソースを追加していますが、ビルド・実行・UI操作・Undo/Redo・コピー／貼り付け・
 エンジン上の描画は更新後のアプリケーションで未検証です。
 
-任意の `QuaternionRandomCompilationTests.WriteNativeFixtures` は
-`VfxProgram.Compile(...).ToBinary()` による
-**内部コンパイラーからネイティブへの raw program fixture** を生成します。
-拡張子は `.lfxb` ですが、統一形式の `EffectBinary` コンテナーではありません。
-ネイティブテストは `Program::load` で読みます。このヘルパーは単独コンバーターの
-実行ファイルを呼び出しません。fixture の実行も、コンバーター実行ファイルとの
-統合動作も未検証です。
+任意の `QuaternionRandomCompilationTests.WriteNativeFixtures` は、`VfxProgram.Compile(...).ToBinary()` を使ってネイティブテスト用の内部プログラムデータを生成します。このデータは実装詳細であり、ユーザー向けの独立ファイルや `.lfxp` パッケージではありません。このヘルパーは Converter 実行ファイルを呼び出しません。fixture の実行も、Converter 実行ファイルとの統合動作も未検証です。
 
 ## 旧バイナリーを使っている場合
 

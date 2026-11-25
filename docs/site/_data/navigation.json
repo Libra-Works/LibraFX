@@ -122,6 +122,11 @@
           "path": "glossary.html",
           "en": "Glossary",
           "ja": "用語集"
+        },
+        {
+          "path": "mcp-guide.html",
+          "en": "Connect an MCP client",
+          "ja": "MCP クライアントを接続"
         }
       ]
     },

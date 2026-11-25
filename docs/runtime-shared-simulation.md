@@ -156,7 +156,7 @@ guide. Pool preparation does not replace engine resource binding.
 Prepare a package from an in-tree player during loading:
 
 ```gdscript
-var bytes := FileAccess.get_file_as_bytes("res://effects/fountain.lfxb")
+var bytes := FileAccess.get_file_as_bytes("res://effects/fountain.lfxp")
 var result: int = $LibraEffectPlayer.prewarm_package(bytes, 8, 4)
 if result != 0:
     push_error("Effect preparation failed: %s" % result)
@@ -210,8 +210,8 @@ Acceptance and benchmark sources live in the development repository; the source
 SDK's default build does not bundle those test/benchmark executables.
 
 ```powershell
-liberafx_particle_host_benchmarks.exe CpuFountain-binary-1000.lfxb 32 600 --bulk
-liberafx_particle_host_benchmarks.exe CpuFountain-binary-1000.lfxb 32 600 --bulk --world-workers 4
+liberafx_particle_host_benchmarks.exe CpuFountain-binary-1000.lfxp 32 600 --bulk
+liberafx_particle_host_benchmarks.exe CpuFountain-binary-1000.lfxp 32 600 --bulk --world-workers 4
 ```
 
 Use the same fixture, hardware, backend and instance count when comparing.

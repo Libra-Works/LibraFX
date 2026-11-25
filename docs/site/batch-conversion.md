@@ -12,7 +12,7 @@ binding and game builds remain separate steps in the
 The standalone converter uses the editor's executable package compiler for
 Spawnable Groups, CPU/GPU particles and Fluid2D, including nested scopes.
 Use matching converter and engine SDK builds. Portable Resource Identity
-projects need the diagnostic manifest path below, rather than normal `.lfxb`
+projects need the diagnostic manifest path below, rather than normal `.lfxp`
 batch output.
 
 <details class="page-toc" markdown="1">
@@ -30,16 +30,16 @@ Use the same build of converter and engine SDK:
 
 ```powershell
 .\LiberaFxConverter.exe --help
-.\LiberaFxConverter.exe convert "C:\FX\Source\Spark.lfxproj" "C:\FX\Build\Spark.lfxb"
+.\LiberaFxConverter.exe convert "C:\FX\Source\Spark.lfxproj" "C:\FX\Build\Spark.lfxp"
 .\LiberaFxConverter.exe batch "C:\FX\Source" "C:\FX\Build"
 ```
 
 `batch` recursively finds `.lfxproj`, preserves relative subdirectories and
-changes the extension to `.lfxb`. For example:
+changes the extension to `.lfxp`. For example:
 
 ```text
 C:\FX\Source\Combat\Hit.lfxproj
-    → C:\FX\Build\Combat\Hit.lfxb
+    → C:\FX\Build\Combat\Hit.lfxp
 ```
 
 Input projects and libraries are not rewritten. Existing outputs cause failure;
@@ -55,8 +55,8 @@ may already have been written when a conversion fails.
 
 Write one `.lfxproj` path per line. Relative paths start at the list file's
 directory. Blank lines and lines starting with `#` are ignored. By default,
-the output uses the input filename with `.lfxb`; optionally add a TAB followed
-by a relative output path, such as `Particles/Fountain.lfxb`.
+the output uses the input filename with `.lfxp`; optionally add a TAB followed
+by a relative output path, such as `Particles/Fountain.lfxp`.
 
 ```text
 # effects.txt
@@ -122,7 +122,7 @@ also prevents deleted or renamed effects from lingering in distribution.
 
 ## Resource Identity manifest: not a playable asset
 
-Normal `.lfxb` export rejects identity metadata rather than discarding it.
+Normal `.lfxp` export rejects identity metadata rather than discarding it.
 The separate diagnostic export supports **single-file `convert` only**:
 
 ```powershell

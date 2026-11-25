@@ -11,10 +11,7 @@ Default is connected.
 
 ## Execution and state
 
-The compiler emits LFXB v8 with `LFEB` branch metadata only when a graph uses
-Enum execution regions. Older LFXB versions remain unchanged and load through
-their existing reader. The native loader validates metadata offsets, case
-indices, stable Enum type IDs and guard chains before accepting the program.
+The compiler stores the internal instruction stream and `LFEB` branch metadata inside the `.lfxp` package when a graph uses Enum execution regions. This instruction metadata is not a separate user-facing package format. The native loader validates metadata offsets, case indices, stable Enum type IDs and guard chains before accepting the package.
 
 Only the selected case's value dependencies and their guarded downstream
 parameter/signal consumers execute. Inactive instructions do not evaluate

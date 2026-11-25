@@ -49,7 +49,7 @@ See [time and lifetime](glossary.md#time).
 ## The exported effect does not play
 
 Use the editor, converter and SDK from the same release. Export an executable
-`.lfxb`, then import/load it and assign engine resources. A `.lfxrm` is a Resource
+`.lfxp`, then import/load it and assign engine resources. A `.lfxrm` is a Resource
 Identity diagnostic manifest, not a playable effect. Keep the original `.lfxproj`
 when investigating an export failure. See [release notes](release-notes.md) and [batch conversion](batch-conversion.md).
 

@@ -16,13 +16,7 @@ and offline gameplay. See [Batch conversion](batch-conversion.md) for automation
 See [engine and file terms](glossary.md#engine) for SDK, runtime, editable projects, and compiled effects.
 
 Download the matching SDK from the latest [Preview release](https://github.com/Libra-Works/LibraFX/releases).
-Use the editor, converter and SDK from the same release. Legacy `.lfxp` packages remain supported inputs.
-
-Existing raw-program assets do not automatically become package assets.
-When replacing a legacy raw `.lfxb` with a new package export, import it as a new
-asset and explicitly reassign its component references. Renaming a file or
-reimporting it is not an asset-type migration. Unity also needs the matching
-native plugin installed for import validation.
+Use the editor, converter and SDK from the same release. Production playback and Live Preview use the compiled `.lfxp` package format. Preserve the editable `.lfxproj` and re-export it with the matching converter when updating an effect; renaming a file does not convert its contents. Unity import validation also requires the matching native plugin.
 Close the engine before installing. Extract the archive and copy only the
 top-level install folder shown below. Each folder includes `VERSION.json`.
 
@@ -138,41 +132,46 @@ downloaded binary, platform, rendering backend or shipped player.
 
 ## Play a first effect
 
-Start with a CPU-only effect package (`.lfxb`) without draw or GPU nodes.
+Start with a CPU-only effect package (`.lfxp`) without draw or GPU nodes.
 This lets you verify loading and named Game I/O before setting up mesh or material
 bindings. Save your `.lfxproj`, then compile it using the bundled `LiberaFxConverter`
 from the `Converter` directory. For example, on Windows:
 
 ```powershell
-.\LiberaFxConverter.exe convert C:\Effects\input.lfxproj C:\Effects\effect.lfxb
+.\LiberaFxConverter.exe convert C:\Effects\input.lfxproj C:\Effects\effect.lfxp
 ```
 
-The editor's **Export VFX...** command creates the same `.lfxb` package. Give the graph
+The editor's **Export VFX...** command creates the same `.lfxp` package. Give the graph
 an observable output, such as a named Output Signal, so that a successful load
 can be distinguished from an effect that never runs.
 
 ### Unity
 
-Put the `.lfxb` under `Assets/`. Assign the imported asset to a
+Put the `.lfxp` under `Assets/`. Assign the imported asset to a
 `LiberaFxSpawnableComponent`; enable **Play On Enable** and enter Play Mode,
 or call `Play()` explicitly. Inspect `LastError` on failure and use
 `GameIoEventReceived` to observe authored outputs.
 
 ### Unreal Engine
 
-Build the project's Editor target after copying the plugin. Import the `.lfxb`
-in the Content Browser and drag the imported asset into the level. This creates
-an actor with a **Libra Effect** component. Enable **Auto Play** and start
-Play In Editor, or call `Play()` explicitly. Use `OnGameIoEvent` to observe
-authored outputs.
+Build the project's Editor target after copying the plugin. Import the compiled
+`.lfxp` package in the Content Browser as a `ULibraSpawnableAsset`. Add
+`ULibraEffectComponent` to an actor and assign the asset to **Package**, or place
+an `ALibraEffectActor` and assign its component's **Package**. The component
+plays the package automatically by default; inspect `LastError` if playback
+fails and use `OnGameIoEvent` to observe authored outputs. The internal
+`ULibraSpawnableComponent` is created and managed by `ULibraEffectComponent`;
+authors do not need to add it separately. GPU-only assets remain available as
+`ULibraGpuEffectAsset` through the component's **GpuEffect** slot; use `.lfxp`
+for complete compiled effects.
 
 ### Godot
 
-Place the `.lfxb` under `res://`, add a `LibraEffectPlayer`, and call
-`play_package(FileAccess.get_file_as_bytes("res://effect.lfxb"))` after the
+Place the `.lfxp` under `res://`, add a `LibraEffectPlayer`, and call
+`play_package(FileAccess.get_file_as_bytes("res://effect.lfxp"))` after the
 player enters the scene tree. A result of `0` means the package loaded; wait
 for the first process tick before firing a game input signal. Observe authored
-outputs via `game_io_event`. Include `.lfxb` files in the export preset's
+outputs via `game_io_event`. Include `.lfxp` files in the export preset's
 non-resource filter if you ship them with the game.
 
 <a id="prepared-playback"></a>
@@ -187,7 +186,7 @@ remain at their engine-thread boundaries.
 | Engine | Prepare during loading | Configure before preparation |
 | --- | --- | --- |
 | Unity | Assigned scene effects prepare in `Awake`; call `PrewarmEffect()` for dynamically assigned assets. | `usePreparedHosts`, `preparedHostCapacity`, `preparationWorkers`, `useSharedSimulation` on the Spawnable component. |
-| Unreal | Assigned effects prepare in `BeginPlay`; call **Prewarm Effect** earlier for dynamic packages. | **Use Prepared Hosts**, **Prepared Host Capacity**, **Preparation Workers**, **Use Shared Simulation** under `Libra Runtime\|Performance`. |
+| Unreal | Assigned `.lfxp` packages are prepared by `ULibraEffectComponent` during `BeginPlay`. | **Use Shared Simulation** is exposed under `Libra Runtime\|Performance`; package capacity and worker counts use runtime defaults. |
 | Godot | Call `prewarm_package(bytes, capacity, workers)` on an in-tree player. | Reserve the needed concurrent playback count before `play_package`. Normal processing shares simulation; explicit `advance(delta)` stays immediate. |
 
 Capacity means simultaneous effect playbacks, not the number of particles.
@@ -245,7 +244,7 @@ how to keep the tools and SDK in sync.
 - **Project C++ nodes:** Register the descriptor matching the node JSON's UUID,
   ABI, and ports. Unreal registers descriptors at module startup. Unity and
   Godot build project descriptors into their native bridge. This supports root
-  and child programs of the `.lfxb` package. Use a native node when the graph needs the
+  and child programs of the `.lfxp` package. Use a native node when the graph needs the
   result within the current evaluation.
 
 See the [SDK distribution reference](https://github.com/Libra-Works/LibraFX/blob/main/docs/sdk-distribution.md#project-defined-nodes-in-spawnable-packages)

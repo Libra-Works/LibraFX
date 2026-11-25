@@ -64,8 +64,8 @@ Build the smoke-test project in Release, using an isolated absolute
 CommentImageSmokeTests.exe --particle-benchmark-fixtures G:/LfxV/new-benchmark-fixtures
 cmake -S Runtime -B Runtime/build-perf -DLIBERAFX_BUILD_BENCHMARKS=ON
 cmake --build Runtime/build-perf --config Release --target liberafx_particle_host_benchmarks
-Runtime/build-perf/Release/liberafx_particle_host_benchmarks.exe G:/LfxV/new-benchmark-fixtures/CpuFountain-10000.lfxb 8 120
-Runtime/build-perf/Release/liberafx_particle_host_benchmarks.exe G:/LfxV/new-benchmark-fixtures/CpuFountain-10000.lfxb 8 120 --interpreter
+Runtime/build-perf/Release/liberafx_particle_host_benchmarks.exe G:/LfxV/new-benchmark-fixtures/CpuFountain-10000.lfxp 8 120
+Runtime/build-perf/Release/liberafx_particle_host_benchmarks.exe G:/LfxV/new-benchmark-fixtures/CpuFountain-10000.lfxp 8 120 --interpreter
 ```
 
 The fixture directory must be new. The tool reports creation, initial emission,
@@ -328,7 +328,7 @@ frames. The release gate also checks that export reduces the binary while
 preserving the source graph and live-debug code. Existing compiled packages can also be optimized without the source project:
 
 ```powershell
-LiberaFxConverter optimize input.lfxb output.lfxb
+LiberaFxConverter optimize input.lfxp output.lfxp
 ```
 
 Input and output must be different files. Existing outputs require `--force`;
@@ -450,8 +450,8 @@ comparisons. Raw local logs are in ignored `build/host-pool-benchmarks.log`.
 Build `liberafx_host_pool_benchmarks` and run:
 
 ```powershell
-liberafx_host_pool_benchmarks.exe CpuFountain-binary-100.lfxb 32 4 180
-liberafx_host_pool_benchmarks.exe CpuFountain-binary-100.lfxb 32 1 180 --fresh
+liberafx_host_pool_benchmarks.exe CpuFountain-binary-100.lfxp 32 4 180
+liberafx_host_pool_benchmarks.exe CpuFountain-binary-100.lfxp 32 1 180 --fresh
 ```
 
 Core tests count ordinary/aligned allocations across acquire and reset/return.

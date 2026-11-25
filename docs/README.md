@@ -16,6 +16,7 @@ Follow the public guides in order, or choose a topic from the grouped navigation
 | Find the controls | [Workspace tour](site/workspace-tour.md) | [はじめての画面操作](site/ja/workspace-tour.md) |
 | Make an effect | [First fountain](site/first-fountain.md) | [最初の噴水](site/ja/first-fountain.md) |
 | Animate particles | [Sprite animation](site/sprite-animation.md) | [パーティクルのアニメーション](site/ja/sprite-animation.md) |
+| Connect an AI client | [MCP guide](site/mcp-guide.md) | [MCP クライアント接続](site/ja/mcp-guide.md) |
 | Use it in a game | [Production workflow](site/production-workflow.md) | [ゲームへの組み込み](site/ja/production-workflow.md) |
 | Solve a problem | [Troubleshooting](site/troubleshooting.md) | [困ったときの確認](site/ja/troubleshooting.md) |
 

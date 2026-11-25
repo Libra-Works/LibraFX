@@ -236,8 +236,8 @@ portable IR or supported shader source; retain the matching metadata when
 exporting a shader. **A successful compile or export does not run the GPU.**
 Use the target engine's integration to resolve bindings, build or import the
 backend artifacts, and verify simulated motion and rendering. Do not treat
-standalone shader source or legacy raw bytecode as a complete GPU effect.
-The editor exports GPU effects in the same `.lfxb` package as CPU effects;
+standalone shader source or internal instruction data as a complete GPU effect; export and load the full `.lfxp` package.
+The editor exports GPU effects in the same `.lfxp` package as CPU effects;
 the standalone converter uses the same compiler for CPU, GPU and Fluid2D effects. Use an engine SDK from the same release. See [Engine integration](engine-integration.md).
 
 Follow [Animate particle textures](sprite-animation.md) for the steps to cut cells, arrange frames and apply them.

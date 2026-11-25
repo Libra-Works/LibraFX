@@ -155,7 +155,7 @@ position converted from world to their own local space; fixed-up draws do not
 need a camera. A singular camera-facing transform is rejected. Hosts must stop or report an update error rather than
 continue displaying a stale mesh. These adapters require matching new
 plugin/SDK builds; older SDKs must report the unsupported draw instead of
-silently omitting it. `.lfxb` package
+silently omitting it. `.lfxp` package
 metadata remains in the existing LFXP container; no new compatibility is
 implied until each consumer supports this descriptor.
 

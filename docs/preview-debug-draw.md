@@ -207,7 +207,7 @@ independently of the engine acceptance runs above.
   four-row terminal routing in `GraphMatrixLowering.cs`.
 - Services/Compilation: `PreviewDebugDraw.cs`, `VfxProgram.cs`,
   `SpawnableGroupPackage.cs`, `RenderProgramBindings.cs`.
-- Services: `CompiledPreviewProtocol.cs`, `EditorNativePreviewSession.cs`,
+- Services: `CompiledPreviewProtocol.cs`,
   `EditorPlayback.cs`, `LiveGameGraphCompiler.cs`, `PreviewHost.cs`,
   `PreviewProtocol.cs`, `ResourceIdentityExport.cs`.
 - ViewModels/Views: `MainViewModel.PreviewDebugDraw.cs`, `GraphNodeViewModel.cs`,

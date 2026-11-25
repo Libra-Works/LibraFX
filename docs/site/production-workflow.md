@@ -29,7 +29,7 @@ The [installation reference](engine-integration.md) and
 | `.lfxproj` | Editable source and history. Keep it in source control; it is not the game's runtime payload. |
 | Engine mesh, material and texture | Stay in the engine project. Resource browsing transfers references and metadata, not copies of an engine's assets into LIBERA FX. |
 | Live preview | A temporary, authenticated editor connection. Useful while authoring; not a saved runtime asset. |
-| `.lfxb` | Compiled effect package to import/load for offline gameplay. Includes the supported CPU/GPU payloads, not arbitrary engine resource files. |
+| `.lfxp` | Compiled effect package to import/load for offline gameplay. Includes the supported CPU/GPU payloads, not arbitrary engine resource files. |
 | Engine asset/bindings | Unity imported assets and serialized references, Unreal `.uasset` and cookable overrides, or Godot resources plus explicit player bindings. |
 
 ### Important current differences
@@ -39,12 +39,12 @@ The [installation reference](engine-integration.md) and
 | Browse an engine asset catalog in Content | Supported (`/Game/`, `/Engine/`) | Supported (`Assets/`, `Packages/`) | Supported (`res://`) |
 | Exact resource/property lookup through Resource Identity | Supported | Supported | Supported (`godot.res-path.v1`) |
 | Desktop live preview | Dedicated Unreal preview window | Unity preview window (with Paste Connection & preview on by default) | Godot EditorPlugin dock (or script connection) |
-| Create a playable effect for the game | Import `.lfxb` | Import `.lfxb` and assign engine bindings | Import `.lfxb` (`LibraFxPackage` / `LibraFxEffect`) |
+| Create a playable effect for the game | Import `.lfxp` | Import `.lfxp` and assign engine bindings | Import `.lfxp` (`LibraFxPackage` / `LibraFxEffect`) |
 
-**Mapped Resource Identity projects can now export directly to `.lfxb`.**
+**Mapped Resource Identity projects can now export directly to `.lfxp`.**
 Both **Export VFX...** in the GUI (with a connected Resource Identity editor) and
-`LiberaFx.Converter` (when outputting `.lfxb` with `--resource-export-project` and
-`--resource-snapshot`) resolve mappings into the compiled `.lfxb`, while `.lfxrm`
+`LiberaFx.Converter` (when outputting `.lfxp` with `--resource-export-project` and
+`--resource-snapshot`) resolve mappings into the compiled `.lfxp`, while `.lfxrm`
 remains available for diagnostic manifest inspection. Unresolved identities are still
 rejected rather than silently discarded.
 See the [identity specification](https://github.com/Libra-Works/LibraFX/blob/main/docs/resource-identity.txt).
@@ -107,10 +107,12 @@ requested time. A compilation failure is not a successful preview update.
 ### 5. Create the engine asset and verify gameplay
 
 For an offline-exportable project, save it and use **File → Export VFX...** to
-write `.lfxb`. Import that file in Unreal's **Content Browser**, then drag the
-imported asset into the level. It creates an actor with the public
-**Libra Effect** component. Enable **Auto Play**, enter PIE, and check playback.
-Blueprint/C++ can instead call `Play()` and consume `OnGameIoEvent`.
+write `.lfxp`. Import the package in Unreal's **Content Browser** as a
+`ULibraSpawnableAsset`, then use the Spawnable component playback path to
+assign and run it. Blueprint/C++ can consume `OnGameIoEvent`. The final public
+Unreal placement/component entry point is part of the engine-integration
+milestone; confirm it against that release's adapter guide before wiring a
+production actor.
 
 The imported asset's **LIBERA FX Resource Overrides** can assign project-local
 Static Mesh, Texture2D and Material objects to the delivered keys. Save the
@@ -118,7 +120,7 @@ Static Mesh, Texture2D and Material objects to the delivered keys. Save the
 Component-level bindings take priority over package overrides.
 
 Set the asset's editor-only **Source Project Path** to its `.lfxproj` for
-**Open LIBERA FX**. This is distinct from the `.lfxb` reimport filename.
+**Open LIBERA FX**. This is distinct from the `.lfxp` reimport filename.
 On Windows, register LIBERA FX as the `.lfxproj` handler or set
 `LIBERAFX_EDITOR_EXECUTABLE` before starting Unreal. If LIBERA FX is already
 running, open the source in its existing window; launch arguments are not forwarded.
@@ -179,7 +181,7 @@ identity** live authoring (`unity.asset-guid-local-id.v1`):
 4. On success, use **Register and assign selected location**. For materials,
    read the exact schema and explicitly bind properties; names are not guessed.
 
-This gives mapped live delivery, **not currently a directly exportable `.lfxb`**.
+This gives mapped live delivery, **not currently a directly exportable `.lfxp`**.
 For the offline legacy-binding path, use the graph/package's exact authored
 lookup keys and explicit Unity object assignments in step 5 instead.
 
@@ -200,8 +202,8 @@ Send or GPU resource mappings. It is separate from the Live Game connection.
 
 ### 5. Create the engine asset and verify gameplay
 
-For an offline-exportable legacy-binding project, **File → Export VFX...** writes
-`.lfxb`. Copy it under Unity's `Assets` and let the importer create a
+For an offline-exportable project, **File → Export VFX...** writes
+`.lfxp`. Copy it under Unity's `Assets` and let the importer create a
 `LiberaFxSpawnableAsset`. Do not rename a new package to `.bytes`.
 
 Create **Assets → Create → LiberaFx → Unity Bindings**. In **Render Assets**,
@@ -215,7 +217,7 @@ GPU packages also need the artifacts/bindings in the [GPU guide](gpu-particles.m
 
 ### 6. Iterate and prepare distribution
 
-Update the exported `.lfxb`, wait for reimport, and restart playback.
+Update the exported `.lfxp`, wait for reimport, and restart playback.
 Keep unchanged `.meta` files and serialized references. Verify load, Play,
 completion, Stop and replay without the desktop connection.
 Build the imported asset and referenced Unity resources with the normal game
@@ -293,12 +295,12 @@ frame-exact GPU reconstruction. See the
 
 ### 5. Load the offline effect
 
-Export an offline-compatible `.lfxb` and place it in the Godot project.
+Export an offline-compatible `.lfxp` and place it in the Godot project.
 On a gameplay player in the scene tree, set the same explicit bindings before:
 
 ```gdscript
 var result = $LibraEffectPlayer.play_package(
-    FileAccess.get_file_as_bytes("res://effects/firework.lfxb"))
+    FileAccess.get_file_as_bytes("res://effects/firework.lfxp"))
 if result != 0:
     push_error("LIBERA FX package load failed: %s" % result)
 ```
@@ -310,7 +312,7 @@ sending gameplay input signals. Disconnect live preview before reusing its playe
 ### 6. Iterate and prepare distribution
 
 Re-export, replace the package and restart playback; resource bindings remain
-the Godot project's responsibility. Add `*.lfxb` to the export preset's
+the Godot project's responsibility. Add `*.lfxp` to the export preset's
 **non-resource include filter** when loading packages through FileAccess.
 Include the matching GDExtension binary and bound resources in the game export;
 do not depend on the authoring project's local path.

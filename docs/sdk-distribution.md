@@ -143,11 +143,7 @@ Compiler/editor sources are not runtime dependencies.
 
 ## First effect in a new project
 
-New exports have two user-facing files: editable `.lfxproj` and compiled `.lfxb`.
-The `.lfxb` always contains the existing LFXP package envelope, including for
-graphs without children. Engine importers inspect its signature; old raw `.lfxb`
-programs and `.lfxp` packages remain legacy inputs. This requires updated SDKs
-from the same source revision, not the published 2026.11.8 binaries.
+New exports have two user-facing files: the editable `.lfxproj` source and the compiled `.lfxp` package. `.lfxp` is the single compiled format for production playback and Live Preview, including graphs without children. Internal instruction blobs are implementation details inside the package, not standalone files or a second preview format. Use editor, converter and SDK builds from the same source revision; the published 2026.11.8 binaries do not support this unified package path.
 The [2026.11.22 Preview](https://github.com/Libra-Works/LibraFX/releases/tag/v2026.11.22)
 includes the unified exports and the CPU particle, Flexible Plane and Quaternion/
 Random additions. Later renderer and authoring changes in source are not
@@ -174,7 +170,6 @@ fluid shader uniform block is 512 bytes.
 See the bilingual [2D smoke guide](site/fluid-2d.md) for the actual verification
 matrix and exclusions. Free-surface water is grid-based rather than a detached-
 droplet particle liquid solver; 3D fluids remain future work.
-Historical test fixture filenames elsewhere in this document still use `.lfxp`.
 The `.lfxrm` diagnostic resource-mapping manifest is not a second playable binary.
 The updated converter also fixes overlapping custom-input defaults and branch
 metadata. Re-export older custom-node effects from their `.lfxproj` sources;
@@ -188,13 +183,9 @@ Random additions have compiler/native regression coverage, but still require
 engine acceptance by integrators. Build results do not establish rendered
 pixels; the bilingual feature guides describe these verification boundaries.
 
-Legacy raw-program assets are not automatically migrated into package asset
-types. Import a replacement package as a new asset and reassign component
-references explicitly. Keep existing Unity `.meta` files for unchanged assets;
-renaming/reimporting a raw file is not a type migration. Unity import validation
-requires the matching native plugin.
+Only the current `.lfxp` package is a runtime asset. Preserve the editable `.lfxproj` and re-export it with the matching converter when updating an effect; import a replacement package and assign it to the package playback component. Keep existing Unity `.meta` files for unchanged assets. Renaming a file does not convert it. Unity import validation requires the matching native plugin.
 
-Start with a **numeric-only `.lfxb` package** with no render assets, GPU programs, or
+Start with a **numeric-only `.lfxp` package** with no render assets, GPU programs, or
 editor connection. This separates package loading and game I/O from project
 resource bindings. For a visible second check in Unity or Unreal, use the
 same compiler-produced ModelDraw Cube package described in both adapters'
@@ -202,13 +193,13 @@ same compiler-produced ModelDraw Cube package described in both adapters'
 Generate effects in the authoring repository, not in the exported SDK:
 
 ```powershell
-dotnet run --project Tools\Converter -- convert C:\Effects\input.lfxproj C:\Effects\effect.lfxb
+dotnet run --project Tools\Converter -- convert C:\Effects\input.lfxproj C:\Effects\effect.lfxp
 ```
 
 | Step | Unity | Unreal | Godot |
 | --- | --- | --- | --- |
 | Install | Add the local package and the matching `liberafx_native` plugin. | Copy-install with the script below into a blank C++ project, then build its Editor target. | Install the built GDExtension descriptor and matching library. |
-| Load | Copy `.lfxb` into Assets and assign the imported asset to `LiberaFxSpawnableComponent`. | Import `.lfxb`, then drag the imported asset into the level. It creates a `LibraEffectActor` with one `Libra Effect` component. | Copy `.lfxb` under `res://`, add `LibraEffectPlayer`, and pass the file bytes to `play_package` after the node enters the tree. |
+| Load | Copy `.lfxp` into Assets and assign the imported asset to `LiberaFxSpawnableComponent`. | Import `.lfxp` as `ULibraSpawnableAsset` and assign it through the Spawnable component playback path. The final public Unreal placement/component entry point remains to be confirmed in M4. | Copy `.lfxp` under `res://`, add `LibraEffectPlayer`, and pass the file bytes to `play_package` after the node enters the tree. |
 | Start | Enter Play mode with Play On Enable set, or call `Play()`. Check `LastError` if startup is rejected. | Start Play In Editor with Auto Play set, or call `Play()` and check its result. | Check `play_package` returns `0` before issuing game I/O. |
 | Drive and observe | Use `SetGameProperty` / `FireGameSignal` and subscribe to `GameIoEventReceived`. | Use `SetGameProperty` / `FireGameSignal` and bind `OnGameIoEvent`. | Use `set_game_property` / `fire_game_signal` and connect `game_io_event`. |
 | Retire | Call `Stop()` or disable the component. | Call `Stop()` or destroy the actor. | Call `stop()` or remove the player from the scene tree. |
@@ -279,13 +270,7 @@ For a first Windows install, start from a C++ Blank project and build its
 `<ProjectName>Editor` Win64 Development target after installing the plugin.
 Launch the project only after the build succeeds; the plugin is source-only.
 
-Use **ULibraEffectComponent** as the public whole-effect entry point; internal
-CPU/GPU/Spawnable helpers do not require author-added companion components.
-Read its included `USAGE.txt` for asset import, explicit resource bindings,
-Play/Stop, instance I/O and lifetime ownership. UE 5.7+ is the current declared
-minimum. Keep the portable Core/Unreal integration Clang-compilable, and use MSVC
-for final Windows Unreal integration verification. This does not certify console
-SDKs, cooking or gameplay merely because a desktop source build succeeds.
+Use the `.lfxp` `ULibraSpawnableAsset` and Spawnable component playback path for Unreal. The public placement/whole-effect entry point is being finalized in M4: the currently inspected `ULibraSpawnableComponent` header is marked `HideDropdown` / `Internal`, so confirm the final exposed API and Blueprint workflow before publishing those setup steps. Read the included Unreal `USAGE.txt` for package import and resource bindings. UE 5.7+ is the current declared minimum. Keep the portable Core/Unreal integration Clang-compilable, and use MSVC for final Windows Unreal integration verification. This does not certify console SDKs, cooking or gameplay merely because a desktop source build succeeds.
 
 ## Project-defined nodes in Spawnable packages
 
@@ -308,15 +293,11 @@ adapter is loaded. Prebuilt binaries contain no project callbacks. To pass
 multiple sources, use a quoted, semicolon-separated CMake list and define the
 entry point in only one file.
 
-The project registry is used by unified `.lfxb` package root and child programs.
-Unreal and Unity also use it for legacy raw program loads; Godot's raw `play()` path remains
-limited to v1/v2. Neither registration path requires custom rendering: return
-values to built-in Model Draw or Sprite nodes and let the adapter render them.
-Keep engine objects and engine API calls out of native parameter callbacks.
+The project registry is used by the root and child programs embedded in `.lfxp` packages. Neither registration path requires custom rendering: return values to built-in Model Draw or Sprite nodes and let the adapter render them. Keep engine objects and engine API calls out of native parameter callbacks.
 
 ### C# and GDScript workflow
 
-On the root graph of a CPU effect package (`.lfxb`), connect a signal (for
+On the root graph of a CPU effect package (`.lfxp`), connect a signal (for
 example, a named **Input Signal** called `sample`) to an **Output Signal**
 called `action.sampleSpeed`. Add a float **Input Property** called `speed` and
 wire it into the graph that drives your standard Model Draw or Sprite nodes.
@@ -332,7 +313,7 @@ player.FireGameSignal("sample");
 ```
 
 In Godot, bind on a `LibraEffectPlayer` that's in the scene tree before starting
-playback. `package_bytes` holds the exported `.lfxb` package:
+playback. `package_bytes` holds the exported `.lfxp` package:
 
 ```gdscript
 func resolve_speed(_event: Dictionary) -> PackedFloat64Array:
@@ -385,7 +366,7 @@ The LIBERA FX Preview pane's **Runtime debugger** uses a private, local
 Windows session. Its invitation is not a Preview Connections invitation and
 must not be saved in assets, source, or logs. Use the same graph revision and
 compiled payload on both sides; a stale import or a preview-specific package
-is not interchangeable with an offline `.lfxb` effect package.
+is not interchangeable with an offline `.lfxp` effect package.
 
 1. Generate the ModelDraw **MaterialPulse** sample using either adapter's
    `--model-material-animation` instructions. Open `MaterialPulse.lfxproj`
@@ -396,10 +377,10 @@ is not interchangeable with an offline `.lfxb` effect package.
 2. In Unity Play Mode, select the live `LiberaFxSpawnableComponent`, click
    **Select current playback**, leave both child fields blank, paste the
    invitation, and click **Attach package debugger**. In Unreal PIE, select
-   the live actor's **Libra Effect** component, paste the invitation into
-   **Local Debugger Invitation**, and invoke **Attach Local Debugger**. This
-   attaches the package root. If using a game-thread Blueprint helper, call
-   `AttachExecutionDebugger` on that same live component.
+   the package host and attach the package-root debugger through the Spawnable
+   component path. The exact public Unreal component/placement controls are part
+   of M4; confirm them in the matching adapter guide before testing. If using a
+   game-thread Blueprint helper, call its package debugger API on that host.
 3. Wait for the pause in LIBERA FX. Confirm the target is the package root
    and **Locate** selects Amplitude. Inspect its connected cosine operand
    and the disconnected `-0.5` multiplier separately from the saved node
@@ -452,17 +433,12 @@ not part of CPU stepping.
 Build `Runtime\Integrations\Godot` from the staged source with a separate
 `godot-cpp` checkout supplying the 4.7 API. Copy `liberafx.gdextension` and
 the matching DLL into the Godot project and add a `LibraEffectPlayer` node.
-Convert `.lfxproj` to `.lfxb` using the Converter from the full authoring
+Convert `.lfxproj` to `.lfxp` using the Converter from the full authoring
 repository before copying the bytecode into the project. See the included
 `Runtime\Integrations\Godot\USAGE.txt` for exact build, installation, and smoke
 test commands.
 
-The Godot adapter accepts standalone CPU bytecode and supported Spawnable
-packages. It exposes named Game I/O, explicit Godot resource bindings,
-CPU rendering, supported root/child GPU billboards, and local preview and
-execution debugging. See its `USAGE.txt` and `LIVE_PREVIEW.txt` for subset and
-rendering-device requirements. Headless playback and real Vulkan GPU execution
-have been exercised on Godot 4.7.2 Windows x86-64; exported players have not
+The Godot adapter accepts `.lfxp` Spawnable packages. It exposes named Game I/O, explicit Godot resource bindings, CPU rendering, supported root/child GPU billboards, and package live preview and execution debugging. See its `USAGE.txt` and `LIVE_PREVIEW.txt` for subset and rendering-device requirements. Headless playback and real Vulkan GPU execution have been exercised on Godot 4.7.2 Windows x86-64; exported players have not
 been verified.
 
 ## Component-free rendering in the Preview update

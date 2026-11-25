@@ -29,7 +29,7 @@ LIBERA FX なしで再生 → 一括変換・ゲームビルド**の順に進め
 | `.lfxproj` | 編集用ソースと履歴。バージョン管理しますが、ゲーム用の再生データではありません。 |
 | エンジンの Mesh・Material・Texture | エンジンのプロジェクト内に保持します。資源取得は参照・メタデータの取得であり、エンジンの実体アセットを LIBERA FX に複製することではありません。 |
 | ライブプレビュー | 制作中だけ使う、認証付きの一時接続。保存済みのゲーム用アセットではありません。 |
-| `.lfxb` | 通常再生用のコンパイル済みエフェクト。対応する CPU／GPU データを含みますが、エンジン資源ファイルそのものをすべて内包するわけではありません。 |
+| `.lfxp` | 通常再生用のコンパイル済みエフェクト。対応する CPU／GPU データを含みますが、エンジン資源ファイルそのものをすべて内包するわけではありません。 |
 | エンジン用アセット・割り当て | Unity のインポート済みアセットと参照、Unreal の `.uasset` と cook 対象の参照、Godot の資源と明示的バインド。 |
 
 ### 現在のエンジン間の違い
@@ -39,10 +39,10 @@ LIBERA FX なしで再生 → 一括変換・ゲームビルド**の順に進め
 | 「コンテンツ」からエンジン資源を一覧検索 | 対応（`/Game/`・`/Engine/`） | 対応（`Assets/`・`Packages/`） | 対応（`res://`） |
 | Resource Identity 経由の厳密な資源・プロパティ照会 | 対応 | 対応 | 対応（`godot.res-path.v1`） |
 | デスクトップからのプレビュー | Unreal 専用プレビュー画面 | Unity 専用プレビュー画面（Paste Connection 対応） | Godot EditorPlugin ドック（またはスクリプト接続） |
-| ゲーム内での通常再生 | `.lfxb` をインポート | `.lfxb` をインポートし資源を割り当て | `.lfxb` をインポート（`LibraFxPackage` / `LibraFxEffect`） |
+| ゲーム内での通常再生 | `.lfxp` をインポート | `.lfxp` をインポートし資源を割り当て | `.lfxp` をインポート（`LibraFxPackage` / `LibraFxEffect`） |
 
-**Resource Identity 対応付けの通常 `.lfxb` 出力にも対応しました。**
-GUI の **Export VFX...**（対応エンジン接続時）および Converter CLI（`--resource-export-project` と `--resource-snapshot` 指定時の `.lfxb` 出力）から、解決済みの `.lfxb` を直接書き出せます（`.lfxrm` 診断マニフェスト出力も引き続き利用可能です）。未接続・未解決 ID のままでは安全のため出力を拒否します。
+**Resource Identity 対応付けの通常 `.lfxp` 出力にも対応しました。**
+GUI の **Export VFX...**（対応エンジン接続時）および Converter CLI（`--resource-export-project` と `--resource-snapshot` 指定時の `.lfxp` 出力）から、解決済みの `.lfxp` を直接書き出せます（`.lfxrm` 診断マニフェスト出力も引き続き利用可能です）。未接続・未解決 ID のままでは安全のため出力を拒否します。
 [資源 ID の仕様](https://github.com/Libra-Works/LibraFX/blob/main/docs/resource-identity.txt)に詳細があります。
 
 この工程差の解消と、ID 対応付けから通常配布までの完結は
@@ -99,11 +99,12 @@ Unreal の GPU プレビューは前方シーク未対応で、後方シーク�
 
 ### 5. エンジン用アセットを作成しゲームで再生
 
-通常出力できる文書を保存し、**File → Export VFX...** で `.lfxb` を書き出します。
-Unreal の **Content Browser** でインポートし、アセットをレベルへドラッグします。
-公開窓口の **Libra Effect** Component を持つ Actor が作成されます。
-**Auto Play** を有効にして PIE で確認するか、Blueprint／C++ から `Play()` を呼びます。
-グラフの通知は `OnGameIoEvent` で受け取れます。
+通常出力できる文書を保存し、**File → Export VFX...** で `.lfxp` を書き出します。
+Unreal の **Content Browser** で `ULibraSpawnableAsset` としてインポートし、
+Spawnable コンポーネントの再生経路に割り当てます。Blueprint／C++ では
+`OnGameIoEvent` からグラフの通知を受け取れます。Unreal の最終的な公開配置・
+コンポーネントの入口はエンジン統合マイルストーンの対象です。製品用 Actor に
+組み込む前に、同リリースのアダプターガイドで確認してください。
 
 インポート済みアセットの **LIBERA FX Resource Overrides** では、配信されたキーに対して
 プロジェクト内の Static Mesh・Texture2D・Material を選べます。
@@ -111,14 +112,14 @@ Unreal の **Content Browser** でインポートし、アセットをレベル�
 ソースグラフの変更ではなく、Component 側の個別割り当てがあればそちらが優先です。
 
 編集元を開く導線には、アセットのエディター専用 **Source Project Path** に `.lfxproj` を設定し、
-**Open LIBERA FX** を使います。`.lfxb` の再インポート元とは別です。
+**Open LIBERA FX** を使います。`.lfxp` の再インポート元とは別です。
 Windows は `.lfxproj` の関連付け、または Unreal 起動前の
 `LIBERAFX_EDITOR_EXECUTABLE` の設定が必要です。
 LIBERA FX が起動済みの場合は既存画面からソースを開いてください。起動引数は転送されません。
 
 ### 6. 更新と配布
 
-同じ `.lfxb` を再出力し、Unreal で再インポートして再生し直します。
+同じ `.lfxp` を再出力し、Unreal で再インポートして再生し直します。
 資源キーを変更した場合は割り当ても確認してください。新しいキーへの推測移行は行いません。
 LIBERA FX を切断した状態でも Play・自然終了・Stop・再生し直しを確認します。
 インポート済みエフェクトと参照資源を cook し、配布先に元の `.lfxproj` や制作 PC のパスを要求しません。
@@ -171,7 +172,7 @@ Unity でも **View → Content** から `Assets/`・`Packages/` の一覧検索
 4. 成功後に **Register and assign selected location**。
    マテリアルは実スキーマを読み、プロパティも明示的に対応付けます。名前から推測しません。
 
-これは ID 対応付きライブ転送であり、**現時点ではそのまま `.lfxb` 出力できる経路ではありません**。
+これは ID 対応付きライブ転送であり、**現時点ではそのまま `.lfxp` 出力できる経路ではありません**。
 通常配布の従来キー方式では、グラフ／パッケージのキーに対して、手順5で Unity の実体を明示的に割り当てます。
 
 ### 4. 制作してプレビュー転送
@@ -191,7 +192,7 @@ Live Game 接続とは別です。
 
 ### 5. エンジン用アセットを作成しゲームで再生
 
-通常出力できる従来キー方式の文書を **File → Export VFX...** で `.lfxb` にします。
+通常出力できる文書を **File → Export VFX...** で `.lfxp` にします。
 Unity の `Assets` 以下へ置くと `LiberaFxSpawnableAsset` としてインポートされます。
 新しいパッケージを `.bytes` に改名しないでください。
 
@@ -207,7 +208,7 @@ GPU は [GPU ガイド](gpu-particles.md)のアーティファクト・割り当
 
 ### 6. 更新と配布
 
-`.lfxb` を再出力し、Unity の再インポート完了後に再生し直します。
+`.lfxp` を再出力し、Unity の再インポート完了後に再生し直します。
 変更していない `.meta` とシリアライズ済み参照を保持してください。
 デスクトップ接続なしで読込・Play・自然終了・Stop・再生し直しを確認します。
 ゲームの通常ビルドにインポート済みアセット・参照資源・ターゲットに合う native plugin を含めます。
@@ -282,12 +283,12 @@ GPU を任意フレームへ完全復元する保証ではありません。
 
 ### 5. 通常再生用データを読み込む
 
-通常出力できる文書から `.lfxb` を出力し、Godot プロジェクトへ配置します。
+通常出力できる文書から `.lfxp` を出力し、Godot プロジェクトへ配置します。
 ゲーム用 Player をシーンツリーへ入れ、同じ明示的資源バインドを設定した後に読み込みます。
 
 ```gdscript
 var result = $LibraEffectPlayer.play_package(
-    FileAccess.get_file_as_bytes("res://effects/firework.lfxb"))
+    FileAccess.get_file_as_bytes("res://effects/firework.lfxp"))
 if result != 0:
     push_error("LIBERA FX package load failed: %s" % result)
 ```
@@ -301,8 +302,8 @@ if result != 0:
 
 再出力したパッケージを置き換えて再生し直します。
 資源のバインドは引き続き Godot プロジェクト側の責任です。
-FileAccess で読む `.lfxb` は Export Preset の
-**リソース以外のファイルを含めるフィルター**へ `*.lfxb` を追加します。
+FileAccess で読む `.lfxp` は Export Preset の
+**リソース以外のファイルを含めるフィルター**へ `*.lfxp` を追加します。
 対応する GDExtension と参照資源もゲームへ含め、制作元 PC のパスに依存させません。
 [一括コンバーター](batch-conversion.md)でCPU／GPU・Fluid2Dを生成した後、通常の Godot export を実行します。
 

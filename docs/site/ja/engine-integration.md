@@ -19,13 +19,7 @@ SDK、ランタイム、編集用プロジェクト、配布用バイナリー�
 以下に示すインストール用フォルダーだけをプロジェクトにコピーします。
 各フォルダーに `VERSION.json` が入っています。
 
-エディター・コンバーター・SDK は同じリリースを使ってください。
-更新後の SDK も旧 `.lfxp` パッケージを引き続き読み込めます。
-
-旧バイトコード単体のアセットを、新しいパッケージ型へ自動移行する処理はありません。
-旧 `.lfxb` を新規出力に置き換える場合は、別のアセットとしてインポートして
-コンポーネントの参照を明示的に付け替えてください。ファイル名の変更や再インポートだけでは
-アセット型は移行しません。Unity のインポート検証には対応するネイティブプラグインも必要です。
+エディター・コンバーター・SDK は同じリリースを使ってください。通常再生とライブプレビューでは、コンパイル済み `.lfxp` パッケージ形式を使います。編集元の `.lfxproj` を保持し、更新時は対応するコンバーターで再出力してください。ファイル名を変えても中身の形式は変換されません。Unity のインポート検証には対応するネイティブプラグインも必要です。
 
 | SDK | プロジェクト内の配置先 | 同梱ランタイム |
 | --- | --- | --- |
@@ -135,39 +129,43 @@ staging の byte 数は、GPU 転送完了量やフレーム時間の実測値�
 
 ## 最初のエフェクトを再生する
 
-最初は描画・GPU ノードを含まない CPU のエフェクトパッケージ（`.lfxb`）を使うと、
+最初は描画・GPU ノードを含まない CPU のエフェクトパッケージ（`.lfxp`）を使うと、
 メッシュやマテリアルを割り当てる前に、読み込みと名前付き Game I/O を切り分けられます。
 `.lfxproj` を保存し、`Converter` フォルダーに同梱された `LiberaFxConverter` で変換します。
 Windows の例は次のとおりです。
 
 ```powershell
-.\LiberaFxConverter.exe convert C:\Effects\input.lfxproj C:\Effects\effect.lfxb
+.\LiberaFxConverter.exe convert C:\Effects\input.lfxproj C:\Effects\effect.lfxp
 ```
 
-エディターの **VFX を書き出す...** も同じ `.lfxb` パッケージを作ります。動作確認には、
+エディターの **VFX を書き出す...** も同じ `.lfxp` パッケージを作ります。動作確認には、
 名前付き Output Signal など、再生できたことが分かる出力をグラフに用意します。
 
 ### Unity
 
-`.lfxb` を `Assets/` 以下に置き、インポートされたアセットを `LiberaFxSpawnableComponent`
+`.lfxp` を `Assets/` 以下に置き、インポートされたアセットを `LiberaFxSpawnableComponent`
 に割り当てます。**Play On Enable** を有効にして Play Mode に入るか、`Play()` を呼びます。
 開始に失敗した場合は `LastError` を確認し、出力は `GameIoEventReceived` で受け取ります。
 
 ### Unreal Engine
 
-プラグインのコピー後にプロジェクトの Editor ターゲットをビルドします。
-Content Browser で `.lfxb` をインポートし、アセットをレベルにドラッグすると
-**Libra Effect** コンポーネント付きのアクターが配置されます。
-**Auto Play** を有効にして Play In Editor を開始するか、`Play()` を呼びます。
-出力は `OnGameIoEvent` で受け取ります。
+プラグインをコピーした後、プロジェクトの Editor ターゲットをビルドします。Content Browser
+でコンパイル済み `.lfxp` パッケージを `ULibraSpawnableAsset` としてインポートします。
+Actor に `ULibraEffectComponent` を追加して **Package** に割り当てるか、
+`ALibraEffectActor` を配置し、そのコンポーネントの **Package** に割り当てます。
+既定ではコンポーネントが自動再生します。失敗時は `LastError` を確認し、出力は
+`OnGameIoEvent` で受け取ります。内部用 `ULibraSpawnableComponent` は
+`ULibraEffectComponent` が生成・管理するため、作者が別途追加する必要はありません。
+GPU 専用アセットは `ULibraGpuEffectAsset` として引き続き利用でき、コンポーネントの
+**GpuEffect** スロットに割り当てます。エフェクト全体を使う場合は `.lfxp` を使います。
 
 ### Godot
 
-`.lfxb` を `res://` 以下に置き、`LibraEffectPlayer` を追加します。プレイヤーがシーンツリーに
-入った後、`play_package(FileAccess.get_file_as_bytes("res://effect.lfxb"))` を呼びます。
+`.lfxp` を `res://` 以下に置き、`LibraEffectPlayer` を追加します。プレイヤーがシーンツリーに
+入った後、`play_package(FileAccess.get_file_as_bytes("res://effect.lfxp"))` を呼びます。
 戻り値 `0` は読み込み成功です。最初の処理フレームを待ってから入力シグナルを送り、
 `game_io_event` で出力を確認します。ゲームと一緒に配布する場合は、エクスポートプリセットの
-非リソースフィルターに `.lfxb` を含めます。
+非リソースフィルターに `.lfxp` を含めます。
 
 <a id="prepared-playback"></a>
 
@@ -181,7 +179,7 @@ SDK はロード中にエフェクトの再生領域を確保し、再利用で�
 | エンジン | ロード中の準備 | 準備前に設定する項目 |
 | --- | --- | --- |
 | Unity | シーンに設定済みのエフェクトは `Awake` で準備。動的に割り当てる場合は `PrewarmEffect()` を呼びます。 | Spawnable コンポーネントの `usePreparedHosts`、`preparedHostCapacity`、`preparationWorkers`、`useSharedSimulation`。 |
-| Unreal | 設定済みのエフェクトは `BeginPlay` で準備。動的なパッケージは、ロード中に **Prewarm Effect** を呼びます。 | `Libra Runtime\|Performance` の **Use Prepared Hosts**、**Prepared Host Capacity**、**Preparation Workers**、**Use Shared Simulation**。 |
+| Unreal | 割り当て済み `.lfxp` パッケージは `ULibraEffectComponent` が `BeginPlay` で準備します。 | `Libra Runtime\|Performance` では **Use Shared Simulation** を設定できます。容量とワーカー数はランタイム既定値を使います。 |
 | Godot | シーンツリー内のプレイヤーで `prewarm_package(bytes, capacity, workers)` を呼びます。 | `play_package` より前に同時再生数を予約します。通常の処理は共有実行し、明示的な `advance(delta)` は即時実行します。 |
 
 ここでの容量は、粒子数ではなく**エフェクトの同時再生数**です。
@@ -235,7 +233,7 @@ Unreal のこの経路はタスクとシーンへの反映の検証で、配布�
   次の評価から使えます。描画には既存の Model Draw や Sprite ノードを使えます。
 - **プロジェクト独自の C++ ノード:** ノード JSON の UUID、ABI、ポートに対応する
   ディスクリプターを登録します。Unreal ではモジュールの起動時に登録し、
-  Unity・Godot ではネイティブブリッジに組み込みます。`.lfxb` パッケージのルートと子に対応します。
+  Unity・Godot ではネイティブブリッジに組み込みます。`.lfxp` パッケージのルートと子に対応します。
   同じ評価中に計算結果が必要な場合はこちらを使います。
 
 登録手順、コード例、検証範囲は

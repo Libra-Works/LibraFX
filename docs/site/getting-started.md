@@ -31,7 +31,7 @@ x64; Unreal's source plugin needs an Editor build. See [SDK installation](engine
 3. Select a node to show its values in an Inspector. Use [the workspace tour](workspace-tour.md)
    to locate panels, connect pins and return from child graphs.
 
-Keep the `.lfxproj`: it is the editable project. An exported `.lfxb` is the package
+Keep the `.lfxproj`: it is the editable project. An exported `.lfxp` is the package
 loaded by the game, not the file to use for further graph editing.
 
 ## 3. Choose a preview route

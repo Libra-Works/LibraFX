@@ -10,7 +10,7 @@ title: 一括コンバーターとビルド自動化
 
 Spawnable Group・CPU／GPU Particle・Fluid2Dを、エディターと同じ実行用パッケージへ変換します。
 ネストしたスコープにも対応します。コンバーターとエンジンSDKは同じビルドを使ってください。
-Resource Identity登録済み文書は、通常の`.lfxb`一括出力ではなく末尾の診断用経路が対象です。
+Resource Identity登録済み文書は、通常の`.lfxp`一括出力ではなく末尾の診断用経路が対象です。
 
 <details class="page-toc" markdown="1">
 <summary>このページの内容</summary>
@@ -27,15 +27,15 @@ Resource Identity登録済み文書は、通常の`.lfxb`一括出力ではな�
 
 ```powershell
 .\LiberaFxConverter.exe --help
-.\LiberaFxConverter.exe convert "C:\FX\Source\Spark.lfxproj" "C:\FX\Build\Spark.lfxb"
+.\LiberaFxConverter.exe convert "C:\FX\Source\Spark.lfxproj" "C:\FX\Build\Spark.lfxp"
 .\LiberaFxConverter.exe batch "C:\FX\Source" "C:\FX\Build"
 ```
 
-`batch` は入力以下の `.lfxproj` を再帰的に探し、相対階層を維持して `.lfxb` へ変換します。
+`batch` は入力以下の `.lfxproj` を再帰的に探し、相対階層を維持して `.lfxp` へ変換します。
 
 ```text
 C:\FX\Source\Combat\Hit.lfxproj
-    → C:\FX\Build\Combat\Hit.lfxb
+    → C:\FX\Build\Combat\Hit.lfxp
 ```
 
 ソース文書・ライブラリは書き換えません。出力が既にある場合は失敗し、
@@ -59,8 +59,8 @@ Source/Fountain.lfxproj
 Source/Curl.lfxproj
 ```
 
-既定では入力のファイル名を`.lfxb`へ変えて出力します。出力名を指定する場合は、
-入力パスの後にTABと相対出力パス（例：`Particles/Fountain.lfxb`）を追加します。
+既定では入力のファイル名を`.lfxp`へ変えて出力します。出力名を指定する場合は、
+入力パスの後にTABと相対出力パス（例：`Particles/Fountain.lfxp`）を追加します。
 `batch-list <一覧> <出力フォルダー>`でも同じ動作になります。
 出力先の重複やフォルダー外へのパスは変換開始前に拒否します。
 個別ファイルの失敗後も残りを処理し、1件でも失敗すれば終了コードは0以外になります。
@@ -113,7 +113,7 @@ if ($LASTEXITCODE -ne 0) {
 
 ## Resource Identity の診断用マニフェスト
 
-登録済み ID を通常 `.lfxb` に出して黙って落とすことはできません。
+登録済み ID を通常 `.lfxp` に出して黙って落とすことはできません。
 別経路の `.lfxrm` 出力は**単体の `convert` のみ**です。
 
 ```powershell
