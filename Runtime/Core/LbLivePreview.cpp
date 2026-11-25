@@ -4,6 +4,9 @@
 #include <charconv>
 #include <cmath>
 #include <cstring>
+#include <locale>
+#include <sstream>
+#include <string>
 #include <string_view>
 #include <utility>
 
@@ -223,8 +226,16 @@ struct JsonCursor final {
                 return false;
             }
         }
-        auto result = std::from_chars(data + start, data + pos, out);
-        return result.ec == std::errc{} && result.ptr == data + pos && std::isfinite(out);
+        // Apple libc++ lacks floating-point std::from_chars; parse the validated token with the classic locale.
+        auto stream = std::istringstream(std::string(data + start, pos - start));
+        stream.imbue(std::locale::classic());
+        stream >> out;
+        if (stream.fail())
+        {
+            return false;
+        }
+        stream.peek();
+        return stream.eof() && std::isfinite(out);
     }
     template <typename T>
     auto readInteger(T& out) noexcept -> bool
