@@ -256,132 +256,50 @@ namespace LiberaFx.Unity
 #endif
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
         internal static extern uint libra_abi_version();
+
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_program_create(byte* bytes, ulong count, out ulong program);
+        internal static extern NativeResult libra_sample_sprite_atlas(double frame, uint columns, uint rows, out AtlasFrame atlas);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_program_release(ulong program);
+        internal static extern NativeResult libra_sample_sprite_rect(uint frameIndex, float u, float v, float width, float height, out AtlasFrame atlas);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_instance_create(ulong program, out ulong instance);
+        internal static extern NativeResult libra_sample_sprite_sequence(double frameInput, double elapsedSeconds, double fps, double* durationFrames, uint frameCount, uint startFrame, uint endFrame, uint loop, uint playing, out uint frameIndex);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_instance_release(ulong instance);
+        internal static extern NativeResult libra_sample_sprite_composition(double elapsedSeconds, double fps, double durationFrames, uint loop, double* durations, uint frameCount, double* keys, uint keyCount, out uint frameIndex, double* pose);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_instance_set_time_context(ulong instance, double effectTime, double frameDelta);
+        internal static extern NativeResult libra_make_sprite_quad(in AtlasFrame atlas, float width, float height, SpriteVertex* vertices);
+
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_bind_value(ulong instance, byte* id, out uint binding);
-        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_bind_parameter(
-            ulong instance, byte* id, uint slot, uint component, out uint binding);
-        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_value_type(
-            ulong instance, uint binding, out NativeValueType type);
-        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_parameter_type(
-            ulong instance, uint binding, out NativeValueType type);
-        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_value_read_int32(
-            ulong instance, uint binding, out int value);
-        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_parameter_get_int32(
-            ulong instance, uint binding, out int value);
-        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_parameter_set_int32(
-            ulong instance, uint binding, int value);
-        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_parameter_get(ulong instance, uint binding, out double value);
-        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_parameter_set(ulong instance, uint binding, double value);
-        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_evaluate(
-            ulong instance, double time, uint* bindings, uint count, NativeValue* values);
-        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_values_read(
-            ulong instance, uint* bindings, uint count, NativeValue* values);
-        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_effect_start(
-            ulong instance, double duration, uint infinite, byte* onStart, uint budget, out NativeLifetimeSample sample);
-        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_effect_start_captured(
-            ulong instance, byte* lifeNode, byte* onStart, uint budget, out NativeLifetimeSample sample);
-        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_effect_advance(ulong instance, double elapsed, out NativeLifetimeSample sample);
-        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_effect_drain(ulong instance, double elapsed);
-        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_effect_destroy(ulong instance, byte* node, uint budget);
-        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_effect_finish(ulong instance);
-        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_effect_stop(ulong instance);
-        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_dispatch_signal(
-            ulong instance, byte* id, double time, uint instructionBudget);
-        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_sample_sprite_atlas(
-            double frame, uint columns, uint rows, out AtlasFrame atlas);
-        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_sample_sprite_rect(
-            uint frameIndex, float u, float v, float width, float height, out AtlasFrame atlas);
-        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_sample_sprite_sequence(
-            double frameInput, double elapsedSeconds, double fps, double* durationFrames,
-            uint frameCount, uint startFrame, uint endFrame, uint loop, uint playing,
-            out uint frameIndex);
-        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_sample_sprite_composition(
-            double elapsedSeconds, double fps, double durationFrames, uint loop,
-            double* durations, uint frameCount, double* keys, uint keyCount,
-            out uint frameIndex, double* pose);
-        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_make_sprite_quad(
-            in AtlasFrame atlas, float width, float height, SpriteVertex* vertices);
-        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_spawnable_host_create(
-            byte* bytes, ulong count, uint maxActivePerTemplate, ulong memoryBudgetBytesPerTemplate,
-            uint eventCapacity, uint instructionBudget, out ulong host);
+        internal static extern NativeResult libra_spawnable_host_create(byte* bytes, ulong count, uint maxActivePerTemplate, ulong memoryBudgetBytesPerTemplate, uint eventCapacity, uint instructionBudget, out ulong host);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
         internal static extern NativeResult libra_spawnable_host_release(ulong host);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
         internal static extern NativeResult libra_spawnable_host_advance(ulong host, double time, double frameDelta);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_spawnable_host_set_quality(
-            ulong host, byte availability, byte tier, byte source, ulong frameSerial);
+        internal static extern NativeResult libra_spawnable_host_set_quality(ulong host, byte availability, byte tier, byte source, ulong frameSerial);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_spawnable_host_set_node_parameter(
-            ulong host, byte* containerId, byte* nodeId, uint inputSlot, uint component,
-            byte isInt32, int intValue, double floatValue);
+        internal static extern NativeResult libra_spawnable_host_set_node_parameter(ulong host, byte* containerId, byte* nodeId, uint inputSlot, uint component, byte isInt32, int intValue, double floatValue);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_spawnable_host_apply_parameter_delta(
-            ulong host, byte* jsonUtf8, ulong length);
-        [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_instance_set_quality(
-            ulong instance, byte availability, byte tier, byte source, ulong frameSerial);
+        internal static extern NativeResult libra_spawnable_host_apply_parameter_delta(ulong host, byte* jsonUtf8, ulong length);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
         internal static extern NativeResult libra_spawnable_host_dispatch_signal(ulong host, byte* nodeId);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
         internal static extern NativeResult libra_spawnable_host_fire_game_signal(ulong host, byte* name);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_spawnable_host_instance_target(
-            ulong host, byte* container, ulong instance, out ulong generation);
+        internal static extern NativeResult libra_spawnable_host_instance_target(ulong host, byte* container, ulong instance, out ulong generation);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_spawnable_host_set_instance_property(
-            ulong host, ulong generation, byte* container, ulong instance, byte* name, double* values, uint width);
+        internal static extern NativeResult libra_spawnable_host_set_instance_property(ulong host, ulong generation, byte* container, ulong instance, byte* name, double* values, uint width);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_spawnable_host_get_instance_property(
-            ulong host, ulong generation, byte* container, ulong instance, byte* name, double* values, out uint width);
+        internal static extern NativeResult libra_spawnable_host_get_instance_property(ulong host, ulong generation, byte* container, ulong instance, byte* name, double* values, out uint width);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_spawnable_host_fire_instance_signal(
-            ulong host, ulong generation, byte* container, ulong instance, byte* name);
+        internal static extern NativeResult libra_spawnable_host_fire_instance_signal(ulong host, ulong generation, byte* container, ulong instance, byte* name);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_spawnable_host_copy_instance_game_io_port_name(
-            ulong host, byte* container, uint index, byte* destination, ulong capacity, out ulong byteCount);
+        internal static extern NativeResult libra_spawnable_host_copy_instance_game_io_port_name(ulong host, byte* container, uint index, byte* destination, ulong capacity, out ulong byteCount);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_spawnable_host_set_game_property(
-            ulong host, byte* name, double* values, uint width);
+        internal static extern NativeResult libra_spawnable_host_set_game_property(ulong host, byte* name, double* values, uint width);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
         internal static extern NativeResult libra_spawnable_host_set_owner_matrix(ulong host, double* values);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_coordinate_convert(ref CoordinateBasis basis, uint kind, uint toHost,
-            double[] source, uint width, [Out] double[] destination);
+        internal static extern NativeResult libra_coordinate_convert(ref CoordinateBasis basis, uint kind, uint toHost, double[] source, uint width, [Out] double[] destination);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
         internal static extern NativeResult libra_spawnable_host_set_coordinate_basis(ulong host, ref CoordinateBasis basis);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
@@ -389,59 +307,41 @@ namespace LiberaFx.Unity
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
         internal static extern NativeResult libra_spawnable_host_time_snapshot(ulong host, out EffectTimeSnapshot snapshot);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_spawnable_host_set_game_spatial_property(ulong host, byte* name,
-            uint kind, double* values, uint width);
+        internal static extern NativeResult libra_spawnable_host_set_game_spatial_property(ulong host, byte* name, uint kind, double* values, uint width);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
         internal static extern NativeResult libra_spawnable_host_request_natural_end(ulong host);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
         internal static extern NativeResult libra_spawnable_host_stop(ulong host);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_spawnable_host_force_terminate(
-            ulong host, uint scopeKind, byte* containerId, ulong instance);
+        internal static extern NativeResult libra_spawnable_host_force_terminate(ulong host, uint scopeKind, byte* containerId, ulong instance);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_spawnable_host_notify_end_request(
-            ulong host, uint scopeKind, byte* containerId, ulong instance, byte* userSignalNodeId);
+        internal static extern NativeResult libra_spawnable_host_notify_end_request(ulong host, uint scopeKind, byte* containerId, ulong instance, byte* userSignalNodeId);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_spawnable_host_root_value(
-            ulong host, byte* nodeId, out NativeValue value);
+        internal static extern NativeResult libra_spawnable_host_root_value(ulong host, byte* nodeId, out NativeValue value);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_spawnable_host_cpu_particle_count(
-            ulong host, byte* systemId, out uint count);
+        internal static extern NativeResult libra_spawnable_host_cpu_particle_count(ulong host, byte* systemId, out uint count);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_spawnable_host_cpu_particle_at(
-            ulong host, byte* systemId, uint index, out NativeCpuParticleSnapshot particle);
+        internal static extern NativeResult libra_spawnable_host_cpu_particle_at(ulong host, byte* systemId, uint index, out NativeCpuParticleSnapshot particle);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_spawnable_host_cpu_particle_pop_event(
-            ulong host, out CpuParticleEvent particleEvent, out uint hasEvent);
+        internal static extern NativeResult libra_spawnable_host_cpu_particle_pop_event(ulong host, out CpuParticleEvent particleEvent, out uint hasEvent);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_spawnable_host_scoped_cpu_particle_count(
-            ulong host, byte* containerId, ulong instance, byte* systemId, out uint count);
+        internal static extern NativeResult libra_spawnable_host_scoped_cpu_particle_count(ulong host, byte* containerId, ulong instance, byte* systemId, out uint count);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_spawnable_host_scoped_cpu_particle_at(
-            ulong host, byte* containerId, ulong instance, byte* systemId, uint index,
-            out NativeCpuParticleSnapshot particle);
+        internal static extern NativeResult libra_spawnable_host_scoped_cpu_particle_at(ulong host, byte* containerId, ulong instance, byte* systemId, uint index, out NativeCpuParticleSnapshot particle);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_spawnable_host_scoped_cpu_particle_timing(
-            ulong host, byte* containerId, ulong instance, byte* systemId, uint index, out double age, out double life);
+        internal static extern NativeResult libra_spawnable_host_scoped_cpu_particle_timing(ulong host, byte* containerId, ulong instance, byte* systemId, uint index, out double age, out double life);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_spawnable_host_scoped_cpu_particle_read(
-            ulong host, byte* containerId, ulong instance, byte* systemId, uint first,
-            NativeCpuParticleSnapshot* snapshots, NativeCpuParticleTiming* timings, uint capacity, out uint written);
+        internal static extern NativeResult libra_spawnable_host_scoped_cpu_particle_read(ulong host, byte* containerId, ulong instance, byte* systemId, uint first, NativeCpuParticleSnapshot* snapshots, NativeCpuParticleTiming* timings, uint capacity, out uint written);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_spawnable_host_scoped_cpu_particle_pop_event(
-            ulong host, byte* containerId, ulong instance, out CpuParticleEvent particleEvent, out uint hasEvent);
+        internal static extern NativeResult libra_spawnable_host_scoped_cpu_particle_pop_event(ulong host, byte* containerId, ulong instance, out CpuParticleEvent particleEvent, out uint hasEvent);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_spawnable_host_child_value(
-            ulong host, byte* containerId, ulong instance, byte* nodeId, out NativeValue value);
+        internal static extern NativeResult libra_spawnable_host_child_value(ulong host, byte* containerId, ulong instance, byte* nodeId, out NativeValue value);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_spawnable_host_next_event(
-            ulong host, out NativeSpawnableHostEvent value, out uint hasEvent);
+        internal static extern NativeResult libra_spawnable_host_next_event(ulong host, out NativeSpawnableHostEvent value, out uint hasEvent);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_spawnable_host_next_game_io_event(
-            ulong host, out NativeGameIoEvent value, out uint hasEvent);
+        internal static extern NativeResult libra_spawnable_host_next_game_io_event(ulong host, out NativeGameIoEvent value, out uint hasEvent);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_spawnable_host_copy_game_io_port_name(
-            ulong host, uint index, byte* destination, ulong capacity, out ulong count);
+        internal static extern NativeResult libra_spawnable_host_copy_game_io_port_name(ulong host, uint index, byte* destination, ulong capacity, out ulong count);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
         internal static extern NativeResult libra_spawnable_host_active_count(ulong host, out ulong count);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
@@ -449,43 +349,11 @@ namespace LiberaFx.Unity
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
         internal static extern NativeResult libra_spawnable_host_template_count(ulong host, out ulong count);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_spawnable_host_template_id(
-            ulong host, ulong index, byte* containerId);
+        internal static extern NativeResult libra_spawnable_host_template_id(ulong host, ulong index, byte* containerId);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_spawnable_host_copy_template_payload(
-            ulong host, byte* containerId, SpawnableTemplatePayloadKind kind,
-            byte* destination, ulong capacity, out ulong count);
+        internal static extern NativeResult libra_spawnable_host_copy_template_payload(ulong host, byte* containerId, SpawnableTemplatePayloadKind kind, byte* destination, ulong capacity, out ulong count);
         [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern NativeResult libra_spawnable_host_copy_root_payload(
-            ulong host, SpawnableTemplatePayloadKind kind, byte* destination,
-            ulong capacity, out ulong count);
-    }
-
-    public sealed unsafe class NativeProgram : IDisposable
-    {
-        internal ulong Handle { get; private set; }
-        public NativeProgram(byte[] compiledBytes)
-        {
-            if (compiledBytes == null) throw new ArgumentNullException(nameof(compiledBytes));
-            NativeAbi.ValidateLayout();
-            if (Native.libra_abi_version() != 1) throw new NotSupportedException("LiberaFx ABI version mismatch.");
-            fixed (byte* bytes = compiledBytes)
-            {
-                NativeInstance.Check(Native.libra_program_create(bytes, (ulong)compiledBytes.LongLength, out var handle));
-                Handle = handle;
-            }
-        }
-        public NativeInstance CreateInstance()
-        {
-            if (Handle == 0) throw new ObjectDisposedException(nameof(NativeProgram));
-            return new NativeInstance(Handle);
-        }
-        public void Dispose()
-        {
-            if (Handle != 0) { Native.libra_program_release(Handle); Handle = 0; }
-            GC.SuppressFinalize(this);
-        }
-        ~NativeProgram() { Dispose(); }
+        internal static extern NativeResult libra_spawnable_host_copy_root_payload(ulong host, SpawnableTemplatePayloadKind kind, byte* destination, ulong capacity, out ulong count);
     }
 
     public sealed class NativeSignal
@@ -501,23 +369,12 @@ namespace LiberaFx.Unity
         }
     }
 
-    public sealed unsafe partial class NativeInstance : IDisposable
+    // Static ABI helpers plus the package-backed Spawnable host wrapper.
+    public sealed unsafe partial class NativeInstance
     {
-        private ulong handle;
-        internal NativeInstance(ulong program)
-        {
-            Check(Native.libra_instance_create(program, out handle));
-        }
-        private ulong Alive
-        {
-            get
-            {
-                if (handle == 0) throw new ObjectDisposedException(nameof(NativeInstance));
-                return handle;
-            }
-        }
+        private NativeInstance() { }
 
-            public partial class NativeSpawnableHostBase : IDisposable
+        public partial class NativeSpawnableHostBase : IDisposable
             {
                 private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
                 private ulong handle;
@@ -1030,98 +887,7 @@ namespace LiberaFx.Unity
         {
             if (result != NativeResult.Ok) throw new InvalidOperationException("LiberaFx: " + result);
         }
-        // Parsing occurs at binding time only. Guid.ToByteArray() uses mixed-endian
-        // Windows layout and must not be sent directly to this ABI.
-        private static byte[] NodeId(string guid)
-        {
-            return new NativeSignal(guid).Id;
-        }
-        public uint BindValue(string nodeGuid)
-        {
-            var id = NodeId(nodeGuid);
-            fixed (byte* pointer = id)
-            {
-                Check(Native.libra_bind_value(Alive, pointer, out var binding));
-                return binding;
-            }
-        }
-        public uint BindParameter(string nodeGuid, uint slot = 0, uint component = 0)
-        {
-            var id = NodeId(nodeGuid);
-            fixed (byte* pointer = id)
-            {
-                Check(Native.libra_bind_parameter(Alive, pointer, slot, component, out var binding));
-                return binding;
-            }
-        }
-        public NativeResult SetParameter(uint binding, double value) =>
-            Native.libra_parameter_set(Alive, binding, value);
-        public NativeResult GetValueType(uint binding, out NativeValueType type) =>
-            Native.libra_value_type(Alive, binding, out type);
-        public NativeResult GetParameterType(uint binding, out NativeValueType type) =>
-            Native.libra_parameter_type(Alive, binding, out type);
-        public NativeResult ReadInt32(uint binding, out int value) =>
-            Native.libra_value_read_int32(Alive, binding, out value);
-        public NativeResult GetParameterInt32(uint binding, out int value) =>
-            Native.libra_parameter_get_int32(Alive, binding, out value);
-        public NativeResult SetParameterInt32(uint binding, int value) =>
-            Native.libra_parameter_set_int32(Alive, binding, value);
-        public NativeResult SetTimeContext(double effectTime, double frameDelta) =>
-            Native.libra_instance_set_time_context(Alive, effectTime, frameDelta);
-        public NativeResult SetHostQuality(HostQualitySnapshot snapshot) =>
-            Native.libra_instance_set_quality(Alive, (byte)snapshot.Availability,
-                (byte)snapshot.Tier, (byte)snapshot.Source, snapshot.FrameSerial);
-        public NativeResult GetParameter(uint binding, out double value) =>
-            Native.libra_parameter_get(Alive, binding, out value);
-        // Caller caches both arrays. Pinning blittable PODs avoids array marshalling
-        // copies and reverse callbacks, including in IL2CPP players.
-        public NativeResult Evaluate(double time, uint[] bindings, NativeValue[] values)
-        {
-            if (bindings == null || values == null || values.Length < bindings.Length)
-                return NativeResult.InvalidArgument;
-            fixed (uint* input = bindings)
-            fixed (NativeValue* output = values)
-                return Native.libra_evaluate(Alive, time, input, (uint)bindings.Length, output);
-        }
-        public NativeResult ReadValues(uint[] bindings, NativeValue[] values)
-        {
-            if (bindings == null || values == null || values.Length < bindings.Length)
-                return NativeResult.InvalidArgument;
-            fixed (uint* input = bindings)
-            fixed (NativeValue* output = values)
-                return Native.libra_values_read(Alive, input, (uint)bindings.Length, output);
-        }
-        public NativeResult StartLifetime(double duration, bool infinite, NativeSignal onStart,
-            uint instructionBudget, out NativeLifetimeSample sample)
-        {
-            fixed (byte* signal = onStart == null ? null : onStart.Id)
-                return Native.libra_effect_start(Alive, duration, infinite ? 1u : 0u, signal, instructionBudget, out sample);
-        }
-        public NativeResult StartCapturedLifetime(NativeSignal lifeNode, NativeSignal onStart,
-            uint instructionBudget, out NativeLifetimeSample sample)
-        {
-            if (lifeNode == null) { sample = default; return NativeResult.InvalidArgument; }
-            fixed (byte* life = lifeNode.Id)
-            fixed (byte* signal = onStart == null ? null : onStart.Id)
-                return Native.libra_effect_start_captured(Alive, life, signal, instructionBudget, out sample);
-        }
-        public NativeResult AdvanceLifetime(double elapsed, out NativeLifetimeSample sample) =>
-            Native.libra_effect_advance(Alive, elapsed, out sample);
-        public NativeResult DrainLifetime(double elapsed) => Native.libra_effect_drain(Alive, elapsed);
-        public NativeResult DispatchNaturalDestroy(NativeSignal signal, uint instructionBudget)
-        {
-            if (signal == null) return NativeResult.InvalidArgument;
-            fixed (byte* id = signal.Id)
-                return Native.libra_effect_destroy(Alive, id, instructionBudget);
-        }
-        public NativeResult FinishLifetime() => Native.libra_effect_finish(Alive);
-        public NativeResult StopLifetime() => Native.libra_effect_stop(Alive);
-        public NativeResult DispatchSignal(NativeSignal signal, double time, uint instructionBudget)
-        {
-            if (signal == null) return NativeResult.InvalidArgument;
-            fixed (byte* id = signal.Id)
-                return Native.libra_dispatch_signal(Alive, id, time, instructionBudget);
-        }
+
         public static NativeResult SampleAtlas(double frame, uint columns, uint rows, out AtlasFrame atlas) =>
             Native.libra_sample_sprite_atlas(frame, columns, rows, out atlas);
         public static NativeResult SampleRect(uint frameIndex, float u, float v, float width, float height,
@@ -1163,12 +929,6 @@ namespace LiberaFx.Unity
             fixed (SpriteVertex* output = vertices)
                 return Native.libra_make_sprite_quad(in atlas, width, height, output);
         }
-        public void Dispose()
-        {
-            if (handle != 0) { Native.libra_instance_release(handle); handle = 0; }
-            GC.SuppressFinalize(this);
-        }
-        ~NativeInstance() { Dispose(); }
     }
 
     public sealed class NativeSpawnableHost : NativeInstance.NativeSpawnableHostBase

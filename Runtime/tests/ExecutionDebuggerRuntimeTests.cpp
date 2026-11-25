@@ -31,6 +31,14 @@ auto fixture(const char* root, const char* name) -> std::vector<std::uint8_t>
     return {std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
 }
 
+auto fixtureProgram(const char* root, const char* name) -> std::vector<std::uint8_t>
+{
+    auto bytes = fixture(root, name);
+    auto package = SpawnablePackage{};
+    assert(loadSpawnablePackage(bytes.data(), bytes.size(), package) == Result::Ok);
+    return std::move(package.parentBytecode);
+}
+
 auto find(const std::vector<std::uint8_t>& bytes, std::uint8_t opcode) -> const std::uint8_t*
 {
     auto scalar = bytes[4] == 1;
@@ -193,7 +201,7 @@ void verifyAuthoredPackageVisits(const char* quality, const char* phase)
     }
     if (phase) {
         struct PhaseObserver { const std::uint8_t* phaseId; int count = 0; };
-        const auto instructions = fixture(phase, "PhasePreset.lfxb");
+        const auto instructions = fixtureProgram(phase, "PhasePreset.lfxp");
         auto observed = PhaseObserver{find(instructions, 55)};
         run(fixture(phase, "PhasePreset.lfxp"), {&observed, [](void* data, const DebugNodeVisit& visit) noexcept {
             auto& observed = *static_cast<PhaseObserver*>(data);
@@ -214,10 +222,10 @@ int main()
         std::cout << "Compiler-produced debugger/Int32 fixture directories are required.\n";
         return 77;
     }
-    verify(fixture(scalar, "DebugScalar.lfxb"), false);
-    verify(fixture(integer, "Int32Add.lfxb"), true);
+    verify(fixtureProgram(scalar, "DebugScalar.lfxp"), false);
+    verify(fixtureProgram(integer, "Int32Add.lfxp"), true);
     auto guarded = std::getenv("LIBERAFX_DEBUG_BRANCH_FIXTURE_DIR");
-    if (guarded) verifyGuarded(fixture(guarded, "enum-branch-divide.lfxb"));
+    if (guarded) verifyGuarded(fixtureProgram(guarded, "enum-branch-divide.lfxp"));
     verifyAuthoredPackageVisits(std::getenv("LIBERAFX_DEBUG_QUALITY_FIXTURE_DIR"),
         std::getenv("LIBERAFX_DEBUG_PHASE_FIXTURE_DIR"));
 }

@@ -102,7 +102,7 @@ bool LibraValidateFluidScope(const std::vector<std::uint8_t>& snapshotBytes,
             const TSharedPtr<FJsonObject>* gpuState = nullptr;
             if (node && node->TryGetObjectField(TEXT("gpuState"), gpuState) && gpuState->IsValid() &&
                 (*gpuState)->HasField(TEXT("fluid2D")))
-                return reject(TEXT("legacy package contains Fluid2D without a version-2 manifest"));
+                return reject(TEXT("GPU snapshots contain Fluid2D without an executable manifest"));
         }
         return true;
     }
@@ -111,8 +111,8 @@ bool LibraValidateFluidScope(const std::vector<std::uint8_t>& snapshotBytes,
     if (!FJsonSerializer::Deserialize(manifestReader, manifest) || !manifest)
         return reject(TEXT("GPU executable manifest JSON is invalid"));
     auto version = double{};
-    if (!manifest->TryGetNumberField(TEXT("version"), version) || (version != 1 && version != 2 && version != 3 && version != 4))
-        return reject(TEXT("GPU executable manifest has an unsupported version"));
+    if (!manifest->TryGetNumberField(TEXT("version"), version) || version != 4)
+        return reject(TEXT("GPU executable manifest must use current version 4"));
     TArray<TSharedPtr<FJsonValue>> snapshots;
     if (!snapshotBytes.empty())
     {
@@ -152,14 +152,22 @@ bool LibraValidateFluidScope(const std::vector<std::uint8_t>& snapshotBytes,
         (isFluid ? expectedFluids : expectedParticles).Add(guid);
     }
     const auto markedFluids = expectedFluids;
-    if (version == 1)
-        return expectedFluids.IsEmpty() && !manifest->HasField(TEXT("fluidPrograms"))
-            ? true : reject(TEXT("version-1 manifest cannot contain Fluid2D snapshots or fluidPrograms"));
     const TArray<TSharedPtr<FJsonValue>>* programs = nullptr;
     const TArray<TSharedPtr<FJsonValue>>* fluids = nullptr;
-    if (!manifest->TryGetArrayField(TEXT("programs"), programs) ||
-        !manifest->TryGetArrayField(TEXT("fluidPrograms"), fluids))
-        return reject(TEXT("version-2 manifest is missing programs or fluidPrograms array"));
+    auto emptyFluids = TArray<TSharedPtr<FJsonValue>>{};
+    if (!manifest->TryGetArrayField(TEXT("programs"), programs))
+        return reject(TEXT("GPU executable manifest is missing its programs array"));
+    if (manifest->HasField(TEXT("fluidPrograms")))
+    {
+        if (!manifest->TryGetArrayField(TEXT("fluidPrograms"), fluids))
+            return reject(TEXT("GPU executable manifest fluidPrograms must be an array when present"));
+    }
+    else
+    {
+        if (!expectedFluids.IsEmpty())
+            return reject(TEXT("GPU snapshots contain Fluid2D nodes but the manifest has no fluidPrograms"));
+        fluids = &emptyFluids;
+    }
     auto manifestFluidIds = TSet<FGuid>{};
     for (const auto& value : *fluids)
     {
@@ -188,17 +196,15 @@ bool LibraValidateFluidScope(const std::vector<std::uint8_t>& snapshotBytes,
             if (!markedFluids.Contains(guid))
                 return reject(TEXT("snapshot gpuState.fluid2D markers do not match Fluid2D manifest entries"));
     }
-    if (version < 4 && expectedFluids.IsEmpty())
-        return reject(TEXT("version-2 manifest contains no Fluid2D programs"));
     if (programs->Num() != expectedParticles.Num() || fluids->Num() != expectedFluids.Num())
     {
         failure = FString::Printf(
-            TEXT("version-2 manifest/snapshot count mismatch (particles %d/%d, fluids %d/%d)"),
+            TEXT("GPU manifest/snapshot count mismatch (particles %d/%d, fluids %d/%d)"),
             programs->Num(), expectedParticles.Num(), fluids->Num(), expectedFluids.Num());
         return false;
     }
     if (programs->Num() + fluids->Num() > 16)
-        return reject(TEXT("version-2 manifest exceeds the 16-program scope limit"));
+        return reject(TEXT("GPU manifest exceeds the 16-program scope limit"));
     for (const auto& value : *programs)
     {
         auto program = value && value->Type == EJson::Object ? value->AsObject() : nullptr;
@@ -229,8 +235,8 @@ bool LibraValidateFluidScope(const std::vector<std::uint8_t>& snapshotBytes,
         if (fluid->HasField(TEXT("automaticPlane")))
         {
             bool automaticPlane;
-            if (version < 3 || !fluid->TryGetBoolField(TEXT("automaticPlane"), automaticPlane))
-                return reject(TEXT("Fluid output selection requires version 3 and a boolean"));
+            if (!fluid->TryGetBoolField(TEXT("automaticPlane"), automaticPlane))
+                return reject(TEXT("Fluid automaticPlane must be a boolean when present"));
         }
     }
     for (const auto& value : *programs)
@@ -242,8 +248,8 @@ bool LibraValidateFluidScope(const std::vector<std::uint8_t>& snapshotBytes,
             return reject(TEXT("GPU particle delivery is missing"));
         if (!(*delivery)->HasField(TEXT("generatedResources")))
             continue;
-        if (version < 3 || !(*delivery)->TryGetObjectField(TEXT("generatedResources"), generated) || (*generated)->Values.Num() > 64)
-            return reject(TEXT("Generated resources require version 3 and bounded bindings"));
+        if (!(*delivery)->TryGetObjectField(TEXT("generatedResources"), generated) || (*generated)->Values.Num() > 64)
+            return reject(TEXT("Generated resources must be an object with bounded bindings"));
         for (const auto& binding : (*generated)->Values)
         {
             const auto reference = binding.Value->AsObject();
@@ -446,14 +452,19 @@ bool ReadLibraPackageResourceGpuKeys(const std::vector<std::uint8_t>& bytes,
     const FLibraPackageResourceJsonArray* programs = nullptr;
     const FLibraPackageResourceJsonArray* fluids = nullptr;
     auto version = double{};
-    if (!root || !root->TryGetNumberField(TEXT("version"), version) ||
-        (version != 1 && version != 2 && version != 3) ||
+    if (!root || !root->TryGetNumberField(TEXT("version"), version) || version != 4 ||
         !root->TryGetArrayField(TEXT("programs"), programs) || programs->Num() > 16)
         return false;
-    if ((version == 1 && root->HasField(TEXT("fluidPrograms"))) ||
-        (version >= 2 && (!root->TryGetArrayField(TEXT("fluidPrograms"), fluids) ||
-            fluids->IsEmpty() || programs->Num() + fluids->Num() > 16)))
-        return false;
+    auto emptyFluids = FLibraPackageResourceJsonArray{};
+    if (root->HasField(TEXT("fluidPrograms")))
+    {
+        if (!root->TryGetArrayField(TEXT("fluidPrograms"), fluids)) return false;
+    }
+    else
+    {
+        fluids = &emptyFluids;
+    }
+    if (programs->Num() + fluids->Num() > 16) return false;
     for (const auto& value : *programs)
     {
         auto program = value && value->Type == EJson::Object ? value->AsObject() : nullptr;
@@ -471,24 +482,21 @@ bool ReadLibraPackageResourceGpuKeys(const std::vector<std::uint8_t>& bytes,
                 return false;
         }
     }
-    if (fluids)
+    for (const auto& value : *fluids)
     {
-        for (const auto& value : *fluids)
-        {
-            auto fluid = value && value->Type == EJson::Object ? value->AsObject() : nullptr;
-            const TSharedPtr<FJsonObject>* settings = nullptr;
-            const TSharedPtr<FJsonObject>* renderer = nullptr;
-            FString nodeId, material;
-            double sizeScale = 0;
-            if (!fluid || !fluid->TryGetStringField(TEXT("nodeId"), nodeId) ||
-                !fluid->TryGetObjectField(TEXT("settings"), settings) ||
-                !fluid->TryGetObjectField(TEXT("renderer"), renderer) ||
-                !(*renderer)->TryGetStringField(TEXT("material"), material) ||
-                !LibraFluidMaterialMatches(*settings, material) ||
-                !(*renderer)->TryGetNumberField(TEXT("sizeScale"), sizeScale) ||
-                !FMath::IsFinite(sizeScale) || sizeScale <= 0 || sizeScale > 10000)
-                return false;
-        }
+        auto fluid = value && value->Type == EJson::Object ? value->AsObject() : nullptr;
+        const TSharedPtr<FJsonObject>* settings = nullptr;
+        const TSharedPtr<FJsonObject>* renderer = nullptr;
+        FString nodeId, material;
+        double sizeScale = 0;
+        if (!fluid || !fluid->TryGetStringField(TEXT("nodeId"), nodeId) ||
+            !fluid->TryGetObjectField(TEXT("settings"), settings) ||
+            !fluid->TryGetObjectField(TEXT("renderer"), renderer) ||
+            !(*renderer)->TryGetStringField(TEXT("material"), material) ||
+            !LibraFluidMaterialMatches(*settings, material) ||
+            !(*renderer)->TryGetNumberField(TEXT("sizeScale"), sizeScale) ||
+            !FMath::IsFinite(sizeScale) || sizeScale <= 0 || sizeScale > 10000)
+            return false;
     }
     return true;
 }

@@ -109,12 +109,12 @@ inline auto read32(const std::uint8_t *bytes) noexcept -> std::uint32_t {
 }
 
 inline auto branchGuard(const std::uint8_t *current,
-                        std::uint16_t version) noexcept -> std::uint32_t {
+                        std::uint16_t /*version*/) noexcept -> std::uint32_t {
   auto opcode = current[16];
   auto customLayout = opcode == customParameterOpcode ||
                       opcode == customSignalOpcode ||
                       opcode == logicalEventSignalOpcode;
-  return read32(current + (version >= 11 && customLayout ? 44 : 112));
+  return read32(current + (customLayout ? 44 : 112));
 }
 
 inline auto read64(const std::uint8_t *bytes) noexcept -> std::uint64_t {
@@ -154,13 +154,9 @@ inline void writeDouble(std::uint8_t *bytes, double value) noexcept {
 inline auto instruction(const std::uint8_t *bytes, std::uint16_t version,
                         std::size_t index) noexcept -> const std::uint8_t *;
 
-inline auto instruction(const std::uint8_t *bytes, std::uint16_t version,
+inline auto instruction(const std::uint8_t *bytes, std::uint16_t /*version*/,
                         std::size_t index) noexcept -> const std::uint8_t * {
-  auto stride = version == 1   ? legacyInstructionSize
-                : version == 2 ? typedInstructionSize
-                               : customInstructionSize;
-  return bytes + (version == 1 ? legacyHeaderSize : typedHeaderSize) +
-         index * stride;
+  return bytes + typedHeaderSize + index * customInstructionSize;
 }
 
 inline auto validStateAlignment(std::size_t alignment) noexcept -> bool {

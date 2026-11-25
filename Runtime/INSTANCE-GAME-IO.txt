@@ -33,7 +33,7 @@ still identifies the historical instance, not a new live target.
 
 All facade calls are owner-thread/job-boundary operations, not a worker mailbox.
 Unity exposes matching methods on NativeSpawnableHost and the playback component.
-Unreal exposes them on the public ULibraEffectComponent, forwarding internally;
+Unreal exposes them on the public ULibraSpawnableComponent, forwarding internally;
 Blueprint int64 fields preserve unsigned identity bits. Targeted signal delivery
 returns Busy while an execution debugger owns evaluation, rather than blocking
 the engine thread. This is separate from asynchronous creation/destruction.

@@ -305,6 +305,14 @@ auto loadFile(const std::filesystem::path& path) -> std::vector<std::uint8_t>
     return {std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
 }
 
+auto loadProgramFile(const std::filesystem::path& path) -> std::vector<std::uint8_t>
+{
+    auto bytes = loadFile(path);
+    auto package = SpawnablePackage{};
+    assert(loadSpawnablePackage(bytes.data(), bytes.size(), package) == Result::Ok);
+    return std::move(package.parentBytecode);
+}
+
 auto runInline(void* context, Job job, void* jobContext) noexcept -> bool
 {
     (void)context;
@@ -338,11 +346,11 @@ auto makeDefaults(const Program& program) -> std::vector<std::max_align_t>
 
 void verifyCompiledFixture(const std::filesystem::path& directory)
 {
-    auto bytes = loadFile(directory / "logical-runtime.lfxb");
+    auto bytes = loadProgramFile(directory / "logical-runtime.lfxp");
     auto bindings = std::vector<CustomNodeBinding>{};
     auto program = Program{};
     assert(loadLogicalProgram(bytes, program, bindings) == Result::Ok);
-    assert(program.version() == 9);
+    assert(program.version() == 11);
     auto workWords = (program.workBytes() + sizeof(double) - 1) / sizeof(double);
     auto work = std::vector<std::max_align_t>(
         (workWords * sizeof(double) + sizeof(std::max_align_t) - 1) / sizeof(std::max_align_t));
@@ -540,11 +548,11 @@ void verifyCompiledFixture(const std::filesystem::path& directory)
 
 void verifyGroupIsolationFixture(const std::filesystem::path& directory)
 {
-    auto bytes = loadFile(directory / "logical-groups.lfxb");
+    auto bytes = loadProgramFile(directory / "logical-groups.lfxp");
     auto bindings = std::vector<CustomNodeBinding>{};
     auto program = Program{};
     assert(loadLogicalProgram(bytes, program, bindings) == Result::Ok);
-    assert(program.version() == 9);
+    assert(program.version() == 11);
     auto workWords = (program.workBytes() + sizeof(double) - 1) / sizeof(double);
     auto work = std::vector<std::max_align_t>(
         (workWords * sizeof(double) + sizeof(std::max_align_t) - 1) / sizeof(std::max_align_t));
@@ -608,11 +616,11 @@ void verifyGroupIsolationFixture(const std::filesystem::path& directory)
 
 void verifyGuardedLogicalFixture(const std::filesystem::path& directory)
 {
-    auto bytes = loadFile(directory / "logical-guards.lfxb");
+    auto bytes = loadProgramFile(directory / "logical-guards.lfxp");
     auto bindings = std::vector<CustomNodeBinding>{};
     auto program = Program{};
     assert(loadLogicalProgram(bytes, program, bindings) == Result::Ok);
-    assert(program.version() == 9);
+    assert(program.version() == 11);
     auto workWords = (program.workBytes() + sizeof(double) - 1) / sizeof(double);
     auto work = std::vector<std::max_align_t>(
         (workWords * sizeof(double) + sizeof(std::max_align_t) - 1) / sizeof(std::max_align_t));
@@ -711,7 +719,7 @@ void verifyGuardedLogicalFixture(const std::filesystem::path& directory)
 
 void verifyMatrixLateRefreshFixture(const std::filesystem::path& directory)
 {
-    auto bytes = loadFile(directory / "logical-matrix.lfxb");
+    auto bytes = loadProgramFile(directory / "logical-matrix.lfxp");
     auto bindings = std::vector<CustomNodeBinding>{};
     auto program = Program{};
     assert(loadLogicalProgram(bytes, program, bindings) == Result::Ok);
@@ -760,7 +768,7 @@ auto overrideBuiltinMatrixCallback(CustomNodeInvocation& call) noexcept -> Resul
 
 void verifyLateRefreshRejectsShadowedBuiltin(const std::filesystem::path& directory)
 {
-    auto bytes = loadFile(directory / "logical-matrix.lfxb");
+    auto bytes = loadProgramFile(directory / "logical-matrix.lfxp");
     constexpr auto matrixTransformRow0 = std::array<std::uint8_t, 16>{
         0xb0, 0xaf, 0x61, 0xd2, 0x29, 0xf6, 0x4c, 0xc9,
         0xa7, 0x1e, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01};
@@ -795,11 +803,11 @@ void verifyLateRefreshRejectsShadowedBuiltin(const std::filesystem::path& direct
 
 void verifyHostIntegrationFixture(const std::filesystem::path& directory)
 {
-    auto bytes = loadFile(directory / "logical-host.lfxb");
+    auto bytes = loadProgramFile(directory / "logical-host.lfxp");
     auto bindings = std::vector<CustomNodeBinding>{};
     auto program = Program{};
     assert(loadLogicalProgram(bytes, program, bindings) == Result::Ok);
-    assert(program.version() == 9);
+    assert(program.version() == 11);
 
     auto initialize = [&](Instance& instance, std::vector<std::max_align_t>& work,
                           std::vector<std::max_align_t>& defaults)

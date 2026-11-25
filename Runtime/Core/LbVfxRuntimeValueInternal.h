@@ -588,7 +588,7 @@ inline auto validEnumSelectValueTypes(const std::uint8_t *data,
 }
 
 inline auto validCurveInstruction(const std::uint8_t *current,
-                                  std::uint16_t version) noexcept -> bool {
+                                  std::uint16_t /*version*/) noexcept -> bool {
   if (current[16] != curveOpcode || current[17] != 1 || current[18] != 0 ||
       current[19] != 0 || current[20] != 0 || current[21] != 0 ||
       current[22] != 0 || current[23] != 0 || read32(current + 24) != noInput ||
@@ -602,7 +602,7 @@ inline auto validCurveInstruction(const std::uint8_t *current,
     }
   }
   for (auto byte = typedInstructionSize; byte < 224; ++byte) {
-    if (!(version >= 8 && byte >= 112 && byte < 116) && current[byte] != 0) {
+    if (!(byte >= 112 && byte < 116) && current[byte] != 0) {
       return false;
     }
   }
@@ -678,6 +678,46 @@ inline auto evaluateCurve(const std::uint8_t *keys, std::uint32_t count,
            (t * t * t - 2 * t * t + t) * span * readDouble(left + 24) +
            (-2 * t * t * t + 3 * t * t) * rightValue +
            (t * t * t - t * t) * span * readDouble(right + 16);
+  default:
+    return 0;
+  }
+}
+
+inline auto evaluateCurve(const CurveKey *keys, std::size_t count,
+                          double time) noexcept -> double {
+  if (count == 0) {
+    return 0;
+  }
+  if (time <= keys[0].time) {
+    return keys[0].value;
+  }
+  if (time >= keys[count - 1].time) {
+    return keys[count - 1].value;
+  }
+  auto low = std::size_t{};
+  auto high = count - 1;
+  while (high - low > 1) {
+    auto middle = low + (high - low) / 2;
+    if (time <= keys[middle].time) {
+      high = middle;
+    } else {
+      low = middle;
+    }
+  }
+  const auto &left = keys[low];
+  const auto &right = keys[high];
+  auto span = right.time - left.time;
+  auto t = (time - left.time) / span;
+  switch (left.interpolation) {
+  case 0:
+    return left.value;
+  case 1:
+    return left.value + (right.value - left.value) * t;
+  case 2:
+    return (2 * t * t * t - 3 * t * t + 1) * left.value +
+           (t * t * t - 2 * t * t + t) * span * left.outSlope +
+           (-2 * t * t * t + 3 * t * t) * right.value +
+           (t * t * t - t * t) * span * right.inSlope;
   default:
     return 0;
   }

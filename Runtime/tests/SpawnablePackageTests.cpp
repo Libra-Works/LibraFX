@@ -31,7 +31,7 @@ auto main(int argc, char** argv) -> int
         auto package = liberafx::SpawnablePackage{};
         require(liberafx::loadSpawnablePackage(bytes.data(), bytes.size(), package) == liberafx::Result::Ok,
             "Could not decode compiler-produced LFXP.");
-        require(package.packageVersion == 11 && package.parentBytecode.size() > 0 &&
+        require(package.packageVersion == 13 && package.parentBytecode.size() > 0 &&
             package.templates.size() == 2 && package.destroyRoutes.size() == 1 &&
             package.onStartNodeId.has_value() && package.autoDestroyWhenIdle &&
             !package.rootRenderConfiguration.empty() &&
@@ -69,40 +69,18 @@ auto main(int argc, char** argv) -> int
                 'p', 'r', 'o', 'g', 'r', 'a', 'm', 's', '"', ':', '[', ']', '}'},
             "Decoded LFXP optional/runtime metadata is incomplete.");
 
-        const auto legacyBytes = read(argv[3]);
-        auto legacy = liberafx::SpawnablePackage{};
-        require(liberafx::loadSpawnablePackage(legacyBytes.data(), legacyBytes.size(), legacy) ==
-            liberafx::Result::Ok && legacy.packageVersion == 9 &&
-            legacy.parentBytecode == package.parentBytecode && legacy.templates.size() == package.templates.size() &&
-            legacy.rootRenderConfiguration.empty() && legacy.rootGpuContainersJson.empty() &&
-            legacy.rootGpuProgramsJson.empty() &&
-            std::all_of(legacy.templates.begin(), legacy.templates.end(),
-                [](const auto& item) { return item.gpuProgramsJson.empty(); }),
-            "Legacy v1 LFXP data changed or invented root/program payloads.");
-        auto legacyHost = std::unique_ptr<liberafx::SpawnableHost>{};
-        require(liberafx::SpawnableHost::create(legacy, {}, legacyHost) == liberafx::Result::Ok &&
-            legacyHost != nullptr,
-            "CPU-only v1 package was no longer usable by the native host.");
-
-        const auto legacyV2Bytes = read(argv[4]);
-        auto legacyV2 = liberafx::SpawnablePackage{};
-        require(liberafx::loadSpawnablePackage(legacyV2Bytes.data(), legacyV2Bytes.size(), legacyV2) ==
-            liberafx::Result::Ok && legacyV2.packageVersion == 10 &&
-            legacyV2.rootRenderConfiguration == package.rootRenderConfiguration &&
-            legacyV2.rootGpuContainersJson == package.rootGpuContainersJson &&
-            legacyV2.rootGpuProgramsJson.empty() &&
-            std::all_of(legacyV2.templates.begin(), legacyV2.templates.end(),
-                [](const auto& item) { return item.gpuProgramsJson.empty(); }),
-            "Legacy v2 layout changed or invented executable GPU payloads.");
-        auto legacyV2Host = std::unique_ptr<liberafx::SpawnableHost>{};
-        require(liberafx::SpawnableHost::create(legacyV2, {}, legacyV2Host) == liberafx::Result::Ok &&
-            legacyV2Host != nullptr,
-            "CPU-only v2 package was no longer usable by the native host.");
+        for (auto index : {3, 4})
+        {
+            auto legacyBytes = read(argv[index]);
+            auto legacy = liberafx::SpawnablePackage{};
+            require(liberafx::loadSpawnablePackage(legacyBytes.data(), legacyBytes.size(), legacy) ==
+                liberafx::Result::UnsupportedBinary, "Legacy package version was accepted.");
+        }
 
         const auto gpuBytes = read(argv[5]);
         auto gpu = liberafx::SpawnablePackage{};
         require(liberafx::loadSpawnablePackage(gpuBytes.data(), gpuBytes.size(), gpu) ==
-            liberafx::Result::Ok && gpu.packageVersion == 11 && gpu.templates.size() == 1 &&
+            liberafx::Result::Ok && gpu.packageVersion == 13 && gpu.templates.size() == 1 &&
             gpu.rootGpuProgramsJson.size() > 0 && gpu.templates[0].gpuProgramsJson.size() > 0,
             "Could not decode the executable GPU package fixture.");
         const auto gpuContainersText = std::string(

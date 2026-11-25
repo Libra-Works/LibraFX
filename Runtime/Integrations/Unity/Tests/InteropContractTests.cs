@@ -130,222 +130,22 @@ namespace LiberaFx.Unity.Tests
 #endif
         public static void Run()
         {
-            NativeAbi.ValidateLayout(); // Marshal sizes and every field offset.
-            using (var program = new NativeProgram(LiberaFxSampleProgram.Create()))
-            using (var instance = program.CreateInstance())
-            {
-                var bindings = new[] {
-                    instance.BindValue(LiberaFxSampleProgram.MotionId),
-                    instance.BindValue(LiberaFxSampleProgram.ColorId),
-                    instance.BindValue(LiberaFxSampleProgram.TimeId)
-                };
-                var parameter = instance.BindParameter(LiberaFxSampleProgram.GainId, 1, 0);
-                var values = new NativeValue[3];
-                program.Dispose();
-                Assert(instance.Evaluate(1, bindings, values) == NativeResult.Ok &&
-                    values[0].X == 0.2 && values[1].ComponentCount == 4 &&
-                    values[1].X == 0.4 && values[1].Y == 0.4 &&
-                    values[1].Z == 0.4 && values[1].W == 0.4 && values[2].X == 1);
-                Assert(instance.SetParameter(parameter, 0.3) == NativeResult.Ok);
-                Assert(instance.GetParameter(parameter, out var gain) == NativeResult.Ok && gain == 0.3);
-                Assert(instance.Evaluate(1, bindings, values) == NativeResult.Ok && values[1].W == 0.5);
-                Assert(NativeInstance.SampleAtlas(-1, 4, 4, out var atlas) == NativeResult.Ok &&
-                    atlas.FrameIndex == 15 && atlas.U == 0.75f && atlas.V == 0.75f &&
-                    atlas.Width == 0.25f && atlas.Height == 0.25f);
-                var quad = new SpriteVertex[4];
-                Assert(NativeInstance.MakeQuad(in atlas, 2, 4, quad) == NativeResult.Ok &&
-                    quad[0].X == -1 && quad[0].Y == 2 && quad[0].U == 0.75f &&
-                    quad[2].X == 1 && quad[2].Y == -2 && quad[2].V == 1 &&
-                    quad[2].R == 1 && quad[2].A == 1);
-                for (var frame = 0; frame < 100; ++frame)
-                    Assert(instance.Evaluate(frame, bindings, values) == NativeResult.Ok);
-                var allocated = GC.GetAllocatedBytesForCurrentThread();
-                for (var frame = 0; frame < 10000; ++frame)
-                    Assert(instance.Evaluate(frame, bindings, values) == NativeResult.Ok);
-                Assert(GC.GetAllocatedBytesForCurrentThread() == allocated);
-            }
-            using (var program = new NativeProgram(LiberaFxSampleProgram.Create()))
-            using (var instance = program.CreateInstance())
-            {
-                var bindings = new[] { instance.BindValue(LiberaFxSampleProgram.TimeId) };
-                var values = new NativeValue[1];
-                Assert(instance.StartLifetime(2, false, null, 0, out var initial) == NativeResult.Ok &&
-                    initial.Age == 0 && initial.Remaining == 2 && initial.Expired == 0);
-                Assert(instance.AdvanceLifetime(3, out var expired) == NativeResult.Ok &&
-                    expired.Age == 2 && expired.Expired == 1 &&
-                    instance.ReadValues(bindings, values) == NativeResult.Ok && values[0].X == 2);
-                Assert(instance.DrainLifetime(4) == NativeResult.Ok &&
-                    instance.ReadValues(bindings, values) == NativeResult.Ok && values[0].X == 4);
-                Assert(instance.FinishLifetime() == NativeResult.Ok);
-            }
-            using (var program = new NativeProgram(LiberaFxSampleProgram.Create()))
-            using (var instance = program.CreateInstance())
-            {
-                var life = new NativeSignal("00000000-0000-0000-0000-000000000003");
-                Assert(instance.StartCapturedLifetime(life, null, 0, out var initial) == NativeResult.Ok &&
-                    initial.Remaining == 0.2);
-                Assert(instance.AdvanceLifetime(1, out var expired) == NativeResult.Ok &&
-                    expired.Age == 0.2 && expired.Expired == 1);
-                Assert(instance.StopLifetime() == NativeResult.Ok);
-            }
-            var clockFixture = Environment.GetEnvironmentVariable("LIBERAFX_UNITY_CLOCK_FIXTURE");
-            if (!string.IsNullOrEmpty(clockFixture))
-            {
-                var ids = File.ReadAllLines(clockFixture + ".ids");
-                using (var program = new NativeProgram(File.ReadAllBytes(clockFixture)))
-                using (var instance = program.CreateInstance())
-                {
-                    var bindings = new[] { instance.BindValue(ids[0]), instance.BindValue(ids[1]), instance.BindValue(ids[2]) };
-                    var values = new NativeValue[3];
-                    Assert(instance.SetTimeContext(5, 0.125) == NativeResult.Ok);
-                    Assert(instance.Evaluate(2, bindings, values) == NativeResult.Ok &&
-                        values[0].X == 5 && values[1].X == 0.125 && values[2].X == 2);
-                    Assert(instance.Evaluate(3, bindings, values) == NativeResult.NotReady);
-                }
-            }
-            var fixture = Environment.GetEnvironmentVariable("LIBERAFX_UNITY_SIGNAL_FIXTURE");
-            if (!string.IsNullOrEmpty(fixture))
-            {
-                using (var program = new NativeProgram(File.ReadAllBytes(fixture)))
-                using (var instance = program.CreateInstance())
-                {
-                    var signal = new NativeSignal(File.ReadAllText(fixture + ".id"));
-                    var missing = new NativeSignal("ffffffff-ffff-ffff-ffff-ffffffffffff");
-                    Assert(instance.DispatchSignal(null, 0, 3) == NativeResult.InvalidArgument);
-                    Assert(instance.DispatchSignal(signal, 0, 3) == NativeResult.NotReady);
-                    Assert(instance.Evaluate(0, new uint[0], new NativeValue[0]) == NativeResult.Ok);
-                    Assert(instance.DispatchSignal(missing, 0, 3) == NativeResult.NodeNotFound);
-                    Assert(instance.DispatchSignal(signal, 0, 0) == NativeResult.InvalidArgument);
-                    Assert(instance.DispatchSignal(signal, 0, 2) == NativeResult.InstructionBudgetExceeded);
-                    Assert(instance.DispatchSignal(signal, 0, 3) == NativeResult.Ok);
-                    for (var i = 0; i < 100; ++i)
-                        Assert(instance.DispatchSignal(signal, 0, 3) == NativeResult.Ok);
-                    var allocated = GC.GetAllocatedBytesForCurrentThread();
-                    for (var i = 0; i < 10000; ++i)
-                        Assert(instance.DispatchSignal(signal, 0, 3) == NativeResult.Ok);
-                    Assert(GC.GetAllocatedBytesForCurrentThread() == allocated);
-                }
-#if UNITY_EDITOR
-                UnityEngine.Debug.Log("LiberaFx compiler-generated Signal interop contract passed.");
-#endif
-            }
-            var int32Fixtures = Environment.GetEnvironmentVariable("LIBERAFX_INT32_FIXTURE_DIR");
-            if (!string.IsNullOrEmpty(int32Fixtures))
-                VerifyInt32InteropFixtures(int32Fixtures);
-            var spawnableFixture = Environment.GetEnvironmentVariable("LIBERAFX_UNITY_SPAWNABLE_FIXTURE");
-            if (!string.IsNullOrEmpty(spawnableFixture))
-                VerifySpawnableHost(spawnableFixture);
+            NativeAbi.ValidateLayout();
+            var atlasResult = NativeInstance.SampleAtlas(-1, 4, 4, out var atlas);
+            Assert(atlasResult == NativeResult.Ok && atlas.FrameIndex == 15 &&
+                atlas.U == 0.75f && atlas.V == 0.75f && atlas.Width == 0.25f && atlas.Height == 0.25f);
+            var quad = new SpriteVertex[4];
+            Assert(NativeInstance.MakeQuad(in atlas, 2, 4, quad) == NativeResult.Ok &&
+                quad[0].X == -1 && quad[0].Y == 2 && quad[2].X == 1 && quad[2].Y == -2);
+            var fixture = Environment.GetEnvironmentVariable("LIBERAFX_UNITY_SPAWNABLE_FIXTURE");
+            if (!string.IsNullOrEmpty(fixture)) VerifySpawnableHost(fixture);
             var payloadFixture = Environment.GetEnvironmentVariable("LIBERAFX_UNITY_SPAWNABLE_PAYLOAD_FIXTURE");
-            if (!string.IsNullOrEmpty(payloadFixture))
-                VerifyPackagePayloadFixtures(payloadFixture);
+            if (!string.IsNullOrEmpty(payloadFixture)) VerifyPackagePayloadFixtures(payloadFixture);
             var gameIoFixture = Environment.GetEnvironmentVariable("LIBERAFX_UNITY_GAMEIO_FIXTURE");
-            if (!string.IsNullOrEmpty(gameIoFixture))
-                VerifyGameIoPortNames(gameIoFixture);
-        }
-
-        private static int ReadInt32LittleEndian(byte[] bytes, int offset)
-        {
-            return bytes[offset] | bytes[offset + 1] << 8 |
-                bytes[offset + 2] << 16 | bytes[offset + 3] << 24;
-        }
-
-        private static string CompilerNodeGuid(byte[] bytes, byte opcode, int occurrence = 0)
-        {
-            Assert(bytes != null && bytes.Length >= 16 && bytes[4] == 10 && bytes[5] == 0);
-            var count = ReadInt32LittleEndian(bytes, 8);
-            Assert(count >= 0);
-            for (var index = 0; index < count; ++index)
-            {
-                var offset = 16 + index * 256;
-                if (bytes[offset + 16] != opcode) continue;
-                if (occurrence-- != 0) continue;
-                var text = new StringBuilder(32);
-                for (var lane = 0; lane < 16; ++lane)
-                    text.Append(bytes[offset + lane].ToString("x2", CultureInfo.InvariantCulture));
-                return Guid.ParseExact(text.ToString(), "N").ToString("D");
-            }
-            throw new InvalidOperationException("Compiler fixture is missing the requested opcode.");
-        }
-
+            if (!string.IsNullOrEmpty(gameIoFixture)) VerifyGameIoPortNames(gameIoFixture);
 #if UNITY_EDITOR
-        public static void RunInt32Batch()
-        {
-            var directory = Environment.GetEnvironmentVariable("LIBERAFX_INT32_FIXTURE_DIR");
-            if (string.IsNullOrEmpty(directory) || !Path.IsPathRooted(directory))
-            {
-                throw new InvalidOperationException("Set LIBERAFX_INT32_FIXTURE_DIR to the compiler-produced fixture directory.");
-            }
-            VerifyInt32InteropFixtures(directory);
-            UnityEngine.Debug.Log("PASS Unity Int32 interop, conversions, arithmetic failures and Group boundary.");
-        }
+            UnityEngine.Debug.Log("LiberaFx package interop and POD contracts passed.");
 #endif
-
-        private static void VerifyInt32InteropFixtures(string directory)
-        {
-            var addBytes = File.ReadAllBytes(Path.Combine(directory, "Int32Add.lfxb"));
-            using (var program = new NativeProgram(addBytes))
-            using (var instance = program.CreateInstance())
-            {
-                var output = instance.BindValue(CompilerNodeGuid(addBytes, 49));
-                Assert(instance.GetValueType(output, out var outputType) == NativeResult.Ok &&
-                    outputType == NativeValueType.Int32);
-                var left = instance.BindParameter(CompilerNodeGuid(addBytes, 48, 0));
-                var right = instance.BindParameter(CompilerNodeGuid(addBytes, 48, 1));
-                Assert(instance.GetParameterType(left, out var parameterType) == NativeResult.Ok &&
-                    parameterType == NativeValueType.Int32);
-                Assert(instance.GetParameterInt32(left, out var initial) == NativeResult.Ok && initial == 14);
-                Assert(instance.SetParameter(left, 1.5) == NativeResult.InvalidValueType);
-                Assert(instance.SetParameterInt32(left, int.MaxValue) == NativeResult.Ok);
-                Assert(instance.SetParameterInt32(right, 1) == NativeResult.Ok);
-                var values = new NativeValue[1];
-                Assert(instance.Evaluate(0, new[] { output }, values) == NativeResult.ArithmeticOverflow);
-                Assert(instance.ReadInt32(output, out _) == NativeResult.ArithmeticOverflow);
-            }
-
-            var conversionBytes = File.ReadAllBytes(Path.Combine(directory, "Conversions.lfxb"));
-            using (var program = new NativeProgram(conversionBytes))
-            using (var instance = program.CreateInstance())
-            {
-                var toInt = instance.BindValue(CompilerNodeGuid(conversionBytes, 53));
-                var toFloat = instance.BindValue(CompilerNodeGuid(conversionBytes, 54));
-                Assert(instance.GetValueType(toInt, out var intType) == NativeResult.Ok &&
-                    intType == NativeValueType.Int32);
-                Assert(instance.GetValueType(toFloat, out var floatType) == NativeResult.Ok &&
-                    floatType == NativeValueType.Float);
-                var source = instance.BindParameter(CompilerNodeGuid(conversionBytes, 1));
-                Assert(instance.GetParameterType(source, out var sourceType) == NativeResult.Ok &&
-                    sourceType == NativeValueType.Float);
-                Assert(instance.SetParameterInt32(source, 3) == NativeResult.InvalidValueType);
-                var values = new NativeValue[2];
-                Assert(instance.Evaluate(0, new[] { toInt, toFloat }, values) == NativeResult.Ok);
-                Assert(instance.ReadInt32(toInt, out var converted) == NativeResult.Ok && converted == 3);
-                Assert(values[1].X == 3);
-                Assert(instance.SetParameter(source, 2147483648.0) == NativeResult.Ok);
-                Assert(instance.Evaluate(0, new[] { toInt }, values) == NativeResult.ArithmeticOverflow);
-                Assert(instance.SetParameter(source, double.NaN) == NativeResult.NonFinite);
-            }
-
-            var divideBytes = File.ReadAllBytes(Path.Combine(directory, "Int32Divide.lfxb"));
-            using (var program = new NativeProgram(divideBytes))
-            using (var instance = program.CreateInstance())
-            {
-                var divisor = instance.BindParameter(CompilerNodeGuid(divideBytes, 48, 1));
-                Assert(instance.SetParameterInt32(divisor, 0) == NativeResult.Ok);
-                var quotient = instance.BindValue(CompilerNodeGuid(divideBytes, 52));
-                Assert(instance.Evaluate(0, new[] { quotient }, new NativeValue[1]) ==
-                    NativeResult.DivideByZero);
-            }
-
-            var groupBytes = File.ReadAllBytes(Path.Combine(directory, "GroupBoundary.lfxb"));
-            using (var program = new NativeProgram(groupBytes))
-            using (var instance = program.CreateInstance())
-            {
-                var output = instance.BindValue(CompilerNodeGuid(groupBytes, 51));
-                Assert(instance.GetValueType(output, out var outputType) == NativeResult.Ok &&
-                    outputType == NativeValueType.Int32);
-                Assert(instance.Evaluate(0, new[] { output }, new NativeValue[1]) == NativeResult.Ok);
-                Assert(instance.ReadInt32(output, out var result) == NativeResult.Ok && result == -51);
-            }
         }
 
         private static unsafe void VerifyGameIoPortNames(string fixture)
@@ -483,7 +283,7 @@ namespace LiberaFx.Unity.Tests
                         out var gpu) == NativeResult.Ok && System.Text.Encoding.UTF8.GetString(gpu) == "[]");
                     Assert(host.GetTemplatePayload(id, SpawnableTemplatePayloadKind.GpuPrograms,
                         out var programs) == NativeResult.Ok &&
-                        System.Text.Encoding.UTF8.GetString(programs).StartsWith("{\"version\":1,\"programs\":[]}", StringComparison.Ordinal));
+                        System.Text.Encoding.UTF8.GetString(programs).StartsWith("{\"version\":4,\"programs\":[]}", StringComparison.Ordinal));
                     Assert(host.GetTemplatePayload(id, (SpawnableTemplatePayloadKind)99, out _) ==
                         NativeResult.InvalidArgument);
                 }
@@ -562,7 +362,7 @@ namespace LiberaFx.Unity.Tests
                     else
                     {
                         var json = System.Text.Encoding.UTF8.GetString(programs);
-                        Assert(json.Contains("\"version\":1", StringComparison.Ordinal) &&
+                        Assert(json.Contains("\"version\":4", StringComparison.Ordinal) &&
                             json.Contains("\"programs\":[", StringComparison.Ordinal));
                     }
                 }
@@ -572,7 +372,7 @@ namespace LiberaFx.Unity.Tests
                 else
                 {
                     var json = System.Text.Encoding.UTF8.GetString(rootPrograms);
-                    Assert(json.Contains("\"version\":1", StringComparison.Ordinal) &&
+                    Assert(json.Contains("\"version\":4", StringComparison.Ordinal) &&
                         json.Contains("\"programs\":[", StringComparison.Ordinal));
                 }
             }

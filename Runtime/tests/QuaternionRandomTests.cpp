@@ -1,3 +1,5 @@
+#include "liberafx/LbSpawnablePackage.h"
+#include "ProgramFixture.h"
 #include "../Core/QuaternionRandom/LbQuaternionRandomNodes.h"
 #include "liberafx/math/LbQuaternionMath.h"
 #include "liberafx/math/LbRandomMath.h"
@@ -276,11 +278,13 @@ void runRegistryTests()
                 bytes[96 + input * 32 + lane * 8 + 7] = 0x3f;
             }
         }
+        auto current = runtime_test_fixture::promoteSimpleProgram(
+            std::vector<std::uint8_t>(bytes.begin(), bytes.end()), &entry, 1);
         auto binding = CustomNodeBinding{};
         auto program = Program{};
-        assert(Program::load(bytes.data(), bytes.size(), nullptr, 0, &binding, 1, program) == Result::Ok);
+        assert(Program::load(current.data(), current.size(), nullptr, 0, &binding, 1, program) == Result::Ok);
         assert(std::memcmp(binding.descriptor->typeId, entry.typeId, 16) == 0);
-        alignas(16) auto work = std::array<double, 4>{};
+        alignas(16) auto work = std::array<double, 128>{};
         auto instance = Instance{};
         assert(instance.initialize(program, work.data(), work.size()) == Result::Ok);
         assert(instance.updateAsync(0, enqueue, nullptr) == Result::Ok && instance.result() == Result::Ok);
@@ -291,20 +295,24 @@ void runRegistryTests()
     }
 }
 
-// Internal compiler-to-native raw program fixture from WriteNativeFixtures.
-// Program::load does not read unified EffectBinary containers. This path does not
+// Compiler-generated LFXP fixture from WriteNativeFixtures. This path does not
 // invoke the standalone converter and is not executable-converter integration coverage.
 void runCompiledFixture(const char* path, bool random)
 {
     auto file = std::ifstream(path, std::ios::binary);
     assert(file.good());
     auto bytes = std::vector<std::uint8_t>(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>{});
+    auto package = SpawnablePackage{};
+    assert(loadSpawnablePackage(bytes.data(), bytes.size(), package) == Result::Ok);
+    const auto& programBytes = package.parentBytecode;
     auto program = Program{};
     auto bindings = std::array<CustomNodeBinding, 2>{};
-    assert(Program::load(bytes.data(), bytes.size(), nullptr, 0, bindings.data(), bindings.size(), program) == Result::Ok);
-    alignas(16) auto work = std::array<double, 8>{};
+    assert(Program::load(programBytes.data(), programBytes.size(), nullptr, 0, bindings.data(), bindings.size(), program) == Result::Ok);
+    auto wordCount = (program.workBytes() + sizeof(std::max_align_t) - 1) / sizeof(std::max_align_t);
+    auto work = std::vector<std::max_align_t>(wordCount);
     auto instance = Instance{};
-    assert(instance.initialize(program, work.data(), work.size()) == Result::Ok);
+    assert(instance.initialize(program, reinterpret_cast<double*>(work.data()),
+        work.size() * sizeof(std::max_align_t) / sizeof(double)) == Result::Ok);
     assert(instance.updateAsync(7, enqueue, nullptr) == Result::Ok && instance.result() == Result::Ok);
     auto expected = math::LbVector{};
     if (random)
@@ -319,7 +327,8 @@ void runCompiledFixture(const char* path, bool random)
                     matrix[4] + 2 * matrix[5] - 3 * matrix[6],
                     matrix[8] + 2 * matrix[9] - 3 * matrix[10]};
     }
-    checkVector({work[4], work[5], work[6]}, expected);
+    auto values = reinterpret_cast<const double*>(work.data());
+    checkVector({values[4], values[5], values[6]}, expected);
 }
 }
 

@@ -15,9 +15,8 @@ void System::buildBatches()
 void System::buildBatch(std::uint32_t stageIndex)
 {
     const auto& stage = stages[stageIndex];
-    // Start with the validated linear V3 subset. Stateful/logical nodes, IO,
-    // fanout, guards and later formats retain their full interpreter semantics.
-    if (stage.program.version() != 3 || stage.program.nodeCount() > ParticleBatchPlan::maximumNodes ||
+    // Only the validated linear subset can run without the general VM.
+    if (stage.program.version() != 11 || stage.program.nodeCount() > ParticleBatchPlan::maximumNodes ||
         !stage.io.empty() || !nonzero(stage.entry)) return;
     auto plan = ParticleBatchPlan{};
     const auto count = stage.program.nodeCount();
@@ -52,6 +51,20 @@ void System::buildBatch(std::uint32_t stageIndex)
         decoded.output = index;
         decoded.width = bytes[17];
         const auto opcode = bytes[16];
+        if (branchGuard(bytes, 11) != noInput)
+        {
+            return;
+        }
+        if (opcode == customSignalOpcode)
+        {
+            for (auto branch = 0u; branch < 4; ++branch)
+            {
+                if (read32(bytes + 228 + branch * 8) != 0)
+                {
+                    return;
+                }
+            }
+        }
         if (opcode == customParameterOpcode || opcode == customSignalOpcode) {
             const auto* binding = stage.bindings[index].descriptor;
             if (!binding || binding->stateBytes != 0 || binding->initialize || binding->cleanup) return;
@@ -129,10 +142,10 @@ void System::buildBatch(std::uint32_t stageIndex)
     // serves unbatched births and ordered error fallback.
     auto& work = stageIndex == 1 ? sharedUpdateWork : sharedSpawnWork;
     auto& handle = stageIndex == 1 ? sharedUpdateEntry : sharedSpawnEntry;
-    work.allocate(stage.program.workBytes(), stage.program.workAlignment());
+    work.allocate(stage.workStride, stage.program.workAlignment());
     auto reference = std::make_unique<Instance>();
     if (reference->initialize(stage.program, static_cast<double*>(work.data),
-            stage.program.workBytes()/sizeof(double)) != Result::Ok ||
+            stage.workStride / sizeof(double)) != Result::Ok ||
         reference->bindSignal(stage.entry.data(), handle) != Result::Ok) return;
     (stageIndex == 1 ? sharedUpdate : sharedSpawn) = std::move(reference);
     stages[stageIndex].work.reset();
@@ -364,8 +377,8 @@ auto System::spawnBatches(std::uint32_t count, double time, const HostQualitySna
     constexpr auto lanes = ParticleBatchPlan::batchSize;
     std::array<std::uint32_t,lanes> particles{}, updating{};
     auto cursor=std::uint32_t{};
-    const auto reset = [&](std::uint32_t slot, std::uint64_t id) noexcept {
-        particleData.reset(slot, id, realTime);
+    const auto reset = [&](std::uint32_t slot, std::uint64_t particleId) noexcept {
+        particleData.reset(slot, particleId, realTime);
     };
     while (count!=0) {
         auto size=std::size_t{};

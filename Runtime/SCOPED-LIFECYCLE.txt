@@ -181,7 +181,7 @@ NotifyEndRequest and NotifyChildEndRequest. SpawnableHostEvent.Kind remains
 uint for compatibility, with an additional typed EventKind property and
 SpawnableHostEventKind.ForceTerminated=5.
 
-Unity LiberaFxSpawnableComponent and Unreal ULibraEffectComponent (the existing
+Unity LiberaFxSpawnableComponent and Unreal ULibraSpawnableComponent (the existing
 public whole-effect owner) expose those same four operations. UE forwards to
 its existing internal Spawnable playback component; authors do not need to
 add another component. The scoped instance argument in Blueprint preserves

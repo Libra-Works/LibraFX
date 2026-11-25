@@ -72,7 +72,7 @@ namespace LiberaFx.Unity
                 return true;
             }
             var next = BinaryPrimitives.ReadUInt64LittleEndian(header.Slice(8));
-            if (next == 0 || next < sequence)
+            if (next == 0 || next <= sequence)
             {
                 return false;
             }
@@ -84,10 +84,16 @@ namespace LiberaFx.Unity
             }
             if (kind == 5)
             {
-                if (!effect) return false;
+                if (!effect || next == 0 || next <= sequence) return false;
                 var jsonBytes = new byte[frame.Length - 48];
                 Buffer.BlockCopy(frame, 48, jsonBytes, 0, jsonBytes.Length);
+                var delta = JsonUtility.FromJson<ParameterDeltaHeader>(Encoding.UTF8.GetString(jsonBytes));
+                if (delta == null || delta.type != "parameter_delta" || delta.sequence < 1 ||
+                    (ulong)delta.sequence != next) return false;
                 if (effect.ApplyParameterDelta(jsonBytes) != LiberaFxNative.NativeResult.Ok) return false;
+                var refresh = effect.RefreshPreview();
+                if (refresh != LiberaFxNative.NativeResult.Ok)
+                    throw new InvalidOperationException("Could not refresh paused Unity preview after parameter delta: " + refresh);
                 sequence = next;
                 return true;
             }
@@ -219,8 +225,7 @@ namespace LiberaFx.Unity
         }
         [Serializable] private sealed class SignalRequest { public string nodeId; }
         [Serializable] private sealed class PreviewControl { public string type; public double[] offset; public SignalRequest[] requests; }
-        [Serializable] private sealed class ParameterUpdate { public string containerId; public string nodeId; public uint inputSlot; public uint component; public bool isInt32; public int intValue; public double floatValue; }
-        [Serializable] private sealed class ParameterDeltaPayload { public string type; public long sequence; public ParameterUpdate[] updates; }
+        [Serializable] private sealed class ParameterDeltaHeader { public string type; public long sequence; }
     }
 }
 #endif

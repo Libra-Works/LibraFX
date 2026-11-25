@@ -235,7 +235,7 @@ bool FLibraSpawnableFluidFixtureTest::RunTest(const FString&)
     auto runFixture = [this, world, &fixtureDirectory](const TCHAR* name, bool expectParticle,
         bool expectTemplateFluid)
     {
-        auto packagePath = FPaths::Combine(fixtureDirectory, FString(name) + TEXT(".lfxb"));
+        auto packagePath = FPaths::Combine(fixtureDirectory, FString(name) + TEXT(".lfxp"));
         auto bytes = TArray<uint8>{};
         if (!TestTrue(FString::Printf(TEXT("%s compiler package reads"), name),
             FFileHelper::LoadFileToArray(bytes, *packagePath))) return false;

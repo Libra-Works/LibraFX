@@ -1,6 +1,6 @@
 @tool
 extends EditorPlugin
-## Godot EditorPlugin providing .lfxb import and an isolated LIBERA FX Live Preview dock.
+## Godot EditorPlugin providing .lfxp import and an isolated LIBERA FX Live Preview dock.
 
 const ImportPluginScript := preload("liberafx_import_plugin.gd")
 const LivePreviewScript := preload("liberafx_live_preview.gd")

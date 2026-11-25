@@ -941,7 +941,7 @@ bool FLibraGeneratedDrawConsumerRhiTest::RunTest(const FString& parameters)
     {
         auto bytes = TArray<uint8>{};
         if (!TestTrue(TEXT("Generated ordinary draw fixture loads"), FFileHelper::LoadFileToArray(bytes,
-            *FPaths::Combine(fixtureDirectory, FString(mode) + TEXT(".lfxb")))))
+            *FPaths::Combine(fixtureDirectory, FString(mode) + TEXT(".lfxp")))))
         {
             return false;
         }

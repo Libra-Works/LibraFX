@@ -452,7 +452,7 @@ namespace LiberaFx.Unity.Editor
                     }
                     finally { scope.Dispose(); }
                 }
-                File.Copy(Path.Combine(fixtureDir, "mixed.lfxb"), folder + "/Mixed.lfxp");
+                File.Copy(Path.Combine(fixtureDir, "mixed.lfxp"), folder + "/Mixed.lfxp");
                 AssetDatabase.ImportAsset(folder + "/Mixed.lfxp", ImportAssetOptions.ForceSynchronousImport);
                 var package = AssetDatabase.LoadAssetAtPath<LiberaFxSpawnableAsset>(folder + "/Mixed.lfxp");
                 Require(package, "Could not import the mixed compiler package.");

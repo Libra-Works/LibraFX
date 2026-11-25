@@ -215,7 +215,7 @@ bool FLibraResourceIdentityTest::RunTest(const FString&)
     if (field(foundLocator.ToSharedRef(), TEXT("kind")) != TEXT("vector") ||
         !foundLocator->TryGetNumberField(TEXT("association"), association) ||
         association != static_cast<int32>(EMaterialParameterAssociation::GlobalParameter) ||
-        !foundLocator->TryGetNumberField(TEXT("index"), index) || index != INDEX_NONE ||
+        !foundLocator->TryGetNumberField(TEXT("index"), index) || index != static_cast<double>(INDEX_NONE) ||
         !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(
             field(foundLocator.ToSharedRef(), TEXT("defaultValueJson"))), defaults) || defaults.Num() != 4 ||
         defaults[0]->AsNumber() != defaultTint.R || defaults[1]->AsNumber() != defaultTint.G ||

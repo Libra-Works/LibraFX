@@ -112,9 +112,7 @@ auto LifecycleSessionEffect::read(const std::uint8_t nodeId[16], double out[4],
 }
 auto LifecycleSessionEffect::restartable() const noexcept -> bool
 {
-    // V1/V2 contain pure arithmetic only: no custom state, logical events,
-    // child spawns, deferred callbacks, engine objects or game IO to migrate.
-    return program_->version() >= 1 && program_->version() <= 2;
+    return program_->isPureRestartable();
 }
 auto LifecycleSessionEffect::stagingMemory() const noexcept -> SessionStagingMemory
 {

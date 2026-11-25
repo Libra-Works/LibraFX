@@ -1,3 +1,4 @@
+#include "ProgramFixture.h"
 #include "liberafx/LbEffectWorld.h"
 #include "liberafx/LbSpawnableHostPool.h"
 #include <algorithm>
@@ -38,6 +39,7 @@ SpawnablePackage basic()
     record[16] = 1;
     record[17] = 1;
     std::fill_n(record + 24, 8, 0xff);
+    package.parentBytecode = runtime_test_fixture::promoteSimpleProgram(package.parentBytecode);
     return package;
 }
 SpawnablePackage custom(const CustomNodeDescriptor &descriptor)
@@ -61,6 +63,7 @@ SpawnablePackage custom(const CustomNodeDescriptor &descriptor)
         std::fill_n(record + 48 + slot * 8, 4, 0xff);
         std::fill_n(record + 208 + slot * 4, 4, 0xff);
     }
+    package.parentBytecode = runtime_test_fixture::promoteSimpleProgram(package.parentBytecode);
     return package;
 }
 struct Callbacks

@@ -47,12 +47,10 @@ inline auto validUtf8(const std::uint8_t *text, std::size_t length) noexcept
 inline auto validGameIoMetadata(const std::uint8_t *data, std::size_t size,
                                 std::size_t offset,
                                 std::uint32_t instructionCount,
-                                std::uint16_t version,
+                                std::uint16_t /*version*/,
                                 std::size_t &metadataEnd) noexcept -> bool {
   constexpr auto headerSize = std::size_t{8};
-  constexpr auto legacyRecordSize = std::size_t{24};
-  constexpr auto recordSize = std::size_t{72};
-  auto currentRecordSize = version == 6 ? legacyRecordSize : recordSize;
+  constexpr auto currentRecordSize = std::size_t{72};
   if (offset > size || size - offset < headerSize ||
       std::memcmp(data + offset, "LFIO", 4) != 0 ||
       read16(data + offset + 6) != 0) {
@@ -68,17 +66,15 @@ inline auto validGameIoMetadata(const std::uint8_t *data, std::size_t size,
       return false;
     }
     auto record = data + cursor;
-    auto kind = version == 6 ? record[16] : record[64];
-    auto width = version == 6 ? record[17] : record[65];
-    auto isColor = version == 6 ? record[18] : record[66];
-    auto bindingCount = version == 6 ? std::uint8_t{1} : record[67];
-    auto nameLength = read16(record + (version == 6 ? 20 : 68));
+    auto kind = record[64];
+    auto width = record[65];
+    auto isColor = record[66];
+    auto bindingCount = record[67];
+    auto nameLength = read16(record + 68);
     auto matrix = width == 16;
-    if (kind > (version == 6 ? 3 : 4) || isColor > 1 || nameLength == 0 ||
-        nameLength > 128 ||
-        (version == 6 && (record[19] != 0 || read16(record + 22) != 0)) ||
-        (version >= 7 &&
-         (read16(record + 70) != 0 || bindingCount != (matrix ? 4 : 1))) ||
+    if (kind > 4 || isColor > 1 || nameLength == 0 ||
+        nameLength > 128 || read16(record + 70) != 0 ||
+        bindingCount != (matrix ? 4 : 1) ||
         (kind == 1 || kind == 3
              ? width != 0 || isColor != 0 || bindingCount != 1
              : (matrix ? kind == 1 || kind == 3 || isColor != 0
@@ -94,7 +90,7 @@ inline auto validGameIoMetadata(const std::uint8_t *data, std::size_t size,
       return false;
     }
     for (auto row = 0u; row < bindingCount; ++row) {
-      auto nodeId = version == 6 ? record : record + row * 16;
+      auto nodeId = record + row * 16;
       auto emptyId = true;
       for (auto byte = 0u; byte < 16; ++byte) {
         emptyId = emptyId && nodeId[byte] == 0;
@@ -131,12 +127,9 @@ inline auto validGameIoMetadata(const std::uint8_t *data, std::size_t size,
     }
     for (auto previous = offset + headerSize; previous < cursor;) {
       auto previousRecord = data + previous;
-      auto previousKind =
-          version == 6 ? previousRecord[16] : previousRecord[64];
-      auto previousBindingCount =
-          version == 6 ? std::uint8_t{1} : previousRecord[67];
-      auto previousNameLength =
-          read16(previousRecord + (version == 6 ? 20 : 68));
+      auto previousKind = previousRecord[64];
+      auto previousBindingCount = previousRecord[67];
+      auto previousNameLength = read16(previousRecord + 68);
       auto duplicateName = previousNameLength == nameLength &&
                            std::memcmp(data + previous + currentRecordSize,
                                        data + nameOffset, nameLength) == 0;
@@ -146,10 +139,8 @@ inline auto validGameIoMetadata(const std::uint8_t *data, std::size_t size,
       for (auto row = 0u; row < bindingCount; ++row) {
         for (auto previousRow = 0u; previousRow < previousBindingCount;
              ++previousRow) {
-          if (std::memcmp(version == 6 ? record : record + row * 16,
-                          version == 6 ? previousRecord
-                                       : previousRecord + previousRow * 16,
-                          16) == 0 &&
+          if (std::memcmp(record + row * 16,
+                          previousRecord + previousRow * 16, 16) == 0 &&
               kind != 2 && previousKind != 2) {
             return false;
           }
@@ -160,7 +151,7 @@ inline auto validGameIoMetadata(const std::uint8_t *data, std::size_t size,
     cursor = nameOffset + nameLength + 1;
   }
   metadataEnd = cursor;
-  return version >= 9 ? cursor <= size : cursor == size;
+  return cursor <= size;
 }
 
 inline auto validEnumBranchMetadata(

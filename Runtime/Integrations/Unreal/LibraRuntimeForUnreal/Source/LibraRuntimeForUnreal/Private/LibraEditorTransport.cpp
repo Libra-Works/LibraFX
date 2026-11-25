@@ -23,6 +23,7 @@
 #pragma push_macro("UI")
 #pragma push_macro("min")
 #pragma push_macro("max")
+#pragma push_macro("GetObject")
 #undef UI
 // OpenSSL's UI typedef conflicts with UE's UI namespace.
 #define UI LIBRA_OPENSSL_UI
@@ -35,6 +36,7 @@ THIRD_PARTY_INCLUDES_START
 #include <openssl/x509.h>
 #include <openssl/sha.h>
 THIRD_PARTY_INCLUDES_END
+#pragma pop_macro("GetObject")
 #pragma pop_macro("max")
 #pragma pop_macro("min")
 #pragma pop_macro("UI")

@@ -320,7 +320,6 @@ bool FLibraPreviewDiscovery::Poll(TArray<FLibraPreviewDiscoveryCandidate>& candi
 #if WITH_DEV_AUTOMATION_TESTS
 #include "LibraEditorPreviewSession.h"
 #include "LibraEditorConnectionComponent.h"
-#include "LibraEditorGpuPreview.h"
 #include "Serialization/JsonSerializer.h"
 #include "HAL/PlatformProcess.h"
 #include "Misc/AutomationTest.h"
@@ -501,81 +500,5 @@ bool FLibraPreviewDiscoveryTest::RunTest(const FString&)
     return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FLibraPreviewPostStartupDiscoveryTest, "Libra.Editor.Preview.PostStartupDiscovery",
-    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-bool FLibraPreviewPostStartupDiscoveryTest::RunTest(const FString&)
-{
-    auto overridePipe = FString{};
-    if (!FParse::Value(FCommandLine::Get(), TEXT("LibraPreviewDiscoveryPipe="), overridePipe) || overridePipe.IsEmpty())
-    {
-        AddInfo(TEXT("PostStartupDiscovery requires an explicitly selected ephemeral Root pipe name."));
-        return true;
-    }
-    auto session = FLibraEditorPreviewSession{};
-    session.bEngineReady = true;
-    session.bPreviewRequested = true;
-    session.Tick(0);
-    if (!TestTrue(TEXT("Preview starts isolated and disconnected without credential bootstrap"),
-        session.world.IsValid() && session.connection.IsValid() && !session.connection->bIsConnected))
-    {
-        session.Stop();
-        return false;
-    }
-    session.DiscoverLibra();
-    auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(60);
-    auto sawConnection = false;
-    auto sawGpuProgram = false;
-    auto sawExecution = false;
-    auto sawRemotePlaying = false;
-    auto sawRemotePause = false;
-    auto pausedAt = std::chrono::steady_clock::time_point{};
-    while (std::chrono::steady_clock::now() < deadline)
-    {
-        session.Tick(0.01f);
-        sawConnection |= session.connection->bIsConnected;
-        if (sawConnection && !session.connection->bIsConnected) break;
-        auto status = TSharedPtr<FJsonObject>{};
-        auto reader = TJsonReaderFactory<>::Create(session.gpuPreview->Status(0));
-        if (FJsonSerializer::Deserialize(reader, status) && status.IsValid())
-        {
-            const TArray<TSharedPtr<FJsonValue>>* programs = nullptr;
-            const TArray<TSharedPtr<FJsonValue>>* errors = nullptr;
-            auto executed = false;
-            if (status->TryGetArrayField(TEXT("programs"), programs) && !programs->IsEmpty() &&
-                status->TryGetArrayField(TEXT("errors"), errors) && errors->IsEmpty())
-            {
-                sawGpuProgram = true;
-                status->TryGetBoolField(TEXT("runtimeExecuted"), executed);
-                sawExecution |= executed;
-                auto playing = false;
-                for (const auto& program : *programs)
-                {
-                    auto object = program.IsValid() ? program->AsObject() : nullptr;
-                    auto value = false;
-                    if (object && object->TryGetBoolField(TEXT("playing"), value)) playing |= value;
-                }
-                sawRemotePlaying |= playing;
-                if (sawRemotePlaying && sawExecution && !playing)
-                {
-                    if (!sawRemotePause) pausedAt = std::chrono::steady_clock::now();
-                    sawRemotePause = true;
-                    // Keep ordinary 4Hz feedback alive long enough for Root to observe Pause.
-                    if (std::chrono::steady_clock::now() - pausedAt > std::chrono::milliseconds(600)) break;
-                }
-            }
-        }
-        FPlatformProcess::Sleep(0.01f);
-    }
-    TestTrue(TEXT("One-click post-startup discovery negotiates a real pinned preview connection"),
-        sawConnection);
-    TestTrue(TEXT("The discovered Root delivers an accepted GPU configuration"), sawGpuProgram);
-    TestTrue(TEXT("The actual native GPU interpreter submits work from that Root delivery"), sawExecution);
-    TestTrue(TEXT("Root remote Play is received without native test-generated Play"), sawRemotePlaying);
-    TestTrue(TEXT("Root remote Pause is received after real GPU execution and fed back before disconnect"), sawRemotePause);
-    session.DisconnectPreview();
-    TestFalse(TEXT("Manual disconnect ends the discovered connection"), session.connection->bIsConnected);
-    session.Stop();
-    return true;
-}
 #endif

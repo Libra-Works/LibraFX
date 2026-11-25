@@ -13,7 +13,7 @@ func run() -> void:
 				"Extension library loaded"):
 			return
 
-	var package := FileAccess.get_file_as_bytes("res://flexible-plane.lfxb")
+	var package := FileAccess.get_file_as_bytes("res://flexible-plane.lfxp")
 	if not check(not package.is_empty(), "Synthetic Flexible Plane package is available"):
 		return
 	var player: Variant = ClassDB.instantiate("LibraEffectPlayer")

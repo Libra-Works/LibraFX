@@ -127,15 +127,23 @@ func consume(bytes: PackedByteArray) -> Dictionary:
 			_seeking = false
 			return {"result": 0, "resync": false, "reset": true}
 		return _consume_signals(bytes.slice(HEADER_BYTES))
-	if sequence < _sequence:
-		return {"result": 0, "resync": false}
 	if kind == 5:
-		if not _has_program or not _owns_player():
-			return {"result": 0, "resync": true}
+		if sequence <= 0 or sequence <= _sequence or not _has_program or not _owns_player():
+			return {"result": 0, "resync": sequence > 0 and sequence <= _sequence}
+		var delta: Variant = JSON.parse_string(bytes.slice(HEADER_BYTES).get_string_from_utf8())
+		if not delta is Dictionary or delta.get("type") != "parameter_delta" \
+				or typeof(delta.get("sequence")) != TYPE_INT or int(delta["sequence"]) != sequence:
+			return _fail("Parameter delta sequence does not match its preview frame.")
 		if int(_player.call("apply_parameter_delta", bytes.slice(HEADER_BYTES))) != 0:
 			return {"result": 0, "resync": true}
+		# The dedicated preview player is paused between explicit editor ticks.
+		# Re-evaluate the current time and refresh render adapters without advancing.
+		if int(_player.call("advance", 0.0)) != 0:
+			return _fail("Godot could not refresh the paused parameter delta.", ERR_FAILED)
 		_sequence = sequence
 		return {"result": 0, "resync": false, "sequence": sequence}
+	if sequence < _sequence:
+		return {"result": 0, "resync": false}
 	if kind == 2 and (not _has_program or base != _sequence or sequence == _sequence):
 		return {"result": 0, "resync": true}
 	if kind == 3:
@@ -144,11 +152,8 @@ func consume(bytes: PackedByteArray) -> Dictionary:
 		return {"result": 0, "resync": false, "diagnostic": error}
 	if kind == 1:
 		var package := bytes.slice(HEADER_BYTES)
-		# Ignore an LFXB snapshot sent before the server received our capability hello.
-		if package.size() >= 4 and package.slice(0, 4).get_string_from_ascii() == "LFXB":
-			return {"result": 0, "resync": false}
 		if package.size() < 24 or package.slice(0, 4).get_string_from_ascii() != "LFXP":
-			return _fail("Expected a compiled .lfxb package (LFXP signature; legacy .lfxp is also supported).")
+			return _fail("Expected a compiled .lfxp package (LFXP signature).")
 		if _generation >= 0 and not _owns_player():
 			return _fail("Preview player was replaced externally.", ERR_BUSY)
 		if _generation < 0 and _player.call("is_playing"):

@@ -7,7 +7,13 @@
 
 namespace liberafx::cpu_particle_batch_tests {
 void require(bool condition, const char* message) { if (!condition) throw std::runtime_error(message); }
-void check(Result result) { require(result == Result::Ok, "Unexpected native result."); }
+void check(Result result)
+{
+    if (result != Result::Ok)
+    {
+        throw std::runtime_error("Unexpected native result: " + std::to_string(static_cast<int>(result)));
+    }
+}
 void compare(const char* path, bool expectBatch, bool expectError = false, Result expectedFailure = Result::DivideByZero,
     int errorFrame = 1, bool expectSpawn = true, int expectFusion = -1, const char* referencePath = nullptr, bool automaticBatching = true)
 {
@@ -29,7 +35,10 @@ void compare(const char* path, bool expectBatch, bool expectError = false, Resul
     require(!systems.empty(), "No CPU systems in the fixture.");
     for (auto& system : systems) {
         check(system->initialize(nullptr,0,true));
-        require(system->updateBatch.enabled == expectBatch, "The intended batch/fallback execution path was not selected.");
+        if (system->updateBatch.enabled != expectBatch)
+        {
+            throw std::runtime_error(std::string(path) + ": unexpected update batch selection");
+        }
         require(system->spawnBatch.enabled == (expectBatch && expectSpawn), "The intended birth execution path was not selected.");
         if (expectBatch && expectSpawn) require(!system->instances && system->sharedSpawn && system->sharedUpdate,
             "Isolated stages retained per-particle VM storage.");
@@ -113,6 +122,23 @@ void compare(const char* path, bool expectBatch, bool expectError = false, Resul
 }
 int main(int argc, char** argv)
 {
+    if (argc == 4 && std::string(argv[1]) == "--aot-only")
+    {
+        try
+        {
+            liberafx::cpu_particle_batch_tests::compare(argv[3], true, false,
+                liberafx::Result::DivideByZero, 1, true, 1, argv[2]);
+            liberafx::cpu_particle_batch_tests::compare(argv[3], true, false,
+                liberafx::Result::DivideByZero, 1, true, 1, argv[2], false);
+            std::cout << "AOT and reference CPU paths agree.\n";
+            return 0;
+        }
+        catch (const std::exception& error)
+        {
+            std::cerr << error.what() << '\n';
+            return 1;
+        }
+    }
     if (argc < 4) { std::cout << "Supply batch, emission/retirement and fallback fixtures (last).\n"; return 77; }
     try {
         for (auto index=1;index<argc-1;++index) {

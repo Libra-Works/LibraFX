@@ -1,12 +1,9 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "liberafx/LbRuntimeResult.h"
 #include <array>
-#include "LibraEffectAsset.h"
 #include "LibraRuntimeTypes.h"
-#include "LibraNativeNodesInternal.h"
-#include "liberafx/LbVfxRuntime.h"
-#include "LibraCpuProfiler.h"
 
 inline auto ToLibraResult(liberafx::Result result) -> ELibraRuntimeResult
 {
@@ -33,47 +30,43 @@ inline auto ToLibraResult(liberafx::Result result) -> ELibraRuntimeResult
     return ELibraRuntimeResult::UnsupportedBinary;
 }
 
-class FCompiledLibraProgram final
+inline constexpr auto ToNativeResult(ELibraRuntimeResult result) -> liberafx::Result
 {
-public:
-    explicit FCompiledLibraProgram(TConstArrayView<uint8> bytes)
-        : registry(LibraNativeNodeSnapshot())
+    switch (result)
     {
-        auto loadProfiler = FLibraCpuProfiler{};
-        if (bytes.Num() <= 0 || bytes.Num() > ULibraEffectAsset::MaximumBytecodeBytes)
-        {
-            result = liberafx::Result::InvalidBinary;
-            return;
-        }
-        bytecode.Append(bytes.GetData(), bytes.Num());
-        result = liberafx::Program::load(bytecode.GetData(), bytecode.Num(), program, loadProfiler.GetHooks());
-        if (bytecode.Num() >= 16 &&
-            bytecode[4] >= 3 && bytecode[4] <= 11 && bytecode[5] == 0)
-        {
-            auto count = uint32{bytecode[8]} | (uint32{bytecode[9]} << 8) |
-                (uint32{bytecode[10]} << 16) | (uint32{bytecode[11]} << 24);
-            auto instructionBytes = 16 + static_cast<uint64>(count) * 256;
-            if (count > 10000 || static_cast<uint64>(bytecode.Num()) < instructionBytes ||
-                (bytecode[4] == 3 && static_cast<uint64>(bytecode.Num()) != instructionBytes))
-            {
-                result = liberafx::Result::InvalidBinary;
-                return;
-            }
-            bindings.SetNum(static_cast<int32>(count));
-            result = liberafx::Program::load(bytecode.GetData(), bytecode.Num(),
-                registry->descriptors.GetData(), registry->descriptors.Num(),
-                bindings.GetData(), bindings.Num(), program, loadProfiler.GetHooks());
-        }
+    case ELibraRuntimeResult::Ok: return liberafx::Result::Ok;
+    case ELibraRuntimeResult::InvalidArgument: return liberafx::Result::InvalidArgument;
+    case ELibraRuntimeResult::InvalidBinary: return liberafx::Result::InvalidBinary;
+    case ELibraRuntimeResult::UnsupportedBinary: return liberafx::Result::UnsupportedBinary;
+    case ELibraRuntimeResult::InsufficientWork: return liberafx::Result::InsufficientWork;
+    case ELibraRuntimeResult::Busy: return liberafx::Result::Busy;
+    case ELibraRuntimeResult::QueueRejected: return liberafx::Result::QueueRejected;
+    case ELibraRuntimeResult::NotReady: return liberafx::Result::NotReady;
+    case ELibraRuntimeResult::NodeNotFound: return liberafx::Result::NodeNotFound;
+    case ELibraRuntimeResult::DivideByZero: return liberafx::Result::DivideByZero;
+    case ELibraRuntimeResult::NonFinite: return liberafx::Result::NonFinite;
+    case ELibraRuntimeResult::InvalidValueType: return liberafx::Result::InvalidValueType;
+    case ELibraRuntimeResult::UnknownCustomNode: return liberafx::Result::UnknownCustomNode;
+    case ELibraRuntimeResult::InvalidHandle: return liberafx::Result::InvalidHandle;
+    case ELibraRuntimeResult::InstructionBudgetExceeded: return liberafx::Result::InstructionBudgetExceeded;
+    case ELibraRuntimeResult::ArithmeticOverflow: return liberafx::Result::ArithmeticOverflow;
+    case ELibraRuntimeResult::CounterOverflow: return liberafx::Result::CounterOverflow;
     }
+    return liberafx::Result::UnsupportedBinary;
+}
 
-    TSharedRef<const FLibraNodeRegistrySnapshot, ESPMode::ThreadSafe> registry;
-    TArray<uint8> bytecode;
-    TArray<liberafx::CustomNodeBinding> bindings;
-    liberafx::Program program;
-    liberafx::Result result = liberafx::Result::NotReady;
-};
+static_assert(ToNativeResult(ELibraRuntimeResult::ArithmeticOverflow) == liberafx::Result::ArithmeticOverflow);
+static_assert(ToNativeResult(ELibraRuntimeResult::CounterOverflow) == liberafx::Result::CounterOverflow);
 
 inline void LibraNodeIdBytes(const FGuid& id, uint8 (&bytes)[16])
+{
+    auto words = std::array<uint32, 4>{ id.A, id.B, id.C, id.D };
+    for (auto index = 0; index < 4; ++index)
+        for (auto byte = 0; byte < 4; ++byte)
+            bytes[index * 4 + byte] = static_cast<uint8>(words[index] >> (24 - byte * 8));
+}
+
+inline void LibraNodeIdBytes(const FGuid& id, std::array<uint8, 16>& bytes)
 {
     auto words = std::array<uint32, 4>{ id.A, id.B, id.C, id.D };
     for (auto index = 0; index < 4; ++index)

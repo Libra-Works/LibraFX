@@ -174,6 +174,18 @@ struct SignalHandle final {
     std::uint32_t nodeIndex = 0;
 };
 
+// Curve override storage belongs to the caller and must remain immutable until
+// it is replaced at an idle boundary or the instance is deinitialized.
+struct CurveKey final {
+    double time = 0, value = 0, inSlope = 0, outSlope = 0;
+    std::uint8_t interpolation = 0;
+};
+struct CurveOverrideView final {
+    std::uint32_t nodeIndex = 0;
+    const CurveKey* keys = nullptr;
+    std::size_t count = 0;
+};
+
 struct DeferredSignal final {
     double time = 0;
     std::uint32_t nodeIndex = 0;
@@ -196,6 +208,7 @@ public:
                        CustomNodeBinding* bindings, std::size_t bindingCount, Program& out,
                        const ProfilingHooks& profiling = {}) noexcept;
     std::size_t nodeCount() const noexcept { return nodeCount_; }
+    bool isPureRestartable() const noexcept;
     std::size_t workBytes() const noexcept;
     // Caller-owned work storage must be aligned to this value and contain workBytes().
     std::size_t workAlignment() const noexcept;
@@ -266,6 +279,17 @@ public:
     Result bindValue(const std::uint8_t nodeId[16], ValueHandle& out) const noexcept;
     Result bindParameter(const std::uint8_t nodeId[16], std::uint8_t inputSlot,
                          std::uint8_t component, ParameterHandle& out) const noexcept;
+    // Validates a proposed value without initializing node state or mutating an instance.
+    static Result validateParameter(const Program& program, const std::uint8_t nodeId[16],
+                                    std::uint8_t inputSlot, std::uint8_t component,
+                                    bool isInt32, std::int32_t intValue, double floatValue) noexcept;
+    static Result defaultParameter(const Program& program, const std::uint8_t nodeId[16],
+                                   std::uint8_t inputSlot, std::uint8_t component,
+                                   double& out) noexcept;
+    static Result findCurve(const Program& program, const std::uint8_t nodeId[16],
+                            std::uint32_t& outIndex) noexcept;
+    static Result validateCurveKeys(const CurveKey* keys, std::size_t count) noexcept;
+    Result setCurveOverrides(const CurveOverrideView* overrides, std::size_t count) noexcept;
     Result bindSignal(const std::uint8_t nodeId[16], SignalHandle& out) const noexcept;
     Result value(const ValueHandle& handle, double out[4]) const noexcept;
     Result valueInt32(const ValueHandle& handle, std::int32_t& out) const noexcept;
@@ -342,6 +366,8 @@ private:
     const Program* program_ = nullptr;
     double* work_ = nullptr;
     double* defaults_ = nullptr;
+    const CurveOverrideView* curveOverrides_ = nullptr;
+    std::size_t curveOverrideCount_ = 0;
     double time_ = 0;
     double effectTime_ = 0, frameDelta_ = 0;
     double pendingEffectTime_ = 0, pendingFrameDelta_ = 0;

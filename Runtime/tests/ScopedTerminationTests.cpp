@@ -1,4 +1,6 @@
+#include "ProgramFixture.h"
 #include "liberafx/LbSpawnableHost.h"
+#include "liberafx/host/LbPackagePreviewContract.h"
 #include "liberafx/LbBuiltinSignals.h"
 #include "liberafx/LbEffectLifecycle.h"
 #include "liberafx/LbPhasePrimitives.h"
@@ -85,6 +87,7 @@ auto package(bool delayedRoute = false) -> liberafx::SpawnablePackage
     output.portId = "request-observed";
     output.templateNodeId = id(2);
     child.signalOutputs = std::vector<liberafx::SpawnablePackageSignalPort>{output};
+    child.bytecode = runtime_test_fixture::promoteSimpleProgram(child.bytecode);
     result.templates.push_back(std::move(child));
     if (delayedRoute) {
         auto route = liberafx::SpawnablePackageDestroyRoute{};
@@ -93,6 +96,7 @@ auto package(bool delayedRoute = false) -> liberafx::SpawnablePackage
         route.delayNodeId = id(5);
         result.destroyRoutes.push_back(route);
     }
+    result.parentBytecode = runtime_test_fixture::promoteSimpleProgram(result.parentBytecode);
     return result;
 }
 auto target(liberafx::GeneratorInstanceId instance) -> liberafx::SpawnableScope
@@ -109,6 +113,115 @@ auto next(liberafx::SpawnableHost& host) -> liberafx::SpawnableHostEvent
     assert(host.popEvent(event));
     return event;
 }
+void atomicChildParameterUpdates()
+{
+    auto host = std::unique_ptr<liberafx::SpawnableHost>{};
+    assert(liberafx::SpawnableHost::create(package(), {}, host) == Result::Ok);
+    assert(host->advance(0, 0) == Result::Ok);
+    auto first = next(*host).instanceId;
+    assert(host->dispatchSignal(id(42).data()) == Result::Ok);
+    auto second = next(*host).instanceId;
+    auto updates = std::array<liberafx::host::ParameterDeltaUpdate, 2>{};
+    updates[0].containerId = id(42);
+    updates[0].nodeId = id(1);
+    updates[0].floatValue = 7;
+    updates[1] = updates[0];
+    updates[1].nodeId = id(99);
+    assert(host->setNodeParameters(updates.data(), updates.size()) == Result::NodeNotFound);
+    assert(host->advance(.25, .25) == Result::Ok);
+    auto value = std::array<double, 4>{};
+    auto width = std::uint8_t{};
+    for (auto instance : {first, second})
+    {
+        assert(host->childValue(id(42).data(), instance, id(1).data(), value.data(), width) == Result::Ok);
+        assert(value[0] == 2);
+    }
+    assert(host->dispatchSignal(id(42).data()) == Result::Ok);
+    auto third = next(*host).instanceId;
+    assert(host->advance(.5, .25) == Result::Ok);
+    assert(host->childValue(id(42).data(), third, id(1).data(), value.data(), width) == Result::Ok && value[0] == 2);
+    assert(host->setNodeParameters(updates.data(), 1) == Result::Ok);
+    assert(host->advance(.75, .25) == Result::Ok);
+    for (auto instance : {first, second, third})
+    {
+        assert(host->childValue(id(42).data(), instance, id(1).data(), value.data(), width) == Result::Ok && value[0] == 7);
+    }
+    assert(host->dispatchSignal(id(42).data()) == Result::Ok);
+    auto fourth = next(*host).instanceId;
+    assert(host->advance(1, .25) == Result::Ok);
+    assert(host->childValue(id(42).data(), fourth, id(1).data(), value.data(), width) == Result::Ok && value[0] == 7);
+    updates[0].reset = true;
+    assert(host->setNodeParameters(updates.data(), 1) == Result::Ok);
+    assert(host->advance(1.25, .25) == Result::Ok);
+    for (auto instance : {first, second, third, fourth})
+    {
+        assert(host->childValue(id(42).data(), instance, id(1).data(), value.data(), width) == Result::Ok && value[0] == 2);
+    }
+    assert(host->dispatchSignal(id(42).data()) == Result::Ok);
+    auto fifth = next(*host).instanceId;
+    assert(host->advance(1.5, .25) == Result::Ok);
+    assert(host->childValue(id(42).data(), fifth, id(1).data(), value.data(), width) == Result::Ok && value[0] == 2);
+}
+
+void atomicChildCurveUpdates()
+{
+    auto input = package();
+    auto bytes = binary(3);
+    constant(bytes, 0, id(1), 2);
+    signal(bytes, 1, id(2), liberafx::signalPassthroughTypeId);
+    bytes.resize(bytes.size() + 80);
+    bytes[4] = 4;
+    auto offset = std::size_t{16 + 2 * 256};
+    std::memcpy(bytes.data() + offset, id(3).data(), 16);
+    bytes[offset + 16] = 42;
+    bytes[offset + 17] = 1;
+    write32(bytes, offset + 24, UINT32_MAX);
+    write32(bytes, offset + 28, UINT32_MAX);
+    write32(bytes, offset + 228, 2);
+    auto firstKey = std::size_t{16 + 3 * 256};
+    bytes[firstKey + 32] = 1;
+    auto one = 1.0;
+    std::memcpy(bytes.data() + firstKey + 40, &one, sizeof(one));
+    std::memcpy(bytes.data() + firstKey + 48, &one, sizeof(one));
+    input.templates[0].bytecode = runtime_test_fixture::promoteSimpleProgram(bytes);
+    auto host = std::unique_ptr<liberafx::SpawnableHost>{};
+    assert(liberafx::SpawnableHost::create(std::move(input), {}, host) == Result::Ok);
+    assert(host->advance(0, 0) == Result::Ok);
+    auto first = next(*host).instanceId;
+    assert(host->dispatchSignal(id(42).data()) == Result::Ok);
+    auto second = next(*host).instanceId;
+    auto updates = std::array<liberafx::host::ParameterDeltaUpdate, 2>{};
+    updates[0].containerId = id(42);
+    updates[0].nodeId = id(3);
+    updates[0].isCurve = true;
+    updates[0].curveKeys = {{0, 5, 0, 0, 1}, {1, 5, 0, 0, 1}};
+    updates[1].containerId = id(42);
+    updates[1].nodeId = id(99);
+    assert(host->setNodeParameters(updates.data(), updates.size()) == Result::NodeNotFound);
+    assert(host->advance(.25, .25) == Result::Ok);
+    auto value = std::array<double, 4>{};
+    auto width = std::uint8_t{};
+    for (auto instance : {first, second})
+    {
+        assert(host->childValue(id(42).data(), instance, id(3).data(), value.data(), width) == Result::Ok && value[0] == .25);
+    }
+    assert(host->setNodeParameters(updates.data(), 1) == Result::Ok);
+    assert(host->advance(.5, .25) == Result::Ok);
+    for (auto instance : {first, second})
+    {
+        assert(host->childValue(id(42).data(), instance, id(3).data(), value.data(), width) == Result::Ok && value[0] == 5);
+    }
+    assert(host->dispatchSignal(id(42).data()) == Result::Ok);
+    auto third = next(*host).instanceId;
+    assert(host->advance(.75, .25) == Result::Ok);
+    assert(host->childValue(id(42).data(), third, id(3).data(), value.data(), width) == Result::Ok && value[0] == 5);
+    updates[0].reset = true;
+    updates[0].curveKeys.clear();
+    assert(host->setNodeParameters(updates.data(), 1) == Result::Ok);
+    assert(host->advance(1, .25) == Result::Ok);
+    assert(host->childValue(id(42).data(), third, id(3).data(), value.data(), width) == Result::Ok && value[0] == .5);
+}
+
 void scopedHost()
 {
     auto host = std::unique_ptr<liberafx::SpawnableHost>{};
@@ -251,7 +364,7 @@ void cleanup(void*, std::size_t, void* data) noexcept
 }
 void poolBoundaryAndExpiry()
 {
-    auto bytes = childBinary();
+    auto bytes = runtime_test_fixture::promoteSimpleProgram(childBinary());
     auto bindings = std::array<liberafx::CustomNodeBinding, 2>{};
     auto program = liberafx::Program{};
     assert(liberafx::Program::load(bytes.data(), bytes.size(), nullptr, 0,
@@ -290,6 +403,7 @@ void poolBoundaryAndExpiry()
     descriptor.function = probe;
     descriptor.cleanup = cleanup;
     descriptor.context = &context;
+    bytes = runtime_test_fixture::promoteSimpleProgram(bytes, &descriptor, 1);
     assert(liberafx::Program::load(bytes.data(), bytes.size(), &descriptor, 1,
         bindings.data(), bindings.size(), program) == Result::Ok);
     assert(liberafx::GeneratorPool::create(program, id(42).data(), 2, 1024 * 1024, 8, pool) == Result::Ok);
@@ -315,6 +429,7 @@ void poolDeferredAndSiblingSignals()
     bytes[offset + 52] = 1;
     write32(bytes, offset + 208, 3); // future continuation -> output
     signal(bytes, 3, id(2), liberafx::signalPassthroughTypeId);
+    bytes = runtime_test_fixture::promoteSimpleProgram(bytes);
     auto bindings = std::array<liberafx::CustomNodeBinding, 4>{};
     auto program = liberafx::Program{};
     assert(liberafx::Program::load(bytes.data(), bytes.size(), nullptr, 0,
@@ -359,6 +474,7 @@ void singleInstancePhaseDispatch()
     signal(bytes, 1, id(10), liberafx::signalPassthroughTypeId);
     signal(bytes, 2, id(20), liberafx::signalPassthroughTypeId);
     signal(bytes, 3, id(30), liberafx::signalPassthroughTypeId);
+    bytes = runtime_test_fixture::promoteSimpleProgram(bytes);
     auto bindings = std::array<liberafx::CustomNodeBinding, 4>{};
     auto program = liberafx::Program{};
     assert(liberafx::Program::load(bytes.data(), bytes.size(), nullptr, 0,
@@ -406,9 +522,12 @@ void authoredPhases()
 {
     auto directory = std::getenv("LIBERAFX_LIFECYCLE_FIXTURE_DIR");
     if (!directory) return;
-    auto file = std::ifstream(std::filesystem::path(directory) / "AuthoredPhases.lfxb", std::ios::binary);
+    auto file = std::ifstream(std::filesystem::path(directory) / "AuthoredPhases.lfxp", std::ios::binary);
     assert(file.good());
-    auto bytes = std::vector<std::uint8_t>(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
+    auto packageBytes = std::vector<std::uint8_t>(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
+    auto package = liberafx::SpawnablePackage{};
+    assert(liberafx::loadSpawnablePackage(packageBytes.data(), packageBytes.size(), package) == Result::Ok);
+    const auto& bytes = package.parentBytecode;
     auto identities = std::ifstream(std::filesystem::path(directory) / "AuthoredPhases.ids", std::ios::binary);
     auto ids = std::array<Id, 10>{};
     for (auto& value : ids) identities.read(reinterpret_cast<char*>(value.data()), value.size());
@@ -580,6 +699,8 @@ int main()
     _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
 #endif
     std::setvbuf(stderr, nullptr, _IONBF, 0);
+    atomicChildParameterUpdates();
+    atomicChildCurveUpdates();
     scopedHost();
     pendingContinuationAndSameTick();
     backpressureAndEffect();

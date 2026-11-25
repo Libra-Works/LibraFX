@@ -1,5 +1,8 @@
 #include "LbVfxRuntimeValueInternal.h"
 
+#include <new>
+#include <vector>
+
 namespace liberafx {
 using namespace vfx_runtime_detail;
 
@@ -123,6 +126,8 @@ auto Instance::initialize(const Program &program, double *work,
     }
   }
   generation_ = nextInstanceGeneration.fetch_add(1, std::memory_order_relaxed);
+  curveOverrides_ = nullptr;
+  curveOverrideCount_ = 0;
   deferredSignals_ = nullptr;
   deferredCapacity_ = 0;
   deferredCount_ = 0;
@@ -150,12 +155,80 @@ auto Instance::deinitialize() noexcept -> Result {
   program_=nullptr; work_=defaults_=stateWork_=nullptr; generation_=0;
   initializedStateCount_=0;
   signalObserver_=nullptr; signalObserverContext_=nullptr;
+  curveOverrides_=nullptr; curveOverrideCount_=0;
   deferredSignals_=nullptr; deferredCapacity_=deferredCount_=0;
   logicalQueueHead_=logicalQueueCount_=0;
   generatedQueueSeeded_=generatedSignalsPending_=false;
   forceRequestsEnabled_=false; forceScope_=0;
   profiling_={}; debugging_={}; result_=Result::NotReady;
   phase_.store(Phase::Idle,std::memory_order_release);
+  return Result::Ok;
+}
+
+auto Instance::findCurve(const Program &program, const std::uint8_t nodeId[16],
+                         std::uint32_t &outIndex) noexcept -> Result {
+  if (!program.bytes_ || !nodeId) {
+    return Result::InvalidArgument;
+  }
+  for (auto index = std::uint32_t{}; index < program.nodeCount_; ++index) {
+    auto node = instruction(program.bytes_, program.version_, index);
+    if (std::memcmp(node, nodeId, 16) == 0) {
+      if (node[16] != curveOpcode) {
+        return Result::InvalidValueType;
+      }
+      outIndex = index;
+      return Result::Ok;
+    }
+  }
+  return Result::NodeNotFound;
+}
+
+auto Instance::validateCurveKeys(const CurveKey *keys, std::size_t count) noexcept -> Result {
+  if (count > maxCurveKeysPerInstruction || (count != 0 && !keys)) {
+    return Result::InvalidArgument;
+  }
+  auto previousTime = -std::numeric_limits<double>::infinity();
+  for (auto index = std::size_t{}; index < count; ++index) {
+    const auto &key = keys[index];
+    if (!std::isfinite(key.time) || std::abs(key.time) > 1000000 || key.time <= previousTime ||
+        !std::isfinite(key.value) || std::abs(key.value) > 1000000 ||
+        !std::isfinite(key.inSlope) || std::abs(key.inSlope) > 1000000 ||
+        !std::isfinite(key.outSlope) || std::abs(key.outSlope) > 1000000 ||
+        key.interpolation > 2) {
+      return Result::InvalidArgument;
+    }
+    previousTime = key.time;
+  }
+  return Result::Ok;
+}
+
+auto Instance::setCurveOverrides(const CurveOverrideView *overrides,
+                                 std::size_t count) noexcept -> Result {
+  if (dispatching_ || phase_.load(std::memory_order_acquire) == Phase::Running) {
+    return Result::Busy;
+  }
+  if (!program_ || (count != 0 && !overrides)) {
+    return Result::InvalidArgument;
+  }
+  for (auto index = std::size_t{}; index < count; ++index) {
+    const auto &item = overrides[index];
+    if (item.nodeIndex >= program_->nodeCount_ || item.count > maxCurveKeysPerInstruction ||
+        (item.count != 0 && !item.keys) ||
+        instruction(program_->bytes_, program_->version_, item.nodeIndex)[16] != curveOpcode) {
+      return Result::InvalidArgument;
+    }
+    for (auto previous = std::size_t{}; previous < index; ++previous) {
+      if (overrides[previous].nodeIndex == item.nodeIndex) {
+        return Result::InvalidArgument;
+      }
+    }
+    auto validation = validateCurveKeys(item.keys, item.count);
+    if (validation != Result::Ok) {
+      return validation;
+    }
+  }
+  curveOverrides_ = overrides;
+  curveOverrideCount_ = count;
   return Result::Ok;
 }
 
@@ -371,6 +444,47 @@ auto Instance::bindParameter(const std::uint8_t nodeId[16],
     }
   }
   return Result::NodeNotFound;
+}
+
+auto Instance::validateParameter(const Program &program,
+                                 const std::uint8_t nodeId[16],
+                                 std::uint8_t inputSlot, std::uint8_t component,
+                                 bool isInt32, std::int32_t intValue,
+                                 double floatValue) noexcept -> Result {
+  if (program.bytes_ == nullptr || nodeId == nullptr) {
+    return Result::InvalidArgument;
+  }
+  try {
+    auto defaults = std::vector<double>(program.parameterValueCount());
+    auto probe = Instance{};
+    probe.program_ = &program;
+    probe.defaults_ = defaults.data();
+    probe.generation_ = 1;
+    auto handle = ParameterHandle{};
+    auto result = probe.bindParameter(nodeId, inputSlot, component, handle);
+    if (result != Result::Ok) {
+      return result;
+    }
+    return isInt32 ? probe.setParameterInt32(handle, intValue)
+                   : probe.setParameter(handle, floatValue);
+  } catch (const std::bad_alloc &) {
+    return Result::InsufficientWork;
+  }
+}
+
+auto Instance::defaultParameter(const Program &program,
+                                const std::uint8_t nodeId[16],
+                                std::uint8_t inputSlot, std::uint8_t component,
+                                double &out) noexcept -> Result {
+  if (program.bytes_ == nullptr || nodeId == nullptr) {
+    return Result::InvalidArgument;
+  }
+  auto probe = Instance{};
+  probe.program_ = &program;
+  probe.generation_ = 1;
+  auto handle = ParameterHandle{};
+  auto result = probe.bindParameter(nodeId, inputSlot, component, handle);
+  return result == Result::Ok ? probe.parameter(handle, out) : result;
 }
 
 auto Instance::bindSignal(const std::uint8_t nodeId[16],
@@ -628,10 +742,12 @@ auto Instance::setParameterInt32(const ParameterHandle &handle,
   if (status != Result::Ok) {
     return status;
   }
-  if (program_ == nullptr || program_->version_ < 10 || handle.inputSlot >= 4 ||
-      valueTypeRecord(program_->bytes_, program_->valueTypeMetadataOffset_,
-                      handle.nodeIndex)[2 + handle.inputSlot] !=
-          valueTypeInt32) {
+  if (program_ == nullptr || program_->version_ < 10 || handle.inputSlot >= 4) {
+    return Result::InvalidValueType;
+  }
+  auto type = valueTypeRecord(program_->bytes_, program_->valueTypeMetadataOffset_,
+                              handle.nodeIndex)[2 + handle.inputSlot];
+  if (type != valueTypeInt32 && type != valueTypeEnum) {
     return Result::InvalidValueType;
   }
   return setParameter(handle, static_cast<double>(value));

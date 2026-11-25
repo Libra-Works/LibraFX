@@ -27,15 +27,15 @@ namespace LiberaFx.Unity.Editor
             GameObject target = null;
             try
             {
-                var canonicalPath = folder + "/Effect.lfxb";
-                var aliasPath = folder + "/Legacy.lfxp";
-                foreach (var path in new[] { canonicalPath, aliasPath })
+                var canonicalPath = folder + "/Effect.lfxp";
+                var secondPath = folder + "/Copy.lfxp";
+                foreach (var path in new[] { canonicalPath, secondPath })
                 {
                     File.WriteAllBytes(path, bytes);
                     AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceSynchronousImport);
                     var imported = AssetDatabase.LoadAssetAtPath<LiberaFxSpawnableAsset>(path);
                     Require(imported && imported.PackageBytes.SequenceEqual(bytes),
-                        "Canonical and legacy package names must import the complete package into the existing asset type.");
+                        "Each .lfxp import must preserve the complete package in the existing asset type.");
                 }
 
                 var effect = AssetDatabase.LoadAssetAtPath<LiberaFxSpawnableAsset>(canonicalPath);
@@ -74,26 +74,9 @@ namespace LiberaFx.Unity.Editor
                     bindings.RenderAssets[0].texture == texture,
                     "Package reimport must preserve prefab, binding asset and resource references.");
 
-                var raw = LiberaFxSampleProgram.Create();
-                var rawPath = folder + "/Raw.lfxb";
-                File.WriteAllBytes(rawPath, raw);
-                AssetDatabase.ImportAsset(rawPath, ImportAssetOptions.ForceSynchronousImport);
-                var rawAsset = AssetDatabase.LoadAssetAtPath<LiberaFxProgramAsset>(rawPath);
-                Require(rawAsset && rawAsset.ProgramBytes.SequenceEqual(raw),
-                    "Legacy raw .lfxb must not become a package or lose binary bytes.");
-                using (var program = new NativeProgram(rawAsset.ProgramBytes))
-                using (var instance = program.CreateInstance())
-                {
-                    var values = new NativeValue[1];
-                    Require(instance.Evaluate(1, new[] { instance.BindValue(LiberaFxSampleProgram.ColorId) }, values) ==
-                        NativeResult.Ok && Math.Abs(values[0].W - 0.4) < 1e-6,
-                        "Imported raw bytes must remain executable.");
-                }
-                RequireRejected(Array.Empty<byte>());
+                RequireRejected(new byte[] { (byte)'L', (byte)'F', (byte)'X', (byte)'B' });
                 RequireRejected(new byte[] { 0, 0, 0, 0 });
-                RequireRejected(bytes.Take(4).ToArray());
-                RequireRejected(raw.Take(12).ToArray());
-                Debug.Log("PASS: canonical .lfxb package, .lfxp alias, raw LFXB, reimport references and corrupt-input validation.");
+                Debug.Log("PASS: .lfxp-only package import, reimport references and raw-input rejection.");
             }
             finally
             {

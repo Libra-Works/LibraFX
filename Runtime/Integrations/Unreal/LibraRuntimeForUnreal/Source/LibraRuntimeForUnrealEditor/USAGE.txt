@@ -44,117 +44,23 @@ are never logged or written to preview profiles. Environment-based opt-in
 bootstrap remains available; manual preview works without credential environment
 variables and displays disconnected status.
 
-The editor preview advertises gpuParticles only when its isolated GPU adapter is
-installed. LFXP query protocol 3 and telemetry JSON version 1 remain unchanged.
-gpu_config is a Kind 5 Scene command, following an accepted numeric root Program.
-Its version-1 envelope contains programSequence and replacement programs, using
-the same frontend delivery fields accepted by ULibraGpuEffectAsset::CreateInMemory.
-Only root GPU containers are delivered; spawnable templates require an instance
-bridge and must not be included.
+Compiled package preview
+  The editor connection sends compiled `.lfxp` packages and playback state to an
+  Unreal preview actor that uses `ULibraEffectComponent`. Parameter edits are
+  delivered through `parameter_delta`; the outer frame sequence and JSON payload
+  sequence must match. The adapter validates and applies each update batch
+  atomically. Numeric values retain double precision; reset, matrix and FCurve
+  updates are handled according to the package-preview contract. Errors are
+  reported to the preview connection rather than treated as successful edits.
+  A package loaded by the current connection is the preview source; this is not
+  raw LFXB/program playback or a hand-authored scene/render-config protocol.
 
-All candidates validate on the game thread before replacing any previous GPU
-runtime. Limits: 16 emitters, 1 MiB scene JSON, 256 MiB aggregate particle,
-register scratch and instruction buffers. Textures must be Texture2D assets with
-valid /Game or /Engine object paths. An empty replacement removes GPU runtimes
-only, leaving CPU rendering, camera and the user's edited level unchanged.
-
-Identical node IDs, IR/source hashes, packet bytes, ordered flow, capacity and
-resource mappings reuse simulation state. Texture objects remain strongly
-referenced by the native GPU asset; no per-texture source hash is available.
-Exact rendererBindingsVersion/rendererBindings and native per-flow blend/size
-are part of reuse identity. Explicit builtin:white is a supported GPU resource;
-unknown builtins and missing bindings are rejected, never silently substituted.
-Reconnect resets the preview generation and permits sequence numbering to restart.
-
-The isolated scene owns one manual GPU runtime tick per preview tick. Remote
-play, pause and playback rate drive it.
-Forward seeking is unsupported and pauses GPU simulation with a diagnostic.
-Backward seeking resets simulation to zero rather than claiming reconstruction
-at the requested time; returning to zero clears the seek block.
-Configuration-rejection diagnostics are independent of seek warnings and remain
-until the next successful configuration or connection-generation reset. A scene
-without GPU emitters does not generate GPU seek warnings.
-
-Startup transport retains up to 64 complete messages in FIFO order, subject to
-the unchanged 256 MiB receive byte budget and per-message limits. The game-thread
-connection tick drains at most eight messages; playback is not dropped/coalesced
-because each packet's base sequence depends on its predecessor.
-When count or byte pressure reaches the receive bound, the socket worker
-suspends LWS read servicing instead of disconnecting. It reserves capacity for
-one maximum-size incoming message, so fragmented messages cannot overflow the
-combined receive budget. A game-thread drain wakes the worker to resume reads;
-the game thread never waits for receive capacity. Established-socket heartbeat
-timeouts are suspended while reads are deliberately paused, and restored on
-resume. Outgoing feedback and cancellation remain serviced. No new unbounded
-application queue is introduced.
-
-gpu_status reports the last accepted GPU configuration sequence, with optional
-requestedProgramSequence for a rejected replacement, at most four times/second.
-runtimeExecuted becomes true only after native interpreter work is submitted.
-Capacity is not an alive-particle count. Source text is export metadata; the
-existing fixed-USF interpreter executes validated LGPK instructions, not incoming
-HLSL. Automation: Libra.Editor.Preview.GpuSceneTransactions and
-Libra.Runtime.EditorTransport.ReceiveQueueBurst.
-Window/connection automation: Libra.Editor.Preview.MenuShowLifecycle,
-Libra.Editor.Preview.EmptySceneAndDeferredConnection,
-Libra.Editor.Preview.ConnectionInvitation and DeferredTabRestoration.
-To verify profile persistence, run Libra.Editor.Preview.ProfileRestart in two
-editor processes using a dedicated project and the same fresh absolute directory
-for -UserDir and -LibraPreviewProfileTestDir. Start with
--LibraPreviewProfileTestPhase=Write, then run -LibraPreviewProfileTestPhase=Read
-after the first process exits. Write activates the real Environment and Settings
-checkboxes with Slate keyboard input. Read checks the restored widgets and the
-dedicated LIBERA FX profile; both phases check that teardown restores the
-editor's prior asset preview profile. The test refuses to operate on config files
-outside the specified fixture.
-Discovery automation: Libra.Editor.Preview.LocalDiscovery. The optional real
-post-startup fixture Libra.Editor.Preview.PostStartupDiscovery requires
--LibraPreviewDiscoveryPipe=LibraFX.Preview.<test-name>. This selects one explicitly
-named local test pipe (no token in command arguments); normal discovery needs no
-flag. Test overrides still verify server process identity and current-user SID.
-With an override, PostStartupDiscovery keeps the real discovered connection
-alive for up to 60 seconds through Root GPU delivery, native dispatch, Root Play
-and Root Pause, then allows ordinary Pause feedback before disconnecting.
-
-CPU scene replacements validate all mesh, material, texture and parameter
-references before changing the current components. New material shaders compile
-asynchronously; pending or failed shaders do not claim successful rendering.
-Rejected replacements preserve the last valid scene. MID feedback reports only
-successful native scalar/vector/texture readbacks, not requested-value fallback.
-Sprites use actual SpriteTexture plus AtlasScale/AtlasOffset uniforms.
-BasicShapeMaterial's Color parameter is used when available. If that engine
-material lacks Color, the preview creates a transient unlit Color material for
-the explicitly requested BasicShapes Color binding, without changing the asset.
-Feedback includes the actual materialPath, making that preview override explicit.
-For guaranteed model color rendering, explicitly send a material override
-materials:[{"slot":0,"path":"builtin:unlit-color"}]. This exact model-only builtin
-creates a real transient unlit material with vector parameter Color (Global=2,
-index=-1), connected to emissive RGB. Its shader must compile before scene commit;
-readbacks come from its actual MID. It is not an asset-catalog object path and
-unknown builtin material identifiers remain rejected. Ordinary /Game or /Engine
-material overrides use the same {slot,path} structure and preserve their actual
-parameter names, association and layer index.
-Libra.Editor.Preview.StockMaterialContract logs bounded vector metadata for the
-actual stock Cube/Sphere assigned materials and independently loaded
-BasicShapeMaterial; never assume those assets or their parameters are identical.
-
-CPU automation: Libra.Editor.Preview.CpuSceneTransactions checks real texture/
-parameter/shader validation, transactional rejection, atlas uniforms and a small
-isolated colored cube render-target readback. Libra.Editor.Preview.CpuRootFixture
-also captures each nonblack Color-bound model at every expected frame, checking
-actual pixels against native MID RGB hue. Captures use a bounds-derived look-at,
-show-only geometry and a bounded five-second mesh/PSO/proxy readiness wait.
-Diagnostics include pixel count, center/max RGB, nonblack count and render state.
-Sprite fixtures also capture real textured pixels facing the component's actual
-plane normal; the stock-white fixture compares pixel RGB hue with actual MID
-Tint while retaining per-frame AtlasScale/AtlasOffset checks.
-accepts -LibraPreviewCpuFixture=<isolated-directory>, containing real Root-exported
-program.lfxb, render-config.json and expected.json. Expected JSON is
-{frames:[{timeSeconds:<number>,nodes:[{nodeId:<GUID>,position:[x,y,z],
-scale:[x,y,z],rotation:[x,y,z],parameters:[{name,slot,value}]}]}]}.
-Parameter values may be scalar numbers, RGBA arrays or texture object paths;
-association/index are optional (default Unreal Global=2 and index=-1; Layer=0,
-Blend=1). Supply the real Sprite or seven-node SolarSystem
-fixture. This test loads native bytecode, evaluates each fixed time and inspects
-actual component transforms and MID values; no credential or normal-user level
-file is part of the fixture.
+  To use the preview, open Window > LIBERA FX Preview, start LIBERA FX on the
+  same PC, then click Connect to Libra. Disconnect ends the session without
+  closing Unreal. For a manual connection, copy connection information from
+  LIBERA FX Connections and use Paste Connection in the preview; clipboard data
+  is read only after that explicit action. Keep the existing isolated-project
+  and fresh `LIBERAFX_DATA_ROOT` requirements for peer-MCP checks described
+  above. Test against a dedicated project and a rendering-capable Editor when
+  verifying actual pixels; connection or package-load success alone does not
+  establish rendered output.

@@ -22,11 +22,7 @@ descriptors. reusable, workerSafe and parallelPreparation are independent;
 undeclared callbacks stay on the caller thread after workers join and cannot
 be pooled. Rebuild project modules with the matching SDK.
 
-This Windows x86-64 GDExtension embeds the same portable C++ Core Runtime
-used by the other integrations. New .lfxb exports contain the existing LFXP
-Spawnable package envelope, including scalar-only roots. Legacy raw .lfxb
-programs and the legacy .lfxp package input alias remain supported. No
-.NET runtime is required in Godot.
+This Windows x86-64 GDExtension embeds the same portable C++ Core Runtime used by the other integrations. `.lfxp` is the compiled Spawnable package format for production playback and Live Preview, including scalar-only roots. Standalone raw program files are not an external input or preview format. No .NET runtime is required in Godot.
 
 The godot-cpp build profile enables JSON, Node3D/World3D, Mesh/ArrayMesh,
 MultiMesh and RenderingServer APIs used by the adapter. CPU package Draws,
@@ -44,21 +40,16 @@ and a separate godot-cpp checkout that provides the 4.7 API:
 
 Copy liberafx.gdextension and bin\liberafx_godot.dll into your Godot project
 with that relative layout; open the project in Godot to discover the
-extension. Add a LibraEffectPlayer node. Keep .lfxb and .lfxp files under
-res:// (include both extensions in the Godot export preset's non-resource
-file filter). A packaged game does not need the .lfxproj, the Converter, or
+extension. Add a LibraEffectPlayer node. Keep `.lfxp` files under `res://` and include `*.lfxp` in the Godot export preset's non-resource file filter. A packaged game does not need the .lfxproj, the Converter, or
 a copy of godot-cpp.
 
 Convert graphs offline using the authoring repository:
 
-  dotnet run --project Tools\Converter -- convert path\input.lfxproj path\effect.lfxb
+  dotnet run --project Tools\Converter -- convert path\input.lfxproj path\effect.lfxp
 
-Play exported .lfxb from GDScript on the main thread after the player has
-entered the tree. play() routes by the LFXP signature to package playback;
-legacy raw LFXB still uses standalone playback. The file suffix does not bypass
-either loader's validation:
+Play the exported `.lfxp` package from GDScript on the main thread after the player has entered the tree. Use the package-only entry point; the file suffix does not bypass package validation:
 
-  var result: int = $LibraEffectPlayer.play(FileAccess.get_file_as_bytes("res://effect.lfxb"))
+  var result: int = $LibraEffectPlayer.play(FileAccess.get_file_as_bytes("res://effect.lfxp"))
   if result != 0:
       push_error("LIBERA FX could not play the effect: %d" % result)
 
@@ -72,10 +63,9 @@ read_value(node_uuid) returns the evaluated lanes as PackedFloat64Array, or
 an empty array if the player is stopped or the UUID has no value. Use these
 values to drive Godot properties from your scene script.
 
-The explicit package-only entrypoint also accepts the canonical .lfxb bytes
-or legacy .lfxp bytes:
+The explicit package entry point accepts the compiled `.lfxp` package bytes:
 
-  var package := FileAccess.get_file_as_bytes("res://effect.lfxb")
+  var package := FileAccess.get_file_as_bytes("res://effect.lfxp")
   var result: int = $LibraEffectPlayer.play_package(package)
   if result != 0:
       push_error("LIBERA FX package could not play: %d" % result)
@@ -83,15 +73,11 @@ or legacy .lfxp bytes:
 The package is loaded and validated before replacing current playback. The
 player advances its Spawnable lifecycle, children, routing and timing on the
 Godot main thread. An optional duration uses the same -1 / finite-seconds
-convention as play(). Legacy raw LFXB playback remains unchanged; do not pass
-raw bytes to play_package(). Renaming a file does not convert its contents.
-New scalar-only exports use package lifecycle behavior, not standalone lifetime
-semantics. Existing raw fixtures are intentionally unchanged.
+convention as play(). The `play` entry point also accepts `.lfxp` package bytes;
+internal instruction data is not an external playback input. Renaming a file
+does not convert its contents. Scalar-only exports use package lifecycle behavior.
 
-Focused coverage added to Tests/package_smoke.gd checks both explicit package
-playback and unified play(), rejects truncated LFXP without replacing playback,
-and retains the existing callback-driven replacement with raw LFXB. No build,
-Godot execution or rendered-pixel validation was performed for this change.
+Focused package coverage in `Tests/package_smoke.gd` checks package playback, rejects truncated LFXP without replacing active playback, and checks callback-driven package replacement. No build, Godot execution or rendered-pixel validation was performed for this change.
 
 Named Game I/O is available for packages:
 
@@ -235,9 +221,9 @@ this trades additional vertex work for removing synchronous state readback.
 Dispatch currently synchronizes main/render-thread command processing, not a
 local device submission. This is not a performance guarantee for every effect.
 
-Version 2 GPU manifests may mix those existing particle programs with
-Fluid2D programs. Godot validates every scope, identity, settings block and
-`builtin:fluid-alpha` renderer before allocating native resources. Fluid2D
+The current GPU manifest schema may contain the existing `programs` array and
+optional `fluidPrograms` array. Godot validates every scope, identity, settings
+block and `builtin:fluid-alpha` renderer before allocating native resources. Fluid2D
 uses the trusted generated Fluid2D shader source on the global RenderingDevice
 and keeps its seven simulation fields and RGBA16F output on the GPU. The output
 is sampled directly by Godot through Texture2DRD and a premultiplied-alpha
@@ -265,8 +251,8 @@ neighboring advected velocities. The force is applied every substep before
 pressure projection; it is separate from noise-driven turbulence. Old settings
 omit it and use zero. Nonzero exports require the updated extension. The
 uniform block is 512 bytes; vorticity remains in grid.w, with model/reaction/force vectors appended.
-Tests/fluid_2d_vorticity_smoke.gd uses the compiler's fluid-only.lfxb and
-vorticity.lfxb fixtures with LIBERAFX_GODOT_TEST_HOOKS enabled. It compares real
+Tests/fluid_2d_vorticity_smoke.gd uses the compiler's fluid-only.lfxp and
+vorticity.lfxp fixtures with LIBERAFX_GODOT_TEST_HOOKS enabled. It compares real
 GPU velocity fields, closed boundaries, independent retirement and restart.
 
 Both GPU paths require a RenderingDevice renderer such as Forward+ or Mobile.
@@ -275,8 +261,9 @@ fallback. Fluid output requires a 3D World3D/viewport and camera for visible
 presentation. GPU particles and fluids now use the same global device, but
 generic cross-container field bindings are still separate implementation work.
 
-Version 3 GPU manifests add same-scope generated Texture2D bindings from a fluid
-producer's DyeOutput to a particle billboard. These references appear separately
+Optional typed `generatedResources` and `generatedDrawBindings` describe
+same-scope generated Texture2D bindings from a fluid producer to particle
+resources or ordinary render texture slots. These references appear separately
 from resourceAssetPaths and require no set_texture_binding call. The shared
 RenderingDevice output is sampled through Texture2DRD; no field readback is
 used for this binding. The source is created and advanced before its consumer.
@@ -285,7 +272,7 @@ retaining compute and output storage; the editor uses this by default when the
 output is consumed. Each scope resolves its own producer and releases both
 resources with that scope. Other field outputs and particle field sampling are
 not provided by this binding. Tests/fluid_2d_generated_smoke.gd consumes actual
-generated-output.lfxb and fluid-only.lfxb compiler fixtures, with test hooks,
+generated-output.lfxp and fluid-only.lfxp compiler fixtures, with test hooks,
 to check consumer pixels, orientation, independent retirement and clear replay.
 
 Each spawned instance owns its particle state and advances on its local time.
@@ -312,7 +299,7 @@ scope cleanup and both world-coordinate and clamped UV FlowMap sampling.
 For Fluid2D, place `fluid-only.lfxp`, `mixed.lfxp`, `nested.lfxp`,
 `odd-grid.lfxp`, `draw-matrix.lfxp` and `owner-matrix.lfxp` beside
 `Tests\fluid_2d_gpu_smoke.gd` in an isolated Godot project with the extension.
-The parent-provided `.lfxb` files are already LFXP runtime envelopes; copy them
+The parent-provided `.lfxp` files are already LFXP runtime envelopes; copy them
 with the `.lfxp` names above. Their matching `.json` files are executable v2
 GPU manifests, not the runtime package. The 24x40, odd-39-iteration root fixture checks blank
 zero-delta output, visible translucent dye, upward motion for positive
@@ -352,51 +339,20 @@ dispatches the same embedded Godot compute shader and compares readback:
 
   Runtime\Integrations\Godot\Tests\RunGpuCanonical.ps1 -ArtifactDirectory C:\LiberaBuild\GodotCanonical -GodotExecutable C:\Godot\godot_console.exe
 
-Local preview and execution debugging
--------------------------------------
+Local package preview and execution debugging
+----------------------------------------------
 
-Add a dedicated LibraEffectPlayer and a Node with liberafx_live_preview.gd.
-In the editor's Preview Connections window, copy the manual invitation and
-the public TLS certificate. Pass them to the script's
-connect_local(player, invitation_json, public_certificate_pem). Keep the
-invitation private. The helper connects only to the loopback editor over
-WSS and checks the certificate fingerprint. disconnect_preview() clears the
-session baseline and stops its playback, not independently started effects.
+Use an idle, dedicated `LibraEffectPlayer` in the running Godot scene. Configure mesh, texture and material bindings before connecting. Add a Node with `liberafx_live_preview.gd`, keep `liberafx_package_preview.gd` beside it, and call `connect_package_local(player, invitation_json, public_certificate_pem)`. The invitation and certificate come from the editor's Preview Connections window; keep the invitation private. The player must expose `get_playback_generation()`, and it must not already be in use. Do not separately play, stop or advance the dedicated player while it is attached.
 
-connect_local evaluates standalone LFXB v1/v2 at editor-published
-times. Use read_value() for the evaluated values and get_preview_error()
-for the latest compile error. For package rendering, keep
-liberafx_package_preview.gd beside the transport script and use
-connect_package_local with an idle player and the required resource
-bindings. See LIVE_PREVIEW.txt for the timeline and editor-command limits.
+The connection sends compiled `.lfxp` packages to compatible package-preview peers over the authenticated local WSS connection. Program edits replace the package; timeline updates advance it at up to 60 steps per frame. Backward seeks rebuild it and replay at steps of at most 1/60 second, with a 120-second limit. Catch-up may lag the editor and does not promise frame-exact or deterministic GPU playback. Missing resources and unsupported features are reported, not substituted. Connect `preview_error` and `frame_rejected` to surface failures.
 
-For standalone breakpoints on Windows, add a LibraFxDebugPlayer and call
-start_debug(lfxb_bytes, editor_debug_invitation). This invitation is distinct
-from the preview connection invitation. Use advance(delta) to submit one
-step at a time; poll() reports busy, closing, closed, active, result, time
-and debug_transport_active. Read values with read_value(node_id) after a
-successful step. Call close() and poll until closed to stop without waiting
-in the main loop. The evaluator runs off the Godot main thread.
+For package breakpoints, configure the same mesh, texture and material bindings on `LibraFxDebugPlayer`, then call `load_package(lfxp_bytes)`. Select the root with `container_id=""` and `instance_id=0`, or obtain a child identity by advancing and reading `next_package_event()`. Use the current `get_debugger_generation()` and a fresh execution-debug invitation with `attach_package_debugger(generation, container_id, instance_id, invitation)`. Call `poll()` regularly to present completed jobs. While a worker is paused, the scene keeps the last committed render state. Wait for an idle job before reading package values or dispatching signals.
 
-For package debugging, configure the same mesh, texture and material
-bindings on LibraFxDebugPlayer, then call load_package(lfxp_bytes). Select root
-with container_id="" and instance_id=0, or obtain a child identity by
-advancing and reading next_package_event(). Use the current
-get_debugger_generation() and a fresh execution debug invitation with
-attach_package_debugger(generation, container_id, instance_id, invitation).
-Call poll() regularly to present completed jobs. While a worker is paused,
-the scene keeps the last committed render state. Wait for an idle job before
-reading package values or dispatching signals.
+To exercise a real editor breakpoint on Windows, copy `Tests\breakpoint_smoke.gd` beside the DLL in the scratch project. Run with isolated `LIBERAFX_DATA_ROOT` and Godot user data:
 
-To exercise a real editor breakpoint on Windows, copy
-Tests\breakpoint_smoke.gd beside the DLL in the scratch project. Run with
-isolated LIBERAFX_DATA_ROOT and Godot user data:
+  dotnet run --project Tests\CommentImageSmokeTests.csproj -- --godot-breakpoint C:\Godot\godot_console.exe C:\LibraBuild\Smoke
 
-  dotnet run --project Tests\CommentImageSmokeTests.csproj -- --godot-breakpoint C:\Godot\godot_console.exe C:\LiberaBuild\Smoke
-
-The test uses the editor's execution debug service and requires an authored
-root breakpoint to pause a real Godot worker and checks that its scene stays
-visible before sending Resume.
+The test uses the editor's execution-debug service and requires an authored root breakpoint to pause a real Godot worker; it checks that the scene stays visible before sending Resume.
 
 The Current Camera graph input is connected only when the package contains
 the reserved hidden input-property port "__LFX_CAMERA_V1" with width 4. Before
@@ -408,23 +364,23 @@ deleted, unresolved or non-Camera3D override falls back to the viewport
 camera. If neither source yields a Camera3D, the zero/invalid sample is used.
 Packages without that exact reserved port are not camera-probed or modified.
 
-Headless .lfxb smoke test:
+Headless .lfxp smoke test:
 
 1. Copy Tests\project.godot and Tests\smoke.gd to a new scratch Godot project.
 2. Copy the .gdextension and DLL into the scratch project as above.
-3. Use the Converter to convert Tests\clock.lfxproj to clock.lfxb in the
+3. Use the Converter to convert Tests\clock.lfxproj to clock.lfxp in the
    scratch project.
 4. Run the Godot 4.7 console executable with:
    --headless --path C:\LiberaBuild\Smoke --script res://smoke.gd --quit-after 120
-   Expect "PASS: Godot GDExtension executed converter-produced LIBERA FX bytecode".
+   Expect "PASS: Godot GDExtension executed converter-produced LIBERA FX package".
 
 CPU Spawnable / Game I/O regression:
 
 1. Prepare a converter-produced CPU-only `spawnable.lfxp` with a named input
    property, named input signal and output signal emitted by that input. Keep
    its root alive between inputs.
-2. Convert `Tests\clock.lfxproj` to `clock.lfxb` in the scratch project; the
-   smoke script uses it to verify reentrant raw-bytecode replacement from an
+2. Convert `Tests\clock.lfxproj` to `clock.lfxp` in the scratch project; the
+   smoke script uses it to verify reentrant package replacement from an
    output-signal callback.
 3. Set `LIBERAFX_INSTANCE_GAMEIO_FIXTURES` to an isolated output directory
    while running the existing `Tests\GameIoCompilationTests` fixture, then
@@ -475,8 +431,7 @@ Sprite Composition smoke test:
    per-draw scene-tree render Nodes. It does not capture or assert rendered
    pixels.
 
-Existing Windows x86-64 Godot 4.7.2 smokes cover raw bytecode, package Game
-I/O, SpriteDraw and SpriteAnimation. The migration smokes exercise root/child
+Existing Windows x86-64 Godot 4.7.2 smokes cover package Game I/O, SpriteDraw and SpriteAnimation. The migration smokes exercise root/child
 ModelDraw and material fixture admission through direct instances, plus
 SpriteComposition playback and direct-instance counts. They do not assert
 shader uniform values, sprite UVs, transforms, or rendered pixels. The Vulkan
@@ -501,7 +456,7 @@ Flexible Plane dynamic-mesh smoke:
 2. Create an isolated synthetic Flexible Plane package:
    pwsh -File Runtime\Integrations\Godot\Tests\CreateFlexiblePlaneSmokeFixture.ps1 `
      -BasePackage C:\LibraBuild\Fixtures\spawnable.adapter.lfxp `
-     -OutputPackage C:\LibraBuild\Smoke\flexible-plane.lfxb
+     -OutputPackage C:\LibraBuild\Smoke\flexible-plane.lfxp
    Copy `Tests\flexible_plane_render_submission_smoke.gd` to the same scratch
    Godot project.
 3. Run Godot 4.7.2 with:
@@ -546,7 +501,7 @@ It checks real pixels after both parent/child deadlines, natural cleanup and
 restart. LIBERAFX_HIERARCHY_OUTPUT optionally selects an evidence directory.
 
 For the CPU direct-submission smoke, copy the isolated
-`cpu-particles.lfxb` fixture to the scratch project as `cpu-particles.lfxb`,
+`cpu-particles.lfxp` fixture to the scratch project as `cpu-particles.lfxp`,
 copy `Tests\cpu_render_submission_smoke.gd`, and run:
 
   --headless --path C:\LibraBuild\Smoke --script res://cpu_render_submission_smoke.gd --quit-after 120
@@ -584,9 +539,9 @@ its direct baseline. The headless determinant check additionally covers zero
 determinants, mixed batches, draw-local scale and double reflections.
 
 To run `Tests\real_graphics_render_smoke.gd`, supply the CPU fixture,
-`adapter.lfxp` and IDs, a root `flexible-plane.lfxb` generated as above,
+`adapter.lfxp` and IDs, a root `flexible-plane.lfxp` generated as above,
 `opaque-batch.lfxp` generated by `Tests\CreateOpaqueBatchSmokeFixture.ps1`,
-and `camera-failure-plane.lfxb` generated by the Flexible Plane helper with
+and `camera-failure-plane.lfxp` generated by the Flexible Plane helper with
 `-CameraFacing -IncludeModel`. Set absolute `LIBERAFX_PIXEL_ARTIFACTS`,
 APPDATA, LOCALAPPDATA and LIBERAFX_DATA_ROOT to isolated directories; use a
 real display and graphics renderer, not --headless. The failure test
@@ -624,7 +579,7 @@ ColorOutput RGBA16F straight display, FieldOutput RGBA32F local velocity.xy,
 density/depth and temperature. VelocityOutput/DensityOutput are typed views
 of FieldOutput, without copies. Storage is 144 bytes/cell before overhead.
 
-Version 3 generatedDrawBindings connect same-scope fluid outputs to ordinary
+The optional `generatedDrawBindings` field connects same-scope fluid outputs to ordinary
 Sprite/Flexible Plane main textures (ColorOutput only) or explicitly bound
 material texture parameters. The compiled builtin:generated-texture marker
 requires an executable producer reference. It is not an engine asset fallback.

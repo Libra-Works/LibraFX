@@ -3,7 +3,7 @@ Live game component sessions (#49/#50)
 
 This is NOT the old numerical v1/v2 session facade or an editor preview.
 Unity LiberaFxLiveGameSession owns real LiberaFxSpawnableComponent GameObjects.
-Unreal FLibraLiveGameSession owns real ULibraEffectComponents on dedicated game
+Unreal FLibraLiveGameSession owns real ULibraSpawnableComponents on dedicated game
 actors, attached to the supplied game owner when it has a scene root. Gameplay
 must opt in and route instances through this service to expose them. Existing
 unregistered components and production games are not enumerated or modified.
@@ -228,7 +228,7 @@ Parent Unreal builds, sequentially (existing verified engine command shape):
 Use the parent's established dedicated appdata/DDC arguments and process
 timeout as well. Check exported automation test results, not just process exit.
 This constructs a real Game UWorld, connects via the same isolated spool,
-asserts real ULibraEffectComponent/StaticMeshComponent playback and changed
+asserts real ULibraSpawnableComponent/StaticMeshComponent playback and changed
 render transforms, failure rollback, concurrent worker requests, queue credit,
 stale generation and shutdown. It does NOT assert rendered Unreal pixels.
 

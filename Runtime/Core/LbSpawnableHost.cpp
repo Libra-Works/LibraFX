@@ -19,22 +19,13 @@ namespace liberafx::spawnable_host_detail {
 auto bytecodeInstructionBytes(const std::vector<std::uint8_t> &bytes,
                               std::size_t &size) noexcept -> Result {
   if (bytes.size() < bytecodeHeaderBytes ||
-      std::memcmp(bytes.data(), "LFXB", 4) != 0 || bytes[4] < 2 ||
-      bytes[4] > 11 || bytes[5] != 0 || bytes[6] != 1 || bytes[7] != 0) {
+      std::memcmp(bytes.data(), "LFXB", 4) != 0 || bytes[4] != 11 ||
+      bytes[5] != 0 || bytes[6] != 1 || bytes[7] != 0 ||
+      bytes[12] != 0 || bytes[13] != 1 || bytes[14] != 0 || bytes[15] != 0)
+  {
     return Result::InvalidBinary;
   }
-  if (bytes[4] == 2) {
-    if (bytes[12] != typedInstructionBytes || bytes[13] != 0 ||
-        bytes[14] != 0 || bytes[15] != 0) {
-      return Result::InvalidBinary;
-    }
-    size = typedInstructionBytes;
-  } else {
-    if (bytes[12] != 0 || bytes[13] != 1 || bytes[14] != 0 || bytes[15] != 0) {
-      return Result::InvalidBinary;
-    }
-    size = customInstructionBytes;
-  }
+  size = customInstructionBytes;
   return Result::Ok;
 }
 
@@ -51,14 +42,6 @@ auto bytecodeNodeCount(const std::vector<std::uint8_t> &bytes,
   }
   if (value > 10000 ||
       bytes.size() < bytecodeHeaderBytes + instructionBytes * value) {
-    return Result::InvalidBinary;
-  }
-  if (bytes[4] == 2 &&
-      bytes.size() != bytecodeHeaderBytes + instructionBytes * value) {
-    return Result::InvalidBinary;
-  }
-  if (bytes[4] == 3 &&
-      bytes.size() != bytecodeHeaderBytes + instructionBytes * value) {
     return Result::InvalidBinary;
   }
   count = value;
@@ -87,9 +70,6 @@ auto findSignalType(const std::vector<std::uint8_t> &bytes,
   auto result = bytecodeNodeCount(bytes, count);
   if (result != Result::Ok) {
     return result;
-  }
-  if (bytes[4] < 3) {
-    return Result::InvalidBinary;
   }
   auto matches = std::size_t{};
   for (auto index = std::size_t{}; index < count; ++index) {

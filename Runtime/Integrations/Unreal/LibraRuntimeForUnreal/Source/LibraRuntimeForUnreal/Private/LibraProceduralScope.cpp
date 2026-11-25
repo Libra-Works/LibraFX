@@ -7,6 +7,7 @@
 #include "LibraNativeRenderPrimitives.h"
 #include "LibraSpawnableComponent.h"
 #include "GameFramework/Actor.h"
+#include "Engine/World.h"
 #include "Engine/Texture2D.h"
 #include "Materials/MaterialInstanceDynamic.h"
 

@@ -1317,27 +1317,24 @@ namespace LiberaFx.Unity
                 System.Text.RegularExpressions.RegexOptions.CultureInvariant,TimeSpan.FromSeconds(1));
             try { manifest = JsonUtility.FromJson<LiberaFxGpuManifestPayload>(json); }
             catch (Exception error) { throw new InvalidOperationException("GPU executable payload JSON is malformed.", error); }
-            if (manifest == null || (manifest.version != 1 && manifest.version != 2 && manifest.version != 3 && manifest.version != 4) ||
+            if (manifest == null || manifest.version != 4 ||
                 manifest.programs == null || manifest.programs.Length > 16)
-                throw new InvalidOperationException("GPU executable payload version or program count is invalid.");
-            if (manifest.version == 1 && manifest.fluidPrograms != null && manifest.fluidPrograms.Length != 0)
-                throw new InvalidOperationException("Fluid programs require GPU executable payload version 2.");
-            if (manifest.version >= 2)
+                throw new InvalidOperationException("GPU executable payload must use the current manifest schema.");
+            var resources = LibraFluid2DManifestValidation.Read(json);
+            generatedDrawBindings = resources.drawBindings;
+            foreach (var program in manifest.programs)
+                program.generatedResources = resources.generated.TryGetValue(CanonicalGuid(program.nodeId), out var generated)
+                    ? generated : Array.Empty<LiberaFxGeneratedGpuResource>();
+            fluids = manifest.fluidPrograms ?? Array.Empty<LiberaFxFluidManifestProgram>();
+            if (fluids.Length + manifest.programs.Length > 16)
+                throw new InvalidOperationException("GPU fluid program count is invalid.");
+            foreach (var fluid in fluids)
             {
-                var resources = LibraFluid2DManifestValidation.Read(json);
-                generatedDrawBindings = resources.drawBindings;
-                foreach (var program in manifest.programs)
-                    program.generatedResources = resources.generated.TryGetValue(CanonicalGuid(program.nodeId), out var generated)
-                        ? generated : Array.Empty<LiberaFxGeneratedGpuResource>();
-                fluids = manifest.fluidPrograms;
-                if (fluids == null || (fluids.Length == 0 && manifest.version!=4) || fluids.Length + manifest.programs.Length > 16)
-                    throw new InvalidOperationException("GPU fluid program count is invalid.");
-                foreach (var fluid in fluids)
-                {
-                    fluid.automaticPlane = resources.automaticPlanes[CanonicalGuid(fluid.nodeId)];
-                    if (fluid.settings == null) throw new InvalidOperationException("Missing fluid settings.");
-                    fluid.settings.ApplyModel(resources.models[CanonicalGuid(fluid.nodeId)]);
-                }
+                fluid.automaticPlane = resources.automaticPlanes.TryGetValue(CanonicalGuid(fluid.nodeId), out var automaticPlane)
+                    ? automaticPlane : true;
+                if (fluid.settings == null) throw new InvalidOperationException("Missing fluid settings.");
+                if (resources.models.TryGetValue(CanonicalGuid(fluid.nodeId), out var model))
+                    fluid.settings.ApplyModel(model);
             }
             var programs = new Dictionary<string, LiberaFxGpuManifestProgram>(StringComparer.Ordinal);
             foreach (var program in manifest.programs)

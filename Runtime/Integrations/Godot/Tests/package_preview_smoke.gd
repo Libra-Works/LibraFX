@@ -28,6 +28,10 @@ func run() -> void:
 		return
 	if not check(player.get_node_or_null("LibraFxRootScope") != null, "Preview rendered the root scene"):
 		return
+	var mismatched_delta := JSON.stringify({"type": "parameter_delta", "sequence": 3, "updates": []}).to_utf8_buffer()
+	if not check(preview.consume(frame(5, 2, 1, 0.1, mismatched_delta))["result"] != 0,
+			"Parameter delta payload sequence must match its frame sequence"):
+		return
 	if not check(preview.consume(frame(2, 3, 2, 0.2))["resync"], "Missing delta requests resync"):
 		return
 	var generation: int = player.get_playback_generation()

@@ -6,7 +6,6 @@
 #include "HAL/FileManager.h"
 #include "HAL/PlatformProcess.h"
 #include "HAL/PlatformMisc.h"
-#include "LibraEffectAsset.h"
 #include "LibraSpawnableAsset.h"
 #include "Misc/MessageDialog.h"
 #include "Misc/Paths.h"
@@ -101,25 +100,13 @@ void LibraSourceProject::AddDetails(IDetailLayoutBuilder& builder, TWeakObjectPt
             .IsEnabled_Lambda([object] { return object.IsValid(); })
             .OnClicked_Lambda([object] {
                 auto* package = Cast<ULibraSpawnableAsset>(object.Get());
-                auto* effect = Cast<ULibraEffectAsset>(object.Get());
-                if (!package && !effect) return FReply::Handled();
-                const auto error = OpenProject(package ? package->SourceProjectPath.FilePath : effect->SourceProjectPath.FilePath);
+                if (!package) return FReply::Handled();
+                const auto error = OpenProject(package->SourceProjectPath.FilePath);
                 if (!error.IsEmpty()) FMessageDialog::Open(EAppMsgType::Ok, error);
                 return FReply::Handled();
             })
         ];
 }
 
-TSharedRef<IDetailCustomization> FLibraEffectAssetDetails::MakeInstance()
-{
-    return MakeShared<FLibraEffectAssetDetails>();
-}
-
-void FLibraEffectAssetDetails::CustomizeDetails(IDetailLayoutBuilder& builder)
-{
-    auto objects = TArray<TWeakObjectPtr<UObject>>{};
-    builder.GetObjectsBeingCustomized(objects);
-    LibraSourceProject::AddDetails(builder, objects.Num() == 1 ? objects[0] : TWeakObjectPtr<UObject>{});
-}
 
 #undef LOCTEXT_NAMESPACE

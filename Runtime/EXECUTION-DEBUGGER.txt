@@ -39,11 +39,11 @@ the fixture-dependent cases skipped (77), not passed, if their fixture roots are
 
 Windows authoring workflow (standalone CPU bytecode)
 --------------------------------------------------
-Load the same .lfxb revision that was exported from the active graph. In LIBERA
+Load the matching compiled .lfxp package revision from the active graph. In LIBERA
 FX, open Engine Connection > Runtime debugger, select any node and toggle its
 breakpoint, then start a local debugger. Copy the temporary invitation:
 
-* Unity: enter Play mode and select the LiberaFxRenderer instance. Paste the
+* Unity: enter Play mode and select the LiberaFxSpawnableComponent instance. Paste the
   invitation in the Inspector's LIBERA FX Runtime Debugger and click Attach.
 * Unreal: in the PIE instance select its LibraEffectComponent, paste the
   invitation in Local Debugger Invitation, then click Attach Local Debugger.

@@ -154,7 +154,7 @@ public static class LiberaFxParticleSpriteCameraVerification
         }
 
         var asset = ScriptableObject.CreateInstance<LiberaFxSpawnableAsset>();
-        asset.SetPackageBytes(File.ReadAllBytes(Root + name + ".lfxb"));
+        asset.SetPackageBytes(File.ReadAllBytes(Root + name + ".lfxp"));
         var owner = new GameObject(name);
         owner.SetActive(false);
         effect = owner.AddComponent<LiberaFxSpawnableComponent>();

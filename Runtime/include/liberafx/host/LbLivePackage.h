@@ -31,12 +31,12 @@ inline auto validateLiveRestart(const std::uint8_t* bytes, std::size_t count) no
     };
     if (!emptyPayload(package.rootGpuContainersJson, "[]") ||
         (!emptyPayload(package.rootGpuProgramsJson, "[]") &&
-         !emptyPayload(package.rootGpuProgramsJson, "{\"version\":1,\"programs\":[]}")))
+         !emptyPayload(package.rootGpuProgramsJson, "{\"version\":4,\"programs\":[]}")))
         return Result::UnsupportedBinary;
     auto program = Program{};
     result = Program::load(package.parentBytecode.data(), package.parentBytecode.size(), program);
     if (result != Result::Ok) return result;
-    return program.version() <= 2 ? Result::Ok : Result::UnsupportedBinary;
+    return program.version() == 11 ? Result::Ok : Result::UnsupportedBinary;
 }
 
 }

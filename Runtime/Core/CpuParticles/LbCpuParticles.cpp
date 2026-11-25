@@ -353,7 +353,10 @@ Result CpuParticleWorld::resetForPoolReuse() noexcept
             auto& work=stage==0 ? system.sharedSpawnWork : system.sharedUpdateWork;
             auto& handle=stage==0 ? system.sharedSpawnEntry : system.sharedUpdateEntry;
             const auto& program=system.stages[stage].program;
-            auto status=shared->initialize(program,static_cast<double*>(work.data),program.workBytes()/sizeof(double));
+            // The prepared shared buffer uses the aligned stride; v11 workBytes
+            // may end in packed state and need a rounded-up double count.
+            auto status=shared->initialize(program,static_cast<double*>(work.data),
+                system.stages[stage].workStride/sizeof(double));
             if (status==Result::Ok) status=shared->bindSignal(system.stages[stage].entry.data(),handle);
             if (status!=Result::Ok) return status;
         }

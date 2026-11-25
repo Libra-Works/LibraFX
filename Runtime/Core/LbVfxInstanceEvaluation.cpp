@@ -499,7 +499,15 @@ auto Instance::evaluate(bool pureRefresh, const bool *dirty) noexcept
           std::size_t{program_->nodeCount_} * customInstructionSize;
       auto curveKeys =
           program_->bytes_ + instructionBytes + read32(current + 224);
-      work_[index * 4] = evaluateCurve(curveKeys, read32(current + 228), time_);
+      auto value = evaluateCurve(curveKeys, read32(current + 228), time_);
+      for (auto overrideIndex = std::size_t{}; overrideIndex < curveOverrideCount_; ++overrideIndex) {
+        const auto &overrideValue = curveOverrides_[overrideIndex];
+        if (overrideValue.nodeIndex == index) {
+          value = evaluateCurve(overrideValue.keys, overrideValue.count, time_);
+          break;
+        }
+      }
+      work_[index * 4] = value;
       if (!std::isfinite(work_[index * 4])) {
         return Result::NonFinite;
       }

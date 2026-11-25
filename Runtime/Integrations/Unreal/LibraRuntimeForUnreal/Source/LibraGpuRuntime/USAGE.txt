@@ -1,9 +1,12 @@
 Libra GPU Unreal integration (experimental, requires UE 5.7 SM5).
 
-For whole effects, use ULibraEffectComponent with a .lfxp Package. It owns
-CPU/GPU/Spawnable playback together; no separate author-added GPU component is
-required. The APIs below describe the low-level helper and standalone
-experimental .lfxgpu path retained for compatibility and diagnostics.
+For whole effects, prefer an `.lfxp` package assigned to **Package** on
+`ULibraEffectComponent` (or its `ALibraEffectActor`). It manages the internal
+`ULibraSpawnableComponent`; authors do not add that helper separately. The
+standalone GPU path remains available through the component's `GpuEffect` slot:
+`ULibraGpuEffectAsset` is still produced by the GPU export/import pipeline and
+is not the removed raw LFXB effect asset. The APIs below also describe the
+internal helper and `.lfxgpu` GPU bundle for specialized GPU-only workflows.
 
 Import a .lfxgpu JSON bundle created by LibraGpu.UnrealExport or the frontend
 gpu_export_bundle tool (programSequence/nodeId/canonicalJson/metadata/shaderSource/
@@ -21,8 +24,8 @@ the resource's selected world-axis pair and bounds. Any Texture2D can be
 assigned, with Linear vector data recommended.
 
 ULibraGpuEffectRuntime is an internal UObject, not an actor component.
-ULibraEffectComponent owns and ticks it for standalone effects; Spawnable and
-editor preview owners drive their own runtimes. SoftEffect is loaded with the
+The internal `ULibraSpawnableComponent` owned by `ULibraEffectComponent` ticks
+it during package playback; editor preview owners drive their own runtimes. SoftEffect is loaded with the
 engine streamable manager. The owner actor location supplies emitterPosition;
 the owning tick supplies time and deltaTime. Each runtime holds separate GPU
 buffers. The execution mode is the fixed GpuRegisterInterpreter shader:
@@ -34,11 +37,12 @@ import. Asset changes are snapshotted at ResetEffect and do not mutate a running
 render-thread instance.
 
 GPU Fluid2D smoke/ink
-  Compiled Fluid2D is part of an executable GPU package manifest (Version=2),
-  not a standalone .lfxgpu particle asset. Use the same public
-  ULibraEffectComponent and SetPackage/Play/Pause/Stop flow as other effects.
-  Root and SpawnableGroup template scopes may contain fluid programs, including
-  mixed scopes with the existing particle programs array. Each fluid uses the
+  Compiled Fluid2D is represented by the optional `fluidPrograms` array in the
+  current Version=4 executable GPU package manifest, not by a standalone
+  `.lfxgpu` particle asset. Assign the package to `ULibraEffectComponent`; its
+  internal helper uses the same SetPackage/Play/Pause/Stop lifecycle as other
+  package content. Root and SpawnableGroup template scopes may contain fluid
+  programs, including mixed scopes with the existing particle `programs` array. Each fluid uses the
   shipped LibraFluid2D global shader, seven independent float4 grid buffers,
   and a native RGBA16F dye texture. Package shader source is retained only as
   compiler metadata and is never compiled or executed by this adapter.
@@ -53,13 +57,14 @@ GPU Fluid2D smoke/ink
   substeps; a zero-delta frame does not inject or advance, and excess long-frame
   time is discarded. Stop retires all seven buffers and the output texture.
   Manifest settings, renderer token, IDs, total scope count and combined GPU
-  memory are validated before package state is created. Version=1 particle
-  packages remain compatible; a fluid marker paired with Version=1 fails.
+  memory are validated before package state is created. The parser accepts the
+  current Version=4 manifest; optional fluid content is determined by the
+  presence and type of `fluidPrograms`, not a historical version branch.
 
   Focused automation:
     Libra.GPU.Fluid2D.ExecutionAndPlaneFramebuffer
     Libra.Runtime.Spawnable.Fluid2DCompilerFixtures
-  The second test accepts compiler-produced .lfxb fixtures in
+  The second test accepts compiler-produced .lfxp fixtures in
   -LibraFluidFixtures=<fixture directory> and exercises fluid-only, mixed,
   SpawnableGroup child, odd-grid, draw-matrix and owner-matrix fixtures.
   Use a fresh project/output/data-root and a real

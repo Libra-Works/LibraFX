@@ -13,6 +13,8 @@
 
 namespace liberafx {
 
+namespace host { struct ParameterDeltaUpdate; }
+
 enum class SpawnableHostEventKind : std::uint8_t {
     Spawn = 1, Stop = 2, Destroy = 3, Signal = 4, ForceTerminated = 5
 };
@@ -94,6 +96,7 @@ public:
     Result setNodeParameter(const std::uint8_t containerId[16], const std::uint8_t nodeId[16],
                             std::uint32_t inputSlot, std::uint32_t component,
                             bool isInt32, std::int32_t intValue, double floatValue);
+    Result setNodeParameters(const host::ParameterDeltaUpdate* updates, std::size_t count);
     Result requestNaturalEnd();
     Result stop();
     // Notification only: nodeId is an explicit user-authored signal entry.

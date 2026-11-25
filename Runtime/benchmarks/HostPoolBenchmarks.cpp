@@ -26,7 +26,7 @@ int main(int argc,char** argv) {
 #ifndef NDEBUG
         throw std::runtime_error("Use a Release build.");
 #endif
-        if (argc!=5 && argc!=6) throw std::runtime_error("Usage: host_pool_benchmarks <CPU .lfxb> <capacity> <workers 1..16> <cycles 30..3600> [--fresh]");
+        if (argc!=5 && argc!=6) throw std::runtime_error("Usage: host_pool_benchmarks <CPU .lfxp> <capacity> <workers 1..16> <cycles 30..3600> [--fresh]");
         const auto fresh=argc==6 && std::string(argv[5])=="--fresh";
         if (argc==6 && !fresh) throw std::runtime_error("Unknown mode.");
         auto options=SpawnableHostPoolOptions{};

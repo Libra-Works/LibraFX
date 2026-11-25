@@ -6,9 +6,9 @@
 
 class ULibraEffectComponent;
 
-// Real game component adapter. This is separate from the numerical
-// FLibraInstanceSession facade. Owner/game thread: Create, Process, List, Resolve,
-// Close, Shutdown. Worker threads: Submit*, TakeCompletion. No worker UObject API.
+// Real game component adapter backed by the package instance host. Owner/game thread:
+// Create, Process, List, Resolve, Close, Shutdown. Worker threads: Submit* and
+// TakeCompletion. No worker UObject API.
 // The facade must outlive/join producers, just like any shared C++ service.
 class LIBRARUNTIMEFORUNREAL_API FLibraLiveGameSession final
 {

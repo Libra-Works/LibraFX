@@ -288,7 +288,7 @@ namespace LiberaFx.Unity.Editor
 
         private static void VerifyPreset(string directory)
         {
-            var program = File.ReadAllBytes(Path.Combine(directory, "PhasePreset.lfxb"));
+            var program = File.ReadAllBytes(Path.Combine(directory, "PhasePreset.lfxp"));
             var phase = "";
             var clock = "";
             for (var index = 0; index < BitConverter.ToUInt32(program, 8); ++index)

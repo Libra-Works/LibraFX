@@ -1023,20 +1023,25 @@ struct FLibraSpawnableRenderState::FImpl
         const TArray<TSharedPtr<FJsonValue>>* programs = nullptr;
         const TArray<TSharedPtr<FJsonValue>>* fluids = nullptr;
         if (!FJsonSerializer::Deserialize(reader, root) || !root || !Integer(root, TEXT("version"), version) ||
-            (version != 1 && version != 2 && version != 3 && version != 4) ||
-            !root->TryGetArrayField(TEXT("programs"), programs))
+            version != 4 || !root->TryGetArrayField(TEXT("programs"), programs))
         {
-            return Fail(TEXT("GPU program manifest does not match its containers."));
+            return Fail(TEXT("GPU program manifest must use current version 4 and match its containers."));
         }
-        if (version == 1 && (!expectedFluids.IsEmpty() || root->HasField(TEXT("fluidPrograms"))))
-            return Fail(TEXT("This Unreal runtime requires GPU program manifest Version=2 for 2D fluids."));
-        if (version == 1 && programs->Num() != expectedParticles.Num())
-            return Fail(TEXT("GPU program manifest does not match its containers."));
-        if (version >= 2)
+        auto emptyFluids = TArray<TSharedPtr<FJsonValue>>{};
+        if (root->HasField(TEXT("fluidPrograms")))
         {
-            if (!root->TryGetArrayField(TEXT("fluidPrograms"), fluids) ||
-                programs->Num() + fluids->Num() > 16)
-                return Fail(TEXT("Version=2 fluid manifest is missing an array or exceeds the 16-program scope limit."));
+            if (!root->TryGetArrayField(TEXT("fluidPrograms"), fluids))
+                return Fail(TEXT("fluidPrograms must be an array when present."));
+        }
+        else
+        {
+            if (!expectedFluids.IsEmpty())
+                return Fail(TEXT("GPU snapshots contain Fluid2D nodes but the manifest has no fluidPrograms."));
+            fluids = &emptyFluids;
+        }
+        if (programs->Num() + fluids->Num() > 16)
+            return Fail(TEXT("GPU manifest exceeds the 16-program scope limit."));
+        {
             auto manifestFluidIds = TSet<FGuid>{};
             for (const auto& item : *fluids)
             {
@@ -1065,9 +1070,8 @@ struct FLibraSpawnableRenderState::FImpl
                     if (!markedFluids.Contains(guid))
                         return Fail(TEXT("gpuState.fluid2D markers do not match FluidPrograms entries."));
             }
-            if ((version < 4 && expectedFluids.IsEmpty()) || fluids->Num() != expectedFluids.Num() ||
-                programs->Num() != expectedParticles.Num())
-                return Fail(TEXT("Version=2 fluid manifest does not match its GPU container snapshots."));
+            if (fluids->Num() != expectedFluids.Num() || programs->Num() != expectedParticles.Num())
+                return Fail(TEXT("GPU manifest does not match its container snapshots."));
         }
         for (const auto& item : *programs)
         {
@@ -1123,8 +1127,6 @@ struct FLibraSpawnableRenderState::FImpl
             {
                 auto object = item.IsValid() && item->Type == EJson::Object ? item->AsObject() : nullptr;
                 auto program = FFluidProgram{};
-                if (version < 3 && object && object->HasField(TEXT("automaticPlane")))
-                    return Fail(TEXT("Fluid output selection requires GPU payload version 3."));
                 if (!ReadFluidProgram(object, program) || !expectedFluids.Remove(program.NodeId))
                     return Fail(TEXT("Invalid, duplicate, or unmatched FluidPrograms entry."));
                 const auto fluidBytes = uint64(program.Settings.width) * program.Settings.height * 144;
@@ -1145,19 +1147,19 @@ struct FLibraSpawnableRenderState::FImpl
                     continue;
                 }
                 FGuid producer;
-                if (version < 3 || !FGuid::Parse(texture.GeneratedProducerNodeId, producer) ||
+                if (!FGuid::Parse(texture.GeneratedProducerNodeId, producer) ||
                     !definition.FluidPrograms.ContainsByPredicate([&](const auto& fluid) { return fluid.NodeId == producer; }))
                 {
-                    return Fail(TEXT("Generated texture producer must be in the same version-3 execution scope."));
+                    return Fail(TEXT("Generated texture producer must be in the same GPU execution scope."));
                 }
             }
         }
         if (root->HasField(TEXT("generatedDrawBindings")))
         {
             const TArray<TSharedPtr<FJsonValue>>* entries = nullptr;
-            if (version < 3 || !root->TryGetArrayField(TEXT("generatedDrawBindings"), entries) || entries->Num() > 64)
+            if (!root->TryGetArrayField(TEXT("generatedDrawBindings"), entries) || entries->Num() > 64)
             {
-                return Fail(TEXT("Generated draw bindings require version 3 and at most 64 entries."));
+                return Fail(TEXT("Generated draw bindings must be an array with at most 64 entries."));
             }
             for (const auto& value : *entries)
             {

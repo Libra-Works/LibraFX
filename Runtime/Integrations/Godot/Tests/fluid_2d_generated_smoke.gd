@@ -8,7 +8,7 @@ func run() -> void:
 			return
 	var viewport := make_viewport()
 	var player: Variant = load_player(viewport)
-	var package := FileAccess.get_file_as_bytes("res://generated-output.lfxb")
+	var package := FileAccess.get_file_as_bytes("res://generated-output.lfxp")
 	if not check(player.play_package(package) == 0, "Generated resource package loads: " + player.get_gpu_error()):
 		return
 	player.set_process(false)
@@ -43,7 +43,7 @@ func run() -> void:
 	if not check(restarted.colored == 0, "Restart clears generated storage"):
 		return
 	player.stop()
-	if not check(player.play_package(FileAccess.get_file_as_bytes("res://fluid-only.lfxb")) == 0, "Automatic plane control loads"):
+	if not check(player.play_package(FileAccess.get_file_as_bytes("res://fluid-only.lfxp")) == 0, "Automatic plane control loads"):
 		return
 	player.set_process(false)
 	for step in range(30):

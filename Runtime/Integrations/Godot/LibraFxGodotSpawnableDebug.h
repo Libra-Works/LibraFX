@@ -2,7 +2,10 @@
 
 #include "liberafx/host/LbSpawnableDebugJob.h"
 #if defined(_WIN32)
-// Windows.h is included by the owning debug adapter before this header.
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <Windows.h>
 #include "liberafx/host/LbWindowsExecutionDebugClient.h"
 #endif
 #include <memory>
@@ -35,7 +38,7 @@ public:
             auto candidate = std::unique_ptr<GodotSpawnableDebug>(
                 new GodotSpawnableDebug(std::move(owner)));
 #if defined(_WIN32)
-            // Identity is for the complete original LFXP, not its root LFXB.
+            // Identity is for the complete original LFXP package, not its nested program payload.
             candidate->identity_ = host::ExecutionDebugProtocol::programIdentity(bytes, byteCount);
 #endif
             out = std::move(candidate);

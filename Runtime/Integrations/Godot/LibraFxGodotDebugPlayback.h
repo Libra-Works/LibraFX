@@ -1,17 +1,6 @@
 #pragma once
 
 #include "liberafx/LbRuntimeResult.h"
-#include "liberafx/LbVfxRuntime.h"
-#if defined(_WIN32)
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <Windows.h>
-#include "liberafx/host/LbWindowsExecutionDebugWorker.h"
-#endif
 #include "LibraFxGodotSpawnableDebug.h"
 #include "LibraFxGodotRender.h"
 #include "LibraFxGodotGpu.h"
@@ -35,8 +24,6 @@
 #include <deque>
 #include <memory>
 #include <new>
-#include <thread>
-#include <vector>
 
 namespace liberafx::godot_adapter {
 
@@ -46,71 +33,21 @@ using godot::PackedByteArray;
 using godot::PackedFloat64Array;
 using godot::String;
 
-// .lfxb/.lfxp debug player. Package loading is separate from debugger attach:
+// Package-only debug player. Loading is separate from debugger attach:
 // first obtain the generation and (for a child) its Spawn event, then attach
 // using the editor's fresh invitation. Poll before reading host-owned values.
 // Core jobs contain no engine objects; Godot values stay on the main thread.
 class LibraFxDebugPlayer final : public Node {
     GDCLASS(LibraFxDebugPlayer, Node)
 
-    struct AlignedStorage final {
-        void* data = nullptr;
-        std::size_t alignment = alignof(std::max_align_t);
-
-        ~AlignedStorage() { reset(); }
-        AlignedStorage() = default;
-        AlignedStorage(const AlignedStorage&) = delete;
-        AlignedStorage& operator=(const AlignedStorage&) = delete;
-
-        auto allocate(std::size_t bytes, std::size_t requestedAlignment) noexcept -> bool
-        {
-            reset();
-            if (bytes == 0) {
-                return true;
-            }
-            if (requestedAlignment < alignof(double) || requestedAlignment > 64 ||
-                (requestedAlignment & (requestedAlignment - 1)) != 0) {
-                return false;
-            }
-            alignment = requestedAlignment;
-            try {
-                data = ::operator new(bytes, std::align_val_t{alignment});
-            } catch (...) {
-                data = nullptr;
-                return false;
-            }
-            std::memset(data, 0, bytes);
-            return true;
-        }
-
-        void reset() noexcept
-        {
-            if (data) {
-                ::operator delete(data, std::align_val_t{alignment});
-                data = nullptr;
-            }
-        }
-
-        auto doubles() noexcept -> double* { return static_cast<double*>(data); }
-    };
 
     struct Playback final {
-        std::vector<std::uint8_t> bytecode;
-        Program program;
-        AlignedStorage work;
-        AlignedStorage defaults;
-        Instance instance;
         std::unique_ptr<GodotSpawnableDebug> package;
-        // Never captured by a Core job. Only the main-thread facade accesses
-        // these after poll has acquired completion and joined the worker.
         std::unique_ptr<PackageRenderRenderer> renderer;
         std::unique_ptr<PackageGpuRenderer> gpu;
         std::deque<SpawnableHostEvent> events;
         String gpuError;
         Result renderResult = Result::NotReady;
-#if defined(_WIN32)
-        std::unique_ptr<host::WindowsExecutionDebugWorker> debugWorker;
-#endif
         bool pending = false;
         bool closing = false;
         bool failed = false;
@@ -122,69 +59,12 @@ class LibraFxDebugPlayer final : public Node {
 
         ~Playback() { shutdown(); }
 
-        auto initialize(const PackedByteArray& source) noexcept -> Result
-        {
-            auto size = static_cast<std::size_t>(source.size());
-            if (!source.ptr() || size < 12 || size > 16u * 1024u * 1024u) {
-                return Result::InvalidArgument;
-            }
-            auto result = validateProgram(source.ptr(), size);
-            if (result != Result::Ok) {
-                return result;
-            }
-            try {
-                bytecode.assign(source.ptr(), source.ptr() + size);
-            } catch (...) {
-                return Result::InsufficientWork;
-            }
-            result = Program::load(bytecode.data(), bytecode.size(), program);
-            if (result != Result::Ok) {
-                return result;
-            }
-
-            auto workBytes = program.workBytes();
-            auto workCount = workBytes / sizeof(double) + (workBytes % sizeof(double) ? 1u : 0u);
-            auto defaultsCount = program.parameterValueCount();
-            constexpr auto maxWorkBytes = std::size_t{16} * 1024u * 1024u;
-            if (workCount > maxWorkBytes / sizeof(double) ||
-                defaultsCount > maxWorkBytes / sizeof(double)) {
-                return Result::InsufficientWork;
-            }
-            if (!work.allocate(workCount * sizeof(double), program.workAlignment()) ||
-                !defaults.allocate(defaultsCount * sizeof(double), program.defaultsAlignment())) {
-                return Result::InsufficientWork;
-            }
-            return instance.initialize(program, work.doubles(), workCount,
-                defaults.doubles(), defaultsCount);
-        }
-
-        auto attachDebugger(const char* invitation) noexcept -> Result
-        {
-#if defined(_WIN32)
-            auto identity = host::ExecutionDebugProtocol::programIdentity(
-                bytecode.data(), bytecode.size());
-            try {
-                debugWorker = std::make_unique<host::WindowsExecutionDebugWorker>(instance, identity);
-            } catch (...) {
-                return Result::InsufficientWork;
-            }
-            auto result = debugWorker->start(invitation);
-            if (result != Result::Ok) {
-                debugWorker.reset();
-            }
-            return result;
-#else
-            static_cast<void>(invitation);
-            return Result::UnsupportedBinary;
-#endif
-        }
-
         auto submit(double delta) noexcept -> Result
         {
             if (!std::isfinite(delta) || delta < 0) {
                 return Result::InvalidArgument;
             }
-            if (closing || failed) {
+            if (!package || closing || failed) {
                 return Result::NotReady;
             }
             if (pending) {
@@ -194,36 +74,17 @@ class LibraFxDebugPlayer final : public Node {
             if (!std::isfinite(nextTime)) {
                 return Result::InvalidArgument;
             }
-            if (package) {
-                auto request = GodotSpawnableDebug::Request{};
-                request.time = nextTime;
-                request.frameDelta = delta;
-                auto result = submitPackage(request);
-                if (result == Result::Ok) {
-                    requestedTime = nextTime;
-                    requestedDelta = delta;
-                    pendingAdvance = true;
-                }
-                return result;
-            }
-#if defined(_WIN32)
-            if (!debugWorker) {
-                return Result::NotReady;
-            }
-            auto result = instance.setTimeContext(nextTime, delta);
-            if (result != Result::Ok) {
-                return result;
-            }
-            result = debugWorker->schedule(nextTime);
+            auto request = GodotSpawnableDebug::Request{};
+            request.time = nextTime;
+            request.frameDelta = delta;
+            auto result = package->submit(request);
             if (result == Result::Ok) {
                 requestedTime = nextTime;
+                requestedDelta = delta;
                 pending = true;
                 pendingAdvance = true;
             }
             return result;
-#else
-            return Result::UnsupportedBinary;
-#endif
         }
 
         auto submitPackage(const GodotSpawnableDebug::Request& request) noexcept -> Result
@@ -238,6 +99,7 @@ class LibraFxDebugPlayer final : public Node {
             if (result == Result::Ok) {
                 pending = true;
                 pendingAdvance = false;
+                requestedDelta = 0;
             }
             return result;
         }
@@ -248,36 +110,16 @@ class LibraFxDebugPlayer final : public Node {
                 return lastResult;
             }
             auto result = Result::NotReady;
-            if (package) {
-                auto status = package->poll(result);
-                if (status != Result::Ok) {
-                    return status;
-                }
-            } else {
-#if defined(_WIN32)
-                if (!debugWorker || !debugWorker->isComplete()) {
-                    return Result::Busy;
-                }
-                result = debugWorker->finish();
-                if (result == Result::Busy) {
-                    return result;
-                }
-#else
-                result = Result::UnsupportedBinary;
-#endif
+            auto status = package->poll(result);
+            if (status != Result::Ok) {
+                return status;
             }
             pending = false;
             lastResult = result;
-            if (result == Result::Ok) {
-                if (pendingAdvance) {
-                    elapsed = requestedTime;
-                }
-            } else {
-                // Package operations have the same retry boundary as the
-                // C ABI (notably QueueRejected after draining events). Keep
-                // the error visible but do not permanently disable the host.
-                failed = !package;
+            if (result == Result::Ok && pendingAdvance) {
+                elapsed = requestedTime;
             }
+            pendingAdvance = false;
             return result;
         }
 
@@ -287,95 +129,23 @@ class LibraFxDebugPlayer final : public Node {
             if (package) {
                 package->requestStop();
             }
-#if defined(_WIN32)
-            if (debugWorker) {
-                debugWorker->requestStop();
-            }
-#endif
         }
 
         auto detachIfReady() noexcept -> Result
         {
-            if (package) {
-                if (pending && poll() == Result::Busy) {
-                    return Result::Busy;
-                }
-                return package->detach();
-            }
-#if defined(_WIN32)
-            if (!debugWorker) {
+            if (!package) {
                 return Result::NotReady;
             }
-            if (pending) {
-                auto result = poll();
-                if (result == Result::Busy) {
-                    return result;
-                }
+            if (pending && poll() == Result::Busy) {
+                return Result::Busy;
             }
-            auto result = debugWorker->detach();
-            if (result == Result::Ok) {
-                debugWorker.reset();
-            }
-            return result;
-#else
-            return Result::UnsupportedBinary;
-#endif
+            return package->detach();
         }
 
         void shutdown() noexcept
         {
-            if (package) {
-                // Session destruction stops transport, releases any pause,
-                // joins evaluation, then removes hooks before freeing Core.
-                package.reset();
-                pending = false;
-                return;
-            }
-#if defined(_WIN32)
-            if (!debugWorker) {
-                return;
-            }
-            beginClose();
-            if (pending) {
-                // requestStop releases a Core pause. The standalone v1/v2
-                // program is capped at 10,000 instructions; after release the
-                // existing worker's bounded evaluation can finish and join.
-                while (pending && debugWorker && !debugWorker->isComplete()) {
-                    std::this_thread::yield();
-                }
-                if (pending) {
-                    static_cast<void>(poll());
-                }
-            }
-            auto result = detachIfReady();
-            if (result != Result::Ok) {
-                // The worker's own destructor performs the final stop/join/
-                // hook-removal ordering; it never leaves a dangling callback.
-                debugWorker.reset();
-            }
-#endif
-        }
-
-        static auto validateProgram(const std::uint8_t* bytes, std::size_t size) noexcept -> Result
-        {
-            if (!bytes || size < 12 || std::memcmp(bytes, "LFXB", 4) != 0) {
-                return Result::InvalidBinary;
-            }
-            auto version = static_cast<std::uint16_t>(bytes[4] | (std::uint16_t(bytes[5]) << 8));
-            if (version != 1 && version != 2) {
-                return Result::UnsupportedBinary;
-            }
-            auto count = std::uint32_t{};
-            for (auto index = 0u; index < 4; ++index) {
-                count |= std::uint32_t(bytes[8 + index]) << (index * 8);
-            }
-            if (count > 10000) {
-                return Result::InvalidBinary;
-            }
-            auto headerBytes = version == 1 ? std::size_t{12} : std::size_t{16};
-            auto instructionBytes = version == 1 ? std::size_t{44} : std::size_t{96};
-            return size == headerBytes + std::size_t{count} * instructionBytes
-                ? Result::Ok : Result::InvalidBinary;
+            package.reset();
+            pending = false;
         }
     };
 
@@ -686,50 +456,18 @@ public:
         return out;
     }
 
-    int start_debug(const PackedByteArray& bytecode, const String& invitation)
-    {
-        if (!godot::Thread::is_main_thread()) {
-            return code(Result::InvalidArgument);
-        }
-        if (playback_) {
-            return code(Result::Busy);
-        }
-        auto candidate = std::unique_ptr<Playback>{};
-        try {
-            candidate = std::make_unique<Playback>();
-        } catch (...) {
-            return code(Result::InsufficientWork);
-        }
-        auto result = candidate->initialize(bytecode);
-        if (result != Result::Ok) {
-            return code(result);
-        }
-        auto invitationUtf8 = invitation.utf8();
-        if (invitationUtf8.length() != 32) {
-            return code(Result::InvalidArgument);
-        }
-        result = candidate->attachDebugger(invitationUtf8.get_data());
-        if (result != Result::Ok) {
-            return code(result);
-        }
-        playback_ = std::move(candidate);
-        return code(Result::Ok);
-    }
-
     int advance(double delta)
     {
-        if (!godot::Thread::is_main_thread() || !playback_) {
+        if (!godot::Thread::is_main_thread() || !playback_ || !playback_->package) {
             return code(Result::NotReady);
         }
-        if (playback_->package) {
-            auto boundary = packageBoundary();
-            if (boundary != Result::Ok) {
-                return code(boundary);
-            }
-            auto result = updateCurrentCamera();
-            if (result != Result::Ok) {
-                return code(result);
-            }
+        auto boundary = packageBoundary();
+        if (boundary != Result::Ok) {
+            return code(boundary);
+        }
+        auto result = updateCurrentCamera();
+        if (result != Result::Ok) {
+            return code(result);
         }
         return code(playback_->submit(delta));
     }
@@ -767,7 +505,7 @@ public:
         auto closing = playback_->closing;
         auto pending = playback_->pending;
         auto elapsed = playback_->elapsed;
-        auto failed = playback_->failed;
+        auto failed = false;
         if (closing && !pending) {
             auto detached = playback_->detachIfReady();
             if (detached == Result::Ok) {
@@ -791,7 +529,7 @@ public:
         status["closed"] = false;
         status["result"] = code(result);
         status["time"] = elapsed;
-        status["package"] = playback_->package != nullptr;
+        status["package"] = true;
         status["visual_preview"] = playback_->renderer != nullptr;
         status["render_result"] = code(playback_->renderResult);
         status["gpu_error"] = playback_->gpuError;
@@ -810,12 +548,6 @@ public:
             }
             return status;
         }
-#if defined(_WIN32)
-        status["debug_transport_worker_running"] = playback_->debugWorker &&
-            playback_->debugWorker->transportRunning();
-#else
-        status["debug_transport_worker_running"] = false;
-#endif
         return status;
     }
 
@@ -832,9 +564,7 @@ public:
         }
         auto components = std::array<double, 4>{};
         auto width = std::uint8_t{};
-        auto result = playback_->package
-            ? playback_->package->runtime().rootValue(id.data(), components.data(), width)
-            : playback_->instance.valueComponents(id.data(), components.data(), width);
+        auto result = playback_->package->runtime().rootValue(id.data(), components.data(), width);
         if (result == Result::Ok && width <= components.size()) {
             values.resize(width);
             for (auto index = 0u; index < width; ++index) {
@@ -861,8 +591,6 @@ public:
 protected:
     static void _bind_methods()
     {
-        godot::ClassDB::bind_method(godot::D_METHOD("start_debug", "bytecode", "invitation"),
-            &LibraFxDebugPlayer::start_debug);
         godot::ClassDB::bind_method(godot::D_METHOD("load_package", "package_bytes"),
             &LibraFxDebugPlayer::load_package);
         godot::ClassDB::bind_method(godot::D_METHOD("set_mesh_binding", "identity", "mesh"),

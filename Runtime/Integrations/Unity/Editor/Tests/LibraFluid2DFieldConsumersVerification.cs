@@ -30,7 +30,7 @@ namespace LiberaFx.Unity.Editor
                     File.WriteAllText(folder + "/Particle.compute", particle.unityShaderSource);
                     File.WriteAllText(folder + "/Particle.json", particle.unityMetadataJson);
                     var packagePath = folder + "/" + mode + ".lfxp";
-                    File.Copy(Path.Combine(fixtures, mode + ".lfxb"), packagePath);
+                    File.Copy(Path.Combine(fixtures, mode + ".lfxp"), packagePath);
                     AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
                     var shader = AssetDatabase.LoadAssetAtPath<ComputeShader>(folder + "/Particle.compute");
                     var metadata = AssetDatabase.LoadAssetAtPath<TextAsset>(folder + "/Particle.json");

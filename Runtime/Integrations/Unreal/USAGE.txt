@@ -8,10 +8,9 @@ Prepared/shared simulation
   instances. Particle age includes effect time scale. CPU render metadata 4,
   GPU executable payload 4 / renderer bindings 2 require matching new sources.
   The GPU asset serializes and validates its timeline for standalone playback.
-  Prepared Host Capacity defaults to 256 per package/options pool, with 4
-  preparation workers. Explicit saved capacity overrides remain in effect.
-  Spawnable components expose Use Prepared Hosts, Prepared Host Capacity,
-  Preparation Workers, Use Shared Simulation and Prewarm Effect under Performance.
+  The package host defaults to capacity 256 per package/options pool and four
+  preparation workers. These are runtime defaults, not separate author-facing
+  controls. `ULibraEffectComponent` exposes Use Shared Simulation under Performance.
   BeginPlay prepares assigned packages before automatic playback. The game-world
   service joins bounded UE tasks after actor ticks, then publishes rendering.
   See source SDK docs/runtime-shared-simulation.md for eligibility and lifetimes.
@@ -84,15 +83,14 @@ GPU Fluid2D smoke/ink
   512-byte uniform block. Use matching updated plugin shaders.
   Libra.GPU.Fluid2D.VorticityConfinement compares projected GPU velocities
   against a disabled control and checks finite values and closed boundaries.
-  Executable GPU payload manifests use Version=2 only for scopes containing a
-  fluid. The existing programs array remains the particle path; fluidPrograms
-  carries {nodeId, settings, renderer}. Container snapshots stay GpuParticle
-  with gpuState.fluid2D marking fluid mode. Mixed particle/fluid scopes and
-  SpawnableGroup template scopes use the same public ULibraEffectComponent.
-  Settings are validated transactionally, including IDs, scope limits and the
-  256 MiB native-buffer/texture budget. Version=1 particle payloads remain
-  compatible; unsupported versions and mismatched fluid snapshots fail instead
-  of dropping the fluid.
+  Executable GPU payload manifests use the current Version=4 shape. The existing
+  programs array remains the particle path; optional fluidPrograms carries
+  {nodeId, settings, renderer} when fluid programs are present. Container
+  snapshots stay GpuParticle with gpuState.fluid2D marking fluid mode. Mixed
+  particle/fluid scopes and SpawnableGroup template scopes use the same package
+  host. Settings are validated transactionally, including IDs, scope limits and
+  the 256 MiB native-buffer/texture budget. Optional content is determined by
+  field presence and type, not a historical manifest-version branch.
   Unreal dispatches the shipped LibraFluid2D global shader only; package shader
   source is never compiled or executed. Each fluid owns seven float4 grid
   buffers and an RGBA16F dye texture, and renders a premultiplied-alpha local XY
@@ -132,7 +130,7 @@ Graph-authored ModelDraw Cube verification
   Automation RunTests Libra.Editor.ModelDraw.SavedScenePlay with only the
   verification-project argument to check map reload and automatic Play without
   access to the original compiler fixture directory.
-  The map contains a public LibraEffectActor, embedded package, project-local
+  The map contains an Effect component with an embedded package, project-local
   bindings/material and PlayerStart; the engine's Cube asset is not modified.
   /Game/LiberaFxSamples/Cube.Cube is an explicit sample lookup alias bound to
   /Engine/BasicShapes/Cube.Cube here, not a confirmed portable asset identity.
@@ -163,106 +161,57 @@ Engine version compatibility
   and 5.9 verification is pending; source targeting alone is not tested support.
 
 Import and use
-  ULibraEffectComponent ("Libra Effect") is the public playback entry point for
-  an entire effect, including CPU logic, rendering, GPU Particle nodes and
-  Spawnable groups. Do not select different components for CPU and GPU.
-  Import a canonical .lfxb package, legacy .lfxp package, legacy raw .lfxb
-  bytecode asset, or standalone .lfxgpu asset,
-  then drag the resulting asset from Content Browser
-  into the level viewport. The editor creates ALibraEffectActor with a scene
-  root and one ULibraEffectComponent, assigns the dropped asset to Package and
-  retains the placement transform. Legacy raw LFXB and .lfxgpu assets use the
-  same actor and component, with Effect or GpuEffect assigned respectively.
-  Assign only one of Effect, Package, or GpuEffect. Placement does not start editor
-  simulation; bAutoPlay starts playback when the game begins.
-  Alternatively add Libra Effect to an existing actor and assign Package.
-  SetPackage/SetEffect switch formats; assigning both properties rejects Play.
-  ULibraSpawnableComponent remains an internal helper, hidden from Add Component.
-  GPU execution uses an internal UObject runtime, not a second actor component.
-  The effect component owns and ticks standalone GPU playback; Spawnable playback
-  drives its own per-instance runtimes.
+  Export compiled effects as `.lfxp` packages. The package importer validates
+  the LFXP signature and package structure; a suffix or magic value alone does
+  not make corrupt content loadable. Renaming a file does not convert it.
+  Import the package in the Content Browser as `ULibraSpawnableAsset`. Add
+  `ULibraEffectComponent` to an actor and assign the asset to **Package**, or
+  place `ALibraEffectActor` and assign the package to its effect component.
+  `ULibraEffectComponent` is the author-facing entry point; it creates and
+  manages the internal `ULibraSpawnableComponent`, which authors should not add
+  separately. Assign required project-local resource bindings as needed;
+  `.lfxp` contains compiled effect data, not copies of engine assets.
+Package asset inspector
+  Open the imported `.lfxp` package in the Content Browser. Under LIBERA FX
+  Resource Overrides, choose a Static Mesh, Texture2D or Material for a key
+  listed from the package's delivered root and child render data (including
+  packaged GPU textures). A key is exactly the delivered identity plus its
+  kind; replacing a key affects every use of that key in this package. This is
+  a local UE binding, not a portable mapping or an edit to the source graph.
+  Save the uasset and restart playback. Existing component AssetBindings have
+  priority; clear a conflicting component binding to use the package's choice.
+  Clearing the asset picker restores normal lookup. A replacement must still
+  satisfy runtime checks (e.g. mesh slots, material parameter locators and
+  sprite atlas material contract). The editor validates identity and asset
+  class before recording a change. Overrides are serialized as asset references
+  for cooking. Reimport does not overwrite them or change the source project
+  link. If export changes a key, refresh the list and clear the old override
+  explicitly; it is not guessed or transferred to another key. The compiled
+  payload is not rewritten by edits.
 
-  New .lfxb exports use the existing LFXP envelope, even for scalar-only roots.
-  The package factory recognizes .lfxb and the legacy .lfxp input alias. The
-  raw effect factory accepts legacy LFXB .lfxb only. Both FactoryCanImport and
-  actual import/reimport validate content; a suffix or correct magic alone
-  cannot make corrupt data importable. The two factories do not both accept
-  the same valid content. Renaming a file does not convert its format.
-  Reimport cannot change an existing raw asset's class to a package class:
-  import a replacement package at a new path and assign Package, clearing Effect.
-
-Imported asset inspector
-  Open the imported .lfxb package (or legacy .lfxp) in the Content Browser.
-  Under LIBERA FX Resource
-  Overrides, choose a Static Mesh, Texture2D or Material for a key listed from
-  the package's delivered root and child render data (including packaged GPU
-  textures). A key is exactly the delivered identity plus its kind; replacing a
-  key affects every use of that key in this package. This is a local UE binding,
-  not a portable mapping or an edit to the source graph. Save the uasset and
-  restart playback. Existing component AssetBindings have priority; clear a
-  conflicting component binding to use the package's choice. Clearing the asset
-  picker restores normal lookup. A replacement must still satisfy the existing
-  runtime checks (e.g. mesh slots, material parameter locators and sprite atlas
-  material contract). The editor validates identity and asset class before
-  recording a change. It does not infer a new material parameter mapping.
-  Overrides are serialized as asset references for cooking. Reimport does not
-  overwrite them or change the source project link. If export changes a key,
-  refresh the list and clear the old override explicitly; it is not guessed or
-  transferred to another key. The compiled payload is not rewritten by edits.
-  A legacy raw LFXB contains bytecode only; use a resource-bearing package for these
-  controls. Standalone .lfxgpu assets use the same Libra Effect placement component.
-
-  On either .lfxp or .lfxb, set the editor-only Source Project Path to the
-  original local .lfxproj, then use Open LIBERA FX. This path is independent of
-  the reimport filename; the .lfxproj is never embedded or changed. On Windows,
-  set LIBERAFX_EDITOR_EXECUTABLE to the full path of a current LiberaFx.exe
-  before starting Unreal Editor, or register that executable as the .lfxproj
-  file handler. Otherwise the action uses the platform file association (Linux
-  requires xdg-open and association success is reported by the OS). If LIBERA FX
-  is already running, open the source in its existing window; the standalone
-  singleton does not forward new launch arguments to that instance.
+  Set the editor-only Source Project Path to the original local `.lfxproj`,
+  then use Open LIBERA FX. This path is independent of the `.lfxp` reimport
+  filename; the source project is never embedded or changed. On Windows, set
+  LIBERAFX_EDITOR_EXECUTABLE before starting Unreal Editor or register it as
+  the `.lfxproj` file handler. Otherwise the platform file association is used.
+  If LIBERA FX is already running, open the source in its existing window.
 
   Automation source: Libra.Editor.Resources.SourceProjectPath (no launch),
   Libra.Editor.Spawnable.ReimportFixture with -LibraSpawnableFixture=<Cube.lfxp>,
   and Libra.Editor.ModelDraw.CubePackage with the compiler fixture above.
 
-Standalone bytecode compatibility
-  Import an existing legacy raw LFXB .lfxb file into Unreal. New Converter/editor
-  exports are packages and use Package instead, even for scalar-only graphs.
-  Add a Libra Effect component to an actor and set its Effect asset.
-  Play / Pause / Stop / EvaluateAtTime are available to both C++ and Blueprint.
-  Read results in OnEvaluationCompleted, before the next worker evaluation starts.
-  BindValue / BindParameter / BindSignal resolve UUIDs once. ReadBoundValue,
-  ReadBoundParameter, SetBoundParameter and DispatchSignal use those handles.
-  GetValueType reports the semantic output type, including bytecode-v10 Int32.
-  Use ReadBoundInt32Value and SetBoundInt32Parameter for exact integer access.
-  Float/Int32 conversions remain authored nodes; overflow reports ArithmeticOverflow.
-  Rebind after changing an effect, reimporting, stopping/recreating its instance,
-  or registering new native node types. Cross-instance/stale handles are rejected.
-  Parameter overrides are per instance; asset bytecode is never modified.
-  Signals run synchronously on the game thread after a successful evaluation.
-  Their instruction budget bounds execution, not rollback of earlier side effects.
-  Effect Age uses effect elapsed time and Delta Time uses the engine tick's
-  delta without substituting effect substeps or applying PlayRate again.
-  Initial/manual evaluations use the world's current delta. Instance Age uses
-  the enclosing Spawnable clock; the component's standalone graph is the root.
-  When Effect is legacy raw LFXB, the component performs raw evaluation: it does not
-  use Life Time to expire playback or automatically dispatch On Start / On
-  Destroy. Stop is an explicit interruption, not natural expiry.
 Effect package playback
-  Import a canonical .lfxb package (legacy .lfxp also works) as a Libra Spawnable asset and assign it to the
-  public Libra Effect component's Package property. It drives the engine-neutral
-  SpawnableHost on the game thread using scaled TimeSeconds and the unscaled
+  `ULibraEffectComponent` plays an assigned `ULibraSpawnableAsset` package
+  through its internal `ULibraSpawnableComponent`. The internal helper drives
+  the engine-neutral SpawnableHost on the game thread using scaled TimeSeconds and the unscaled
   Unreal frame delta. Blueprint events expose Spawn/Stop/Destroy/Signal and
   named game-I/O records; methods accept game signals/properties and read root
   or active child values. RequestNaturalEnd follows the package's natural
   lifecycle; Stop is explicit and never publishes natural Destroy.
   Play(false) resumes paused package playback without replacing its scopes.
-  DispatchNodeSignal addresses package node UUIDs; the existing DispatchSignal
-  bound-handle API remains for standalone bytecode. ReadRootValue/ReadChildValue
-  and named game I/O address package values. Package seeking, raw bound handles
-  and per-node profiling flags currently reject explicitly rather than evaluating
-  a separate CPU instance or silently ignoring requested behavior.
+  DispatchNodeSignal addresses package node UUIDs. ReadRootValue/ReadChildValue
+  and named game I/O address package values. Unsupported requests fail explicitly
+  rather than silently evaluating a separate CPU instance or ignoring behavior.
   The host owns package lifecycle, delayed work and parent/child routing.
   Ordinary Draw, CPU Sprite and FlexiblePlane use effect-owned native
   FPrimitiveSceneDesc registrations and pre-created scene proxies; none creates
@@ -314,8 +263,8 @@ Effect package playback
   used only when exposed. Frame -1 with playing enabled follows scope-local time.
   Missing/wrong-typed assets, unsupported inputs/material parameters and invalid
   manifests reject playback with LastError instead of a partial visual fallback.
-  Executable GPU manifests require current package export; legacy GPU snapshots
-  alone reject with a re-export diagnostic. Each scope owns an independent
+  Executable GPU manifests are required for GPU playback; packages without one
+  reject with a source re-export diagnostic. Each scope owns an independent
   GPU runtime, particle buffers, spawn cursor and seed. GPU ticking
   uses effect-scaled local elapsed time and is driven only by the Spawnable
   owner. GpuSpawnPerSecond controls
@@ -333,8 +282,8 @@ Effect package playback
   package asset validation, component startup, child draining, root completion
   and explicit Stop. Supply -LibraSpawnableFixture=<absolute path> and run
   "Automation RunTests Libra.Runtime.Spawnable.ComponentFixture" in Output Log.
-  The user also imported Fireworks.lfxp through Content Browser and confirmed
-  the resulting LibraSpawnableAsset and source import data in the asset editor.
+  Fireworks.lfxp was imported through Content Browser and the resulting
+  LibraSpawnableAsset and source import data were confirmed in the asset editor.
   The ordinary Draw fixture was run in the isolated UE 5.7.4 Editor with
   NullRHI; it verifies zero per-Draw UStaticMeshComponents, native primitive
   counts, evaluated transform/bounds snapshots, overlapping scopes, paused
@@ -353,20 +302,21 @@ Effect package playback
   prove rendered pixels, material output or visual transparent ordering.
   The focused component fixture additionally exercises actual renderer objects,
   two overlapping instances with independent local clocks, and resource cleanup.
-  These lifecycle/rendering fixtures now run through ULibraEffectComponent.
-  Libra.Editor.Effect.ViewportAssetPlacement verifies real editor factory
-  discovery, both asset formats, actor/component assignment and placement pose.
+  These lifecycle/rendering fixtures exercise the package playback path through
+  the effect component. Libra.Editor.Effect.ViewportAssetPlacement verifies that
+  the package factory places the public effect actor/component, rejects unrelated
+  assets, and retains package and standalone GPU asset assignments.
   Isolated UE 5.7 D3D11 automation also passed GameIoRendering (root properties,
   named spawn signals and overlapping Capture/Live values) and GpuFixture
   (actual particle dispatch/readback, independent local clocks, paused playback,
   natural scope release, Stop and component destruction). Supply the matching
   compiler-produced fixtures using -LibraSpawnableGameIoFixture=<absolute path>
   and -LibraSpawnableGpuFixture=<absolute path to spawnable.gpu.lfxp>, then run
-  "Automation RunTests Libra.Runtime.Spawnable". RootGpuFixture additionally
-  passed actual root dispatch/readback, natural teardown, legacy re-export and
-  auto-idle rejection; supply -LibraSpawnableRootGpuFixture=<RootGpu.lfxp>, with
-  RootGpu.legacy.lfxp beside it. The isolated test project's
-  --spawnable-adapter-fixtures command emits these root GPU and game I/O files.
+  "Automation RunTests Libra.Runtime.Spawnable". RootGpuFixture additionally passed actual root dispatch/readback, natural
+  teardown and auto-idle rejection; supply
+  -LibraSpawnableRootGpuFixture=<RootGpu.lfxp>. The isolated test project's
+  --spawnable-adapter-fixtures command emits the root GPU and game I/O package
+  fixtures, including an unsupported non-executable snapshot case.
   Separate UE 5.7.4 D3D11/SM5 RealRhiAcceptance passed actual SceneCapture
   readback for an instanced opaque batch, CPU Sprite custom RGB/half-alpha, and
   fixed-up FlexiblePlane red/green vertex colors. Each target became clear
@@ -381,8 +331,8 @@ Effect package playback
   lies in XY, so capture it from above with a near plane smaller than its scale.
   Run "Automation RunTests Libra.Runtime.Rendering.RealRhiAcceptance" with
   -d3d11, -LibraOpaqueBatchFixture=<opaque-batch.lfxp>,
-  -LibraCpuParticleFixture=<cpu-particles-render.lfxb>, -LibraRhiCpuTinted,
-  -LibraFlexiblePlaneFixture=<root-flexible-plane.lfxb>, and optionally
+  -LibraCpuParticleFixture=<cpu-particles-render.lfxp>, -LibraRhiCpuTinted,
+  -LibraFlexiblePlaneFixture=<root-flexible-plane.lfxp>, and optionally
   -LibraRealRenderOutput=<absolute-isolated-output-directory>.
   --cpu-particle-fixture <new-isolated-directory> on the managed smoke executable
   emits both the ordinary CPU fixture and this authored tinted/half-alpha variant.
@@ -398,8 +348,8 @@ Effect package playback
   Synchronous GPU diagnostics wait on the readback fence; an idle GPU alone
   does not make an emulated frame-based RHI fence immediately report ready.
   The asset editor's LIBERA FX Package section includes "Reimport from source".
-  It updates the embedded binary from the original .lfxb (or legacy .lfxp) and lets you locate
-  a moved source file. Failed imports preserve the existing embedded data.
+  It updates the embedded package from the original `.lfxproj` source and lets
+  you locate a moved source file. Failed imports preserve the existing embedded data.
   Save the asset after reimporting. Source files are not needed for playback.
   Content Browser's asset type filters include a LIBERA FX category containing
   "LIBERA FX Compiled Effect" and "LIBERA FX Spawnable Package".
@@ -409,11 +359,9 @@ Effect package playback
   preservation of embedded data when the source is invalid or missing.
   Visual placement and clicking the new details button still need a UI check.
   Unified-format coverage added (not built or executed for this change):
-  Libra.Editor.Import.LegacyRawRouting checks raw factory routing, truncated
-  content, direct factory validation and failed raw reimport.
-  Libra.Editor.Spawnable.ReimportFixture now tests each supplied package under
-  BOTH .lfxb and .lfxp, including non-competing factory selection, corruption,
-  resource overrides and source-link persistence through save/reload/reimport.
+  `Libra.Editor.Spawnable.ReimportFixture` checks `.lfxp` package validation,
+  corruption rejection, resource overrides and source-link persistence through
+  save/reload/reimport.
   Supply a compiler-produced package using -LibraSpawnableFixture=<absolute path>;
   use -LibraSpawnableRequiredKinds=Model,Texture,Material when the fixture
   actually contains all those resources. Old fixture contents are not rewritten.
@@ -431,16 +379,17 @@ Effect package playback
 Live editor connection
   Start LIBERA FX and show its Preview panel. Use that session's access token
   and SHA-256 certificate fingerprint; neither is written into level assets.
-  Add a Libra Editor Connection component to the same actor as Libra Effect.
-  Target defaults to the first Libra Effect component on that actor.
-  Set Host, Port (default 8766), AccessToken and CertificateFingerprint, then call
-  ConnectToEditor from Blueprint or C++. Use PIE or a running standalone game.
-  The client uses /preview?protocol=3 with certificate-pinned TLS, authenticates
-  before subscribing, and accepts compiled LFXB programs, playback, and bounded
+  Add a Libra Editor Connection component to the host actor and set **Target**
+  to its `ULibraEffectComponent`. Set Host, Port (default 8766), AccessToken and
+  CertificateFingerprint, then call ConnectToEditor from Blueprint or C++. Use
+  PIE or a running standalone game. The client uses /preview?protocol=3 with
+  certificate-pinned TLS, authenticates before subscribing, and accepts compiled
+  `.lfxp` packages, playback updates, `parameter_delta` edits and bounded
   compilation diagnostics. It never interprets the editable graph in the engine.
-  Graph edits replace the transient program; playback-only packets reuse it.
-  Rebind handles in OnPreviewProgramChanged. Continue reading completed values
-  in the target component's OnEvaluationCompleted, not OnPreviewUpdated.
+  Graph edits replace the transient package; playback-only packets reuse it.
+  Parameter deltas carry a matching outer/payload sequence and are applied as an
+  atomic batch; failures are reported rather than silently accepted. Continue
+  reading completed values through the effect component API.
   Invalid programs/compilation errors leave the last accepted effect intact.
   RequestSnapshot asks for a full resynchronization. DisconnectFromEditor closes
   the transport and restores the original asset (its prior instance state is
@@ -462,8 +411,8 @@ Project-native nodes
   the matching SDK; descriptor ABI-1 itself is unchanged.
   Add LibraRuntimeForUnreal to your module's Build.cs dependencies.
   Register descriptors with FLibraNativeNodes::Register in your module startup.
-  The same registry is used by raw programs (.lfxb) and by both the root and
-  spawned templates of an effect package (.lfxp). Register before playback.
+  The same registry is used by the root and spawned templates embedded in an
+  effect package. Register before package playback.
   Use the same type UUID, ABI version, numeric input order/widths, output width
   and signal branch count in C++ and the project's JSON node definitions.
   Parameter callbacks run on workers: do not touch UObject/actors there.
@@ -581,9 +530,8 @@ Validation sources
 CPU particle Sprite billboards
   CPU packages use LFXP format 4/package 12 with `cpuParticleVersion: 1`.
   Template CPU systems or nested Spawnables use format 5/package 13.
-  Play through Libra Effect; it owns one instanced native primitive per
-  emitter and dynamic scope, not an instanced mesh component. Do not add a
-  Spawnable component. Resolve each texture through
+  Play through the `ULibraEffectComponent` package path; its internal helper owns one instanced native primitive per
+  emitter and dynamic scope, not an instanced mesh component. Resolve each texture through
   AssetBindings or package resource overrides, or use `builtin:white`.
 
   Bind a Translucent material as `builtin:cpu-particle-alpha`, or an Additive
@@ -607,7 +555,7 @@ CPU particle Sprite billboards
   does not get separate orientations. Transparent sorting is by emitter, not
   by particle.
 
-  Blueprint/C++ callers use Libra Effect's `PopCpuParticleEvent` on the game
+  Blueprint/C++ callers use `ULibraEffectComponent`'s `PopCpuParticleEvent` on the game
   thread until `hasEvent` is false. Kind 1 is Property and kind 2 is Signal;
   Width gives the meaningful lanes of Values. ParticleId is an unsigned
   decimal string so Blueprint retains all 64 bits. Rendering does not consume
@@ -621,7 +569,7 @@ CPU particle Sprite billboards
   Libra.Runtime.Rendering.RealRhiAcceptance with -LibraRhiCpuSpriteOnly
   -LibraRhiNestedCpuSprite -LibraCpuParticleFixture=<absolute fixture path>.
   This checks rendering after both parent/child deadlines, natural retirement,
-  resource cleanup and restart through the public Libra Effect component.
+  resource cleanup and restart through `ULibraEffectComponent`.
 
 Development: water, combustion and generated fields
 --------------------------------------------------

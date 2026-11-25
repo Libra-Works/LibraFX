@@ -1,6 +1,4 @@
-#include "liberafx/host/LbProgramSession.h"
 #include "liberafx/host/LbProjectNodes.h"
-#include "liberafx/LbLivePreview.h"
 #include "liberafx/host/LbPackagePreviewContract.h"
 #include "liberafx/LbCpuParticles.h"
 #include "liberafx/LbSpawnableHost.h"
@@ -53,9 +51,6 @@ using liberafx::NamedIoKind;
 using liberafx::SpawnableHost;
 using liberafx::SpawnableHostOptions;
 using liberafx::SpawnablePackage;
-using host::ProgramCompletion;
-using host::ProgramSession;
-using host::ProgramSessionOptions;
 
 class LibraEffectPlayer;
 class LibraSharedEffectWorld final : public Node {
@@ -85,51 +80,11 @@ class LibraEffectPlayer final : public Node {
     GDCLASS(LibraEffectPlayer, Node)
 
     struct Playback final {
-        std::unique_ptr<ProgramSession> session;
         host::PlaybackHost packageHost;
         std::unique_ptr<PackageRenderRenderer> renderer;
         std::unique_ptr<PackageGpuRenderer> gpu;
-        InstanceId instance{};
-        bool active = false;
         double elapsed = 0;
         double duration = -1;
-
-        Result complete(RequestId request)
-        {
-            auto processed = std::size_t{};
-            auto result = session->process(1, processed);
-            if (result != Result::Ok) {
-                return result;
-            }
-            auto completion = ProgramCompletion{};
-            result = session->takeCompletion(request, completion);
-            if (result != Result::Ok) {
-                return result;
-            }
-            if (completion.result == Result::Ok && completion.kind == InstanceRequestKind::Create) {
-                instance = completion.instance;
-                active = true;
-            }
-            return completion.result;
-        }
-
-        ~Playback()
-        {
-            if (packageHost) {
-                packageHost->stop();
-                return;
-            }
-            if (!session) {
-                return;
-            }
-            if (active) {
-                auto request = RequestId{};
-                if (session->submitControl(InstanceRequestKind::Destroy, instance, request) == Result::Ok) {
-                    complete(request);
-                }
-            }
-            session->close();
-        }
     };
 
 public:
@@ -184,139 +139,10 @@ public:
         return code(playback_->packageHost->setGameSpatialProperty(name.utf8().get_data(),
             static_cast<SpatialValueKind>(kind), source.data(), static_cast<std::size_t>(values.size())));
     }
-    int play(const PackedByteArray& bytecode, double duration)
+    int play(const PackedByteArray& packageBytes, double duration)
     {
-        if (bytecode.size() >= 4 && bytecode[0] == 'L' && bytecode[1] == 'F' &&
-            bytecode[2] == 'X' && bytecode[3] == 'P')
-        {
-            return play_package(bytecode, duration);
-        }
-        return playStandalone(bytecode, duration, 0, false);
+        return play_package(packageBytes, duration);
     }
-
-    int playStandalone(const PackedByteArray& bytecode, double duration, double previewTime, bool preview)
-    {
-        if (!Thread::is_main_thread() || !is_inside_tree()) {
-            return code(Result::InvalidArgument);
-        }
-
-        auto lifetime = Lifetime::infinite();
-        if (duration != -1) {
-            auto result = Lifetime::finite(duration, lifetime);
-            if (result != Result::Ok) {
-                return code(result);
-            }
-        }
-
-        auto candidate = std::make_unique<Playback>();
-        auto options = ProgramSessionOptions{};
-        options.instanceCapacity = 1;
-        options.requestCapacity = 1;
-        auto result = ProgramSession::create({1, 1}, options, candidate->session);
-        if (result != Result::Ok) {
-            return code(result);
-        }
-        auto request = RequestId{};
-        result = candidate->session->submitProgram(InstanceRequestKind::Create, {}, bytecode.ptr(),
-            static_cast<std::size_t>(bytecode.size()), lifetime, ReplacementPolicy::Restart, request);
-        if (result == Result::Ok) {
-            result = candidate->complete(request);
-        }
-        if (result == Result::Ok && preview) {
-            auto finished = false;
-            result = candidate->session->advance(candidate->instance, previewTime, previewTime, finished);
-            if (result == Result::Ok && finished) {
-                result = Result::NotReady;
-            }
-        }
-        if (result == Result::Ok) {
-            candidate->duration = duration;
-            candidate->elapsed = previewTime;
-            ++playbackGeneration_;
-            completedCpuEventHost_.reset();
-            playback_ = std::move(candidate);
-            set_process(!preview);
-        }
-        return code(result);
-    }
-
-    int apply_preview_frame(const PackedByteArray& bytes)
-    {
-        if (!Thread::is_main_thread() || !is_inside_tree()) {
-            return code(Result::InvalidArgument);
-        }
-        auto frame = livepreview::FrameView{};
-        if (livepreview::decodeFrame(bytes.ptr(), static_cast<std::size_t>(bytes.size()), frame) !=
-            livepreview::DecodeResult::Ok) {
-            return code(Result::InvalidBinary);
-        }
-        if (frame.kind == livepreview::Kind::Control || frame.kind == livepreview::Kind::Scene) {
-            return code(Result::UnsupportedBinary);
-        }
-        auto state = previewSequence_.validate(frame);
-        if (state == livepreview::SequenceResult::Stale) {
-            return code(Result::Ok);
-        }
-        if (state == livepreview::SequenceResult::Resync) {
-            return code(Result::QueueRejected);
-        }
-        if (frame.kind == livepreview::Kind::CompileError) {
-            previewError_ = String::utf8(reinterpret_cast<const char*>(frame.payload), frame.payloadLength);
-            previewSequence_.commit(frame);
-            return code(Result::Ok);
-        }
-        if (frame.timeSeconds < 0) {
-            return code(Result::InvalidArgument);
-        }
-        if (frame.kind == livepreview::Kind::Program) {
-            if (frame.payloadLength < 12 || std::memcmp(frame.payload, "LFXB", 4) != 0) {
-                return code(Result::InvalidBinary);
-            }
-            if (frame.payload[4] != 1 && frame.payload[4] != 2) {
-                return code(Result::UnsupportedBinary);
-            }
-            auto program = PackedByteArray{};
-            if (program.resize(static_cast<std::int64_t>(frame.payloadLength)) != godot::OK) {
-                return code(Result::InsufficientWork);
-            }
-            std::memcpy(program.ptrw(), frame.payload, frame.payloadLength);
-            auto result = playStandalone(program, -1, frame.timeSeconds, true);
-            if (result != code(Result::Ok)) {
-                return result;
-            }
-            previewBytecode_ = std::move(program);
-        } else {
-            if (!playback_ || playbackGeneration_ != previewPlaybackGeneration_ || previewBytecode_.is_empty()) {
-                return code(Result::QueueRejected);
-            }
-            auto delta = frame.timeSeconds - playback_->elapsed;
-            auto result = delta < 0
-                ? playStandalone(previewBytecode_, -1, frame.timeSeconds, true)
-                : advance(delta);
-            if (result != code(Result::Ok)) {
-                return result;
-            }
-        }
-        previewPlaybackGeneration_ = playbackGeneration_;
-        previewError_ = String{};
-        previewSequence_.commit(frame);
-        return code(Result::Ok);
-    }
-
-    void reset_preview_stream()
-    {
-        if (!Thread::is_main_thread()) {
-            return;
-        }
-        if (playback_ && playbackGeneration_ == previewPlaybackGeneration_ && !previewBytecode_.is_empty()) {
-            stop();
-        }
-        previewSequence_.reset();
-        previewBytecode_ = PackedByteArray{};
-        previewError_ = String{};
-    }
-
-    String get_preview_error() const { return Thread::is_main_thread() ? previewError_ : String{}; }
 
     int play_package(const PackedByteArray& packageBytes, double duration)
     {
@@ -417,14 +243,7 @@ public:
             result = playback_->packageHost->advance(elapsed, delta);
             return complete_shared(generation, elapsed, result);
         }
-        auto finished = false;
-        auto result = playback_->session->advance(playback_->instance, elapsed, delta, finished);
-        if (result != Result::Ok || finished) {
-            stop();
-        } else {
-            playback_->elapsed = elapsed;
-        }
-        return code(result);
+        return code(Result::NotReady);
     }
 
     LibraSharedEffectWorld* shared_world()
@@ -697,9 +516,7 @@ public:
         }
         auto components = std::array<double, 4>{};
         auto width = std::uint8_t{};
-        auto result = playback_->packageHost
-            ? playback_->packageHost->rootValue(id.data(), components.data(), width)
-            : playback_->session->read(playback_->instance, id.data(), components.data(), width);
+        auto result = playback_->packageHost->rootValue(id.data(), components.data(), width);
         if (result == Result::Ok) {
             values.resize(width);
             for (auto index = 0u; index < width; ++index) {
@@ -1070,7 +887,6 @@ public:
     }
     void _exit_tree() override
     {
-        reset_preview_stream();
         stop();
     }
 
@@ -1142,9 +958,6 @@ protected:
             &LibraEffectPlayer::get_gpu_spawn_per_second);
         ADD_PROPERTY(godot::PropertyInfo(godot::Variant::FLOAT, "gpu_spawn_per_second"),
             "set_gpu_spawn_per_second", "get_gpu_spawn_per_second");
-        godot::ClassDB::bind_method(godot::D_METHOD("apply_preview_frame", "bytes"), &LibraEffectPlayer::apply_preview_frame);
-        godot::ClassDB::bind_method(godot::D_METHOD("reset_preview_stream"), &LibraEffectPlayer::reset_preview_stream);
-        godot::ClassDB::bind_method(godot::D_METHOD("get_preview_error"), &LibraEffectPlayer::get_preview_error);
         godot::ClassDB::bind_method(godot::D_METHOD("clear_texture_binding", "asset_identity"), &LibraEffectPlayer::clear_texture_binding);
         godot::ClassDB::bind_method(godot::D_METHOD("set_camera_path", "path"), &LibraEffectPlayer::set_camera_path);
         godot::ClassDB::bind_method(godot::D_METHOD("get_camera_path"), &LibraEffectPlayer::get_camera_path);
@@ -1379,10 +1192,6 @@ private:
     TextureBindings textureBindings_;
     MaterialBindings materialBindings_;
     String gpuError_;
-    livepreview::SequenceCursor previewSequence_;
-    PackedByteArray previewBytecode_;
-    String previewError_;
-    std::uint64_t previewPlaybackGeneration_ = 0;
     NodePath cameraPath_;
     double gpuSpawnPerSecond_ = 100.0;
     std::uint64_t playbackGeneration_ = 0;

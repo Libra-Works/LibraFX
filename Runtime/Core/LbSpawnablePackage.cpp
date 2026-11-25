@@ -273,11 +273,7 @@ auto loadSpawnablePackage(const std::uint8_t* bytes, std::size_t byteCount,
         !reader.readU32(reserved) || encodedHeaderSize != headerSize ||
         totalLength != byteCount || reserved != 0)
         return Result::InvalidBinary;
-    if (!((formatVersion == 1 && packageVersion == 9) ||
-          (formatVersion == 2 && packageVersion == 10) ||
-          (formatVersion == 3 && packageVersion == 11) ||
-          (formatVersion == 4 && packageVersion == 12) ||
-          (formatVersion == 5 && packageVersion == 13)))
+    if (formatVersion != 5 || packageVersion != 13)
         return Result::UnsupportedBinary;
 
     try {
@@ -331,52 +327,38 @@ auto loadSpawnablePackage(const std::uint8_t* bytes, std::size_t byteCount,
                     reader.readGuid(route.targetNodeId);
             }))
             return Result::InvalidBinary;
-        if (formatVersion >= 2 &&
-            (!reader.readBlob(package.rootRenderConfiguration) ||
-             !reader.readBlob(package.rootGpuContainersJson) ||
-             !validUtf8(package.rootGpuContainersJson.data(), package.rootGpuContainersJson.size())))
+        if (!reader.readBlob(package.rootRenderConfiguration) ||
+            !reader.readBlob(package.rootGpuContainersJson) ||
+            !validUtf8(package.rootGpuContainersJson.data(), package.rootGpuContainersJson.size()) ||
+            !reader.readBlob(package.rootGpuProgramsJson) ||
+            !validUtf8(package.rootGpuProgramsJson.data(), package.rootGpuProgramsJson.size()))
+        {
             return Result::InvalidBinary;
-        if (formatVersion >= 3) {
-            if (!reader.readBlob(package.rootGpuProgramsJson) ||
-                !validUtf8(package.rootGpuProgramsJson.data(), package.rootGpuProgramsJson.size()))
-                return Result::InvalidBinary;
-            for (auto& item : package.templates)
-                if (!reader.readBlob(item.gpuProgramsJson) ||
-                    !validUtf8(item.gpuProgramsJson.data(), item.gpuProgramsJson.size()))
-                    return Result::InvalidBinary;
         }
-        if (formatVersion >= 4)
+        for (auto& item : package.templates)
         {
-            if (!reader.readBlob(package.cpuPrograms) ||
-                (formatVersion == 4 && package.cpuPrograms.empty()))
+            if (!reader.readBlob(item.gpuProgramsJson) ||
+                !validUtf8(item.gpuProgramsJson.data(), item.gpuProgramsJson.size()))
             {
                 return Result::InvalidBinary;
             }
         }
-        if (formatVersion >= 5)
+        if (!reader.readBlob(package.cpuPrograms))
         {
-            for (auto& item : package.templates)
-            {
-                if (!reader.readOptionalGuid(item.parentContainerId) ||
-                    !reader.readBlob(item.cpuPrograms))
-                {
-                    return Result::InvalidBinary;
-                }
-            }
+            return Result::InvalidBinary;
         }
-        if (reader.remaining() != 0) return Result::InvalidBinary;
-        if (formatVersion >= 5)
+        for (auto& item : package.templates)
         {
-            auto nestedPayload = false;
-            for (const auto& item : package.templates)
-            {
-                nestedPayload = nestedPayload || item.parentContainerId.has_value() ||
-                    !item.cpuPrograms.empty();
-            }
-            if (!nestedPayload)
+            if (!reader.readOptionalGuid(item.parentContainerId) || !reader.readBlob(item.cpuPrograms))
             {
                 return Result::InvalidBinary;
             }
+        }
+        if (reader.remaining() != 0)
+        {
+            return Result::InvalidBinary;
+        }
+        {
             for (auto index = std::size_t{}; index < package.templates.size(); ++index)
             {
                 for (auto previous = std::size_t{}; previous < index; ++previous)

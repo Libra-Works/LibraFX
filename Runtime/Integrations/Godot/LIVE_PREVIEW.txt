@@ -8,9 +8,7 @@ The invitation and certificate come from the editor's Preview Connections
 window. Treat the invitation as a secret.
 
 The connection uses the existing local WSS protocol and certificate fingerprint.
-The host sends the compiled `.lfxp` package only to peers advertising
-`godotPackagePreview`. Other peers, including `connect_local`, retain the
-existing bytecode preview behavior. The player must expose
+The host sends the compiled `.lfxp` package to peers advertising `godotPackagePreview`. Live Preview uses the package path; there is no standalone raw-bytecode preview mode. The player must expose
 `get_playback_generation()`; without it package connection returns
 `ERR_UNAVAILABLE`. A player already in use is rejected. Do not separately
 play, stop or advance the dedicated player while it is attached.

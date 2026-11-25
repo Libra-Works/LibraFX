@@ -17,7 +17,7 @@ unvalidated engine values.
 
 The Unreal ReadLibraQualitySnapshot adapter is game-thread-only, snapshots
 Scalability::GetQualityLevels().EffectsQuality (0..4) and an explicit host frame
-serial. Public ULibraEffectComponent playback publishes it before initial package
+serial. Public ULibraSpawnableComponent playback publishes it before initial package
 evaluation and subsequent jobs through its existing internal execution owner.
 Custom/out-of-range engine values stay Unknown and fail when compared; programs
 that do not use quality do not acquire an invented quality dependency.
@@ -78,7 +78,7 @@ LiberaFxAuthoredRuntimeVerification.RunBatch additionally exercises its actual
 quality provider and compiled package through the native plugin.
 Unreal Libra.Runtime.Quality.AuthoredComponent, supplied with
 -LibraQualityFixture=<the same compiler-produced directory>, exercises the
-public ULibraEffectComponent, actual EffectsQuality selection and FIFO value 2.
+public ULibraSpawnableComponent, actual EffectsQuality selection and FIFO value 2.
 Libra.Runtime.Quality.GameThreadSnapshot covers the engine snapshot boundary.
 Raw C ABI evaluation and standalone Unreal evaluation also drain generated
 Signals before publishing values; repeated evaluation must not retain a pending

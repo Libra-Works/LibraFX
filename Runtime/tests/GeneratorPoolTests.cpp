@@ -1,3 +1,4 @@
+#include "ProgramFixture.h"
 #include "liberafx/LbGeneratorPool.h"
 #include "liberafx/LbNamedIo.h"
 #ifdef NDEBUG
@@ -137,9 +138,10 @@ void lifecycleTests()
     descriptor.function = onStart;
     descriptor.cleanup = cleanupLife;
     descriptor.context = &context;
+    auto currentBytes = runtime_test_fixture::promoteSimpleProgram(bytes, &descriptor, 1);
     auto bindings = std::array<liberafx::CustomNodeBinding, 3>{};
     auto program = liberafx::Program{};
-    assert(liberafx::Program::load(bytes.data(), bytes.size(), &descriptor, 1,
+    assert(liberafx::Program::load(currentBytes.data(), currentBytes.size(), &descriptor, 1,
                                    bindings.data(), bindings.size(), program) == Result::Ok);
     auto container = std::array<std::uint8_t, 16>{}; container[15] = 42;
     auto pool = std::unique_ptr<liberafx::GeneratorPool>{};
@@ -377,9 +379,10 @@ void lifecycleTests()
     failureDescriptors[1].outputWidth = 1;
     failureDescriptors[1].function = failStartEvaluation;
     failureDescriptors[1].context = &failedEvaluations;
+    auto currentFailure = runtime_test_fixture::promoteSimpleProgram(failureBytes, failureDescriptors.data(), failureDescriptors.size());
     auto failureBindings = std::array<liberafx::CustomNodeBinding, 3>{};
     auto failureProgram = liberafx::Program{};
-    assert(liberafx::Program::load(failureBytes.data(), failureBytes.size(), failureDescriptors.data(),
+    assert(liberafx::Program::load(currentFailure.data(), currentFailure.size(), failureDescriptors.data(),
         failureDescriptors.size(), failureBindings.data(), failureBindings.size(), failureProgram) == Result::Ok);
     auto failurePool = std::unique_ptr<liberafx::GeneratorPool>{};
     assert(liberafx::GeneratorPool::create(failureProgram, container.data(), 1, 65536, 2, failurePool) == Result::Ok);
@@ -431,11 +434,12 @@ int main()
     }
     write32(childBytes, 12 + 2 * 44 + 20, 0);
     write32(childBytes, 12 + 2 * 44 + 24, 1);
+    auto currentChild = runtime_test_fixture::promoteSimpleProgram(childBytes);
     auto child = liberafx::Program{};
-    assert(liberafx::Program::load(childBytes.data(), childBytes.size(), child) == liberafx::Result::Ok);
+    assert(liberafx::Program::load(currentChild.data(), currentChild.size(), child) == liberafx::Result::Ok);
     {
-        alignas(16) auto ioWork = std::array<double, 3>{};
-        alignas(16) auto ioDefaults = std::array<double, 6>{};
+        alignas(16) auto ioWork = std::array<double, 128>{};
+        alignas(16) auto ioDefaults = std::array<double, 128>{};
         auto instance = liberafx::Instance{};
         assert(instance.initialize(child, ioWork.data(), ioWork.size(), ioDefaults.data(), ioDefaults.size()) == liberafx::Result::Ok);
         auto ports = std::array<liberafx::NamedIoPort, 2>{};
@@ -491,6 +495,7 @@ int main()
     descriptor.branchCount = 1;
     descriptor.function = signal;
     descriptor.context = &context;
+    auto currentSignal = runtime_test_fixture::promoteSimpleProgram(signalBytes, &descriptor, 1);
     {
         auto ioContext = IoSignalContext{};
         auto ioDescriptor = descriptor;
@@ -498,9 +503,9 @@ int main()
         ioDescriptor.context = &ioContext;
         auto ioBinding = liberafx::CustomNodeBinding{};
         auto ioProgram = liberafx::Program{};
-        assert(liberafx::Program::load(signalBytes.data(), signalBytes.size(), &ioDescriptor, 1,
+        assert(liberafx::Program::load(currentSignal.data(), currentSignal.size(), &ioDescriptor, 1,
                                        &ioBinding, 1, ioProgram) == liberafx::Result::Ok);
-        alignas(16) auto ioWork = std::array<double, 4>{};
+        alignas(16) auto ioWork = std::array<double, 128>{};
         auto instance = liberafx::Instance{};
         assert(instance.initialize(ioProgram, ioWork.data(), ioWork.size()) == liberafx::Result::Ok);
         auto ports = std::array<liberafx::NamedIoPort, 2>{};
@@ -523,8 +528,8 @@ int main()
     }
     auto binding = liberafx::CustomNodeBinding{};
     auto parent = liberafx::Program{};
-    assert(liberafx::Program::load(signalBytes.data(), signalBytes.size(), &descriptor, 1, &binding, 1, parent) == liberafx::Result::Ok);
-    alignas(16) auto work = std::array<double, 4>{};
+    assert(liberafx::Program::load(currentSignal.data(), currentSignal.size(), &descriptor, 1, &binding, 1, parent) == liberafx::Result::Ok);
+    alignas(16) auto work = std::array<double, 128>{};
     auto parentInstance = liberafx::Instance{};
     assert(parentInstance.initialize(parent, work.data(), work.size()) == liberafx::Result::Ok);
     assert(parentInstance.updateAsync(0, inlineJob, nullptr) == liberafx::Result::Ok);
@@ -602,9 +607,10 @@ int main()
     stateDescriptor.stateAlignment = 64;
     stateDescriptor.initialize = stateInitialize;
     stateDescriptor.function = stateEvaluate;
+    auto currentState = runtime_test_fixture::promoteSimpleProgram(stateBytes, &stateDescriptor, 1);
     auto stateBinding = liberafx::CustomNodeBinding{};
     auto stateProgram = liberafx::Program{};
-    assert(liberafx::Program::load(stateBytes.data(), stateBytes.size(), &stateDescriptor, 1,
+    assert(liberafx::Program::load(currentState.data(), currentState.size(), &stateDescriptor, 1,
         &stateBinding, 1, stateProgram) == liberafx::Result::Ok);
     assert(stateProgram.workAlignment() == 64);
     auto statePool = std::unique_ptr<liberafx::GeneratorPool>{};
@@ -643,8 +649,9 @@ int main()
     vectorBytes[4] = 2; vectorBytes[6] = 1; vectorBytes[8] = 1; vectorBytes[12] = 96;
     vectorBytes[31] = 50; vectorBytes[32] = 8; vectorBytes[33] = 3;
     write32(vectorBytes, 40, UINT32_MAX); write32(vectorBytes, 44, UINT32_MAX);
+    auto currentVector = runtime_test_fixture::promoteSimpleProgram(vectorBytes);
     auto vectorProgram = liberafx::Program{};
-    assert(liberafx::Program::load(vectorBytes.data(), vectorBytes.size(), vectorProgram) == liberafx::Result::Ok);
+    assert(liberafx::Program::load(currentVector.data(), currentVector.size(), vectorProgram) == liberafx::Result::Ok);
     auto vectorPool = std::unique_ptr<liberafx::GeneratorPool>{};
     assert(liberafx::GeneratorPool::create(vectorProgram, container.data(), 2, 65536, 4, vectorPool) == liberafx::Result::Ok);
     auto captures = std::array<liberafx::GeneratorCapture, 3>{};

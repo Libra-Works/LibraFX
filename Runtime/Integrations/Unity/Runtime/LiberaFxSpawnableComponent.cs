@@ -349,6 +349,15 @@ namespace LiberaFx.Unity
             FinishFrame(current);
         }
 
+        public NativeResult RefreshPreview()
+        {
+            UnityInstanceSession.RequireMainThread();
+            if (!manualPreviewTime || host == null || debugging || sourceInitialAdvancePending)
+                return NativeResult.NotReady;
+            if (scriptActionDepth != 0) return NativeResult.Busy;
+            return FinishFrame(host);
+        }
+
         public NativeResult AdvancePreview(double time)
         {
             UnityInstanceSession.RequireMainThread();
@@ -458,25 +467,28 @@ namespace LiberaFx.Unity
             else FailPlayback(status, "Could not queue debug Advance: " + status, current);
         }
 
-        private void FinishFrame(NativeSpawnableHost current)
+        private NativeResult FinishFrame(NativeSpawnableHost current)
         {
             try
             {
-                if (current.IsRootFinished(out var finished) != NativeResult.Ok)
-                    throw new InvalidOperationException("Native root completion query failed.");
-                if (host != current) return;
+                var result = current.IsRootFinished(out var finished);
+                if (result != NativeResult.Ok)
+                    throw new InvalidOperationException("Native root completion query failed: " + result);
+                if (host != current) return NativeResult.NotReady;
                 if (finished)
                 {
                     rootFinished = true;
                     ReleaseAllScopes();
-                    return;
+                    return NativeResult.Ok;
                 }
                 UpdateRenderScopes(current);
+                return NativeResult.Ok;
             }
             catch (Exception error)
             {
                 FailPlayback(NativeResult.InternalError, "Unity render update failed: " + error.Message, current);
                 enabled = false;
+                return NativeResult.InternalError;
             }
         }
 

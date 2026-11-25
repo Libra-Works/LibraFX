@@ -22,7 +22,7 @@ bool FLibraSharedSimulationTest::RunTest(const FString &)
     FString path;
     if (!FParse::Value(FCommandLine::Get(), TEXT("LibraSharedFixture="), path))
     {
-        AddWarning(TEXT("Shared simulation fixture not supplied; pass -LibraSharedFixture=<CPU .lfxb> to execute this "
+        AddWarning(TEXT("Shared simulation fixture not supplied; pass -LibraSharedFixture=<CPU .lfxp> to execute this "
                         "acceptance test."));
         return true;
     }

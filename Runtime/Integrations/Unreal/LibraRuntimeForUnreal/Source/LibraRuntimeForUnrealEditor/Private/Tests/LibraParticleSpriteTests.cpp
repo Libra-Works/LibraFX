@@ -102,7 +102,7 @@ bool FLibraCpuParticleSpriteTest::RunTest(const FString &parameters)
     for (const auto layered : {false, true})
     {
         TArray<uint8> bytes;
-        const auto name = layered ? TEXT("cpu-composition.lfxb") : TEXT("cpu-sequence.lfxb");
+        const auto name = layered ? TEXT("cpu-composition.lfxp") : TEXT("cpu-sequence.lfxp");
         if (!TestTrue(TEXT("Read compiled package"),
                       FFileHelper::LoadFileToArray(bytes, *FPaths::Combine(directory, name))))
         {

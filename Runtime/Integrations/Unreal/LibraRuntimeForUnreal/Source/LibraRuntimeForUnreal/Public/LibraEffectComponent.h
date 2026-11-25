@@ -3,16 +3,15 @@
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "LibraRuntimeTypes.h"
-#include "LibraRuntimeHandles.h"
-#include "LibraProfileMeasurement.h"
 #include "LibraSpawnableComponent.h"
+#include <cstddef>
+
 #include "LibraEffectComponent.generated.h"
 
-class ULibraEffectAsset;
+namespace liberafx::host { struct ParameterDeltaUpdate; }
 class ULibraGpuEffectAsset;
 class ULibraGpuEffectRuntime;
 class UCameraComponent;
-struct FLibraEffectState;
 
 UCLASS(ClassGroup = (Effects), meta = (BlueprintSpawnableComponent, DisplayName = "Libra Effect"))
 class LIBRARUNTIMEFORUNREAL_API ULibraEffectComponent : public UActorComponent
@@ -24,14 +23,20 @@ public:
     ULibraEffectComponent();
     virtual ~ULibraEffectComponent() override;
 
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Libra Runtime", meta = (EditCondition = "Package == nullptr && GpuEffect == nullptr"))
-    TObjectPtr<ULibraEffectAsset> Effect;
-
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Libra Runtime", meta = (EditCondition = "Effect == nullptr && GpuEffect == nullptr"))
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Libra Runtime", meta = (EditCondition = "GpuEffect == nullptr"))
     TObjectPtr<ULibraSpawnableAsset> Package;
 
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Libra Runtime", meta = (EditCondition = "Effect == nullptr && Package == nullptr"))
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Libra Runtime", meta = (EditCondition = "Package == nullptr"))
     TObjectPtr<ULibraGpuEffectAsset> GpuEffect;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Libra Runtime|Coordinates")
+    FIntVector EffectAxes = FIntVector(2, 3, 1);
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Libra Runtime|Coordinates", meta = (ClampMin = "0.000000001"))
+    double HostUnitsPerMetre = 100;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Libra Runtime|Performance")
+    bool bUseSharedSimulation = true;
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Libra Runtime|Rendering")
     TArray<FLibraSpawnableAssetBinding> AssetBindings;
@@ -78,27 +83,6 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Libera FX|Playback")
     TObjectPtr<UCameraComponent> EffectCameraOverride;
 
-    UPROPERTY(EditAnywhere, Category = "Libra Runtime", meta = (ClampMin = "1024"))
-    int64 MaximumWorkingBytes = 16 * 1024 * 1024;
-
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Libra Runtime|Profiling")
-    bool bProfileNodes = false;
-
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Libra Runtime|Profiling")
-    bool bProfileAccessors = false;
-
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Libra Runtime|Profiling")
-    bool bRecordProfiling = false;
-
-    UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Profiling")
-    ELibraRuntimeResult ConfigureProfiling(bool enableNodeScopes, bool enableAccessorScopes);
-
-    UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Profiling")
-    ELibraRuntimeResult ConfigureRecording(bool enabled, bool enableNodeScopes = true, bool enableAccessorScopes = false);
-
-    bool CaptureProfiling(TArray<FLibraProfileMeasurement>& measurements, uint64& dropped) const;
-    bool IsEvaluationPending() const;
-
     UPROPERTY(BlueprintReadOnly, Category = "Libra Runtime")
     double TimeSeconds = 0;
 
@@ -116,9 +100,6 @@ public:
     FOnLibraEvaluationCompleted OnEvaluationCompleted;
 
     UFUNCTION(BlueprintCallable, Category = "Libra Runtime")
-    ELibraRuntimeResult SetEffect(ULibraEffectAsset* newEffect);
-
-    UFUNCTION(BlueprintCallable, Category = "Libra Runtime")
     ELibraRuntimeResult SetPackage(ULibraSpawnableAsset* newPackage);
 
     UFUNCTION(BlueprintCallable, Category = "Libra Runtime")
@@ -127,8 +108,6 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Libra Runtime")
     ELibraRuntimeResult RequestNaturalEnd();
 
-    // Package path: no author-added internal Spawnable component is required.
-    // Plain bytecode evaluation has no scoped lifecycle and is rejected.
     UFUNCTION(BlueprintCallable, Category = "Libra Runtime")
     ELibraRuntimeResult ForceTerminate();
 
@@ -150,6 +129,9 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Game I/O")
     ELibraRuntimeResult SetGameProperty(const FString& name, const TArray<double>& values);
 
+    UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Game I/O")
+    ELibraRuntimeResult SetOwnerMatrix(const TArray<double>& values);
+
     UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Instance Game I/O")
     ELibraRuntimeResult GetInstanceTarget(FGuid containerId, int64 instanceId, int64& generation);
 
@@ -163,9 +145,6 @@ public:
 
     UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Instance Game I/O")
     ELibraRuntimeResult FireInstanceSignal(int64 generation, FGuid containerId, int64 instanceId, const FString& name);
-
-    UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Game I/O")
-    ELibraRuntimeResult SetOwnerMatrix(const TArray<double>& values);
 
     UFUNCTION(BlueprintCallable, Category = "Libra Runtime")
     ELibraRuntimeResult ReadRootValue(FGuid nodeId, FVector4& value, int32& componentCount) const;
@@ -186,6 +165,7 @@ public:
 
     UFUNCTION(BlueprintPure, Category = "Libra Runtime|Rendering")
     int32 GetNativeDrawPrimitiveCount() const;
+
     void GetNativeRenderSubmissionStats(int32& logicalRenderObjects, int32& nativePrimitives,
         int32& opaqueBatches, int32& cpuParticleBatches, int32& liveCpuParticles,
         int32& allocatedInstanceCapacity, uint64& submittedBytes) const;
@@ -210,16 +190,18 @@ public:
 
     UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Debugger")
     ELibraRuntimeResult AttachExecutionDebugger(const FString& invitation);
+
     UFUNCTION(BlueprintPure, Category = "Libra Runtime|Debugger")
     int64 GetPackageDebuggerGeneration() const;
+
     UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Debugger")
-    ELibraRuntimeResult AttachPackageDebugger(int64 generation, FGuid containerId, int64 instanceId, const FString& invitation);
+    ELibraRuntimeResult AttachPackageDebugger(int64 generation, FGuid containerId, int64 instanceId,
+        const FString& invitation);
 
     UFUNCTION(BlueprintCallable, CallInEditor, Category = "Libra Runtime|Debugger")
     void DetachExecutionDebugger();
 
 #if WITH_EDITORONLY_DATA
-    // Never serialized or placed in the editor transaction history.
     UPROPERTY(EditInstanceOnly, Transient, NonTransactional, Category = "Libra Runtime|Debugger")
     FString LocalDebuggerInvitation;
 #endif
@@ -227,40 +209,8 @@ public:
     UFUNCTION(CallInEditor, Category = "Libra Runtime|Debugger")
     void AttachLocalDebugger();
 
-    UFUNCTION(BlueprintCallable, Category = "Libra Runtime")
-    ELibraRuntimeResult SetParameterComponent(FGuid nodeId, double value,
-        ELibraParameterInput input = ELibraParameterInput::A, int32 component = 0);
-
-    UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Binding")
-    ELibraRuntimeResult BindValue(FGuid nodeId, FLibraValueHandle& handle);
-
-    UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Binding")
-    ELibraRuntimeResult BindParameter(FGuid nodeId, FLibraParameterHandle& handle,
-        ELibraParameterInput input = ELibraParameterInput::A, int32 component = 0);
-
-    UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Binding")
-    ELibraRuntimeResult BindSignal(FGuid nodeId, FLibraSignalHandle& handle);
-
-    UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Binding")
-    ELibraRuntimeResult ReadBoundValue(const FLibraValueHandle& handle, FVector4& value, int32& componentCount) const;
-
-    UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Binding")
-    ELibraRuntimeResult GetValueType(FGuid nodeId, ELibraValueType& valueType);
-
-    UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Binding")
-    ELibraRuntimeResult ReadBoundInt32Value(const FLibraValueHandle& handle, int32& value) const;
-
-    UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Binding")
-    ELibraRuntimeResult SetBoundInt32Parameter(const FLibraParameterHandle& handle, int32 value);
-
-    UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Binding")
-    ELibraRuntimeResult SetBoundParameter(const FLibraParameterHandle& handle, double value);
-
-    UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Binding")
-    ELibraRuntimeResult ReadBoundParameter(const FLibraParameterHandle& handle, double& value) const;
-
-    UFUNCTION(BlueprintCallable, Category = "Libra Runtime|Signals")
-    ELibraRuntimeResult DispatchSignal(const FLibraSignalHandle& handle, int32 instructionBudget = 10000);
+    ELibraRuntimeResult SetNodeParameters(const liberafx::host::ParameterDeltaUpdate* updates,
+        std::size_t updateCount);
 
     UFUNCTION(BlueprintCallable, Category = "Libra Runtime")
     bool GetScalar(FGuid nodeId, double& value) const;
@@ -277,7 +227,8 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Libra Runtime")
     bool GetLinearColor(FGuid nodeId, FLinearColor& value) const;
 
-    virtual void TickComponent(float deltaTime, ELevelTick tickType, FActorComponentTickFunction* tickFunction) override;
+    virtual void TickComponent(float deltaTime, ELevelTick tickType,
+        FActorComponentTickFunction* tickFunction) override;
     virtual void BeginDestroy() override;
 
 protected:
@@ -304,9 +255,5 @@ private:
     UPROPERTY(Transient)
     TObjectPtr<ULibraGpuEffectRuntime> GpuPlayback;
     bool bStopping = false;
-    ELibraRuntimeResult EnsureState();
-    ELibraRuntimeResult QueueEvaluation(double timeSeconds, double frameDelta);
     bool ReadComponents(FGuid nodeId, double (&values)[4], uint8 width) const;
-    bool HasCurrentState() const;
-    TSharedPtr<FLibraEffectState, ESPMode::NotThreadSafe> NativeState;
 };

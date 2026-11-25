@@ -4,9 +4,10 @@
 #include "Components/ActorComponent.h"
 #include "LibraRuntimeTypes.h"
 #include <memory>
+#include <cstddef>
 #include "LibraSpawnableComponent.generated.h"
 
-namespace liberafx { class SpawnableHost; class SpawnableHostPool; struct CpuParticleSnapshot; struct CpuParticleTiming; }
+namespace liberafx { class SpawnableHost; class SpawnableHostPool; struct CpuParticleSnapshot; struct CpuParticleTiming; namespace host { struct ParameterDeltaUpdate; } }
 class ULibraSpawnableAsset;
 class UCameraComponent;
 class UMaterialInterface;
@@ -163,7 +164,9 @@ public:
     ELibraRuntimeResult SetTimeScale(double ratio);
 
     ELibraRuntimeResult SetNodeParameter(const FGuid& containerId, const FGuid& nodeId,
-        uint32 inputSlot, uint32 component, bool isInt32, int32 intValue, float floatValue);
+        uint32 inputSlot, uint32 component, bool isInt32, int32 intValue, double floatValue);
+    ELibraRuntimeResult SetNodeParameters(const liberafx::host::ParameterDeltaUpdate* updates,
+        std::size_t updateCount);
 
     UPROPERTY(BlueprintReadOnly, Category = "Libra Runtime")
     bool bIsPlaying = false;

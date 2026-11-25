@@ -12,7 +12,7 @@ func run() -> void:
 				"Extension library loaded"):
 			return
 
-	var package := FileAccess.get_file_as_bytes("res://cpu-particles.lfxb")
+	var package := FileAccess.get_file_as_bytes("res://cpu-particles.lfxp")
 	if not check(not package.is_empty(), "Isolated CPU particle fixture is available"):
 		return
 	var player: Variant = ClassDB.instantiate("LibraEffectPlayer")

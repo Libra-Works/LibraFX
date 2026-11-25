@@ -105,6 +105,23 @@ struct AlignedBuffer final {
   }
 };
 
+struct CurveStore final {
+  struct Item final {
+    std::array<std::uint8_t, 16> nodeId{};
+    std::uint32_t nodeIndex = 0;
+    std::vector<CurveKey> keys;
+  };
+  std::vector<Item> items;
+  std::vector<CurveOverrideView> views;
+  void rebuildViews() {
+    views.clear();
+    views.reserve(items.size());
+    for (const auto &item : items) {
+      views.push_back({item.nodeIndex, item.keys.data(), item.keys.size()});
+    }
+  }
+};
+
 struct SpawnCallbackContext final {
   GeneratorPool *pool = nullptr;
   std::uint64_t *ownerTag = nullptr;
@@ -180,6 +197,7 @@ struct SpawnableHost::Impl final {
       double floatValue = 0;
     };
     std::vector<ParameterOverride> parameterOverrides;
+    spawnable_host_detail::CurveStore curveOverrides;
   };
   struct SignalInputContext final {
     std::array<std::uint8_t, 16> typeId{};
@@ -210,6 +228,7 @@ struct SpawnableHost::Impl final {
     CpuParticleEvent event{};
   };
 
+  spawnable_host_detail::CurveStore rootCurveOverrides;
   SpawnablePackage packageData;
   SpawnableHostOptions options;
   std::vector<CustomNodeDescriptor> projectDescriptors;

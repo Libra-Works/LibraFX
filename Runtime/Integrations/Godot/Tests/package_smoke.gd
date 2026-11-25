@@ -34,7 +34,7 @@ func run() -> void:
 	if not check(package_result == 0, "CPU Spawnable package loads (result %d)" % package_result):
 		return
 	if not check(player.play(package) == 0,
-			"Unified play accepts LFXP bytes from either canonical .lfxb or legacy .lfxp"):
+			"Unified play accepts compiled .lfxp packages"):
 		return
 	var generation: int = player.get_playback_generation()
 	if not check(player.play(package.slice(0, 24)) != 0
@@ -70,9 +70,9 @@ func run() -> void:
 	if not check(player.advance(0.01) == 0, "Package starts with initial inputs"):
 		return
 	received_events.clear()
-	replacement_bytecode = FileAccess.get_file_as_bytes("res://clock.lfxb")
+	replacement_bytecode = FileAccess.get_file_as_bytes("res://clock.lfxp")
 	if not check(not replacement_bytecode.is_empty(),
-			"Raw bytecode is available for the reentrant replacement check"):
+			"A second compiled package is available for the reentrant replacement check"):
 		return
 	replace_on_event = true
 	if not check(player.fire_game_signal(signal_name) == 0,
@@ -81,7 +81,7 @@ func run() -> void:
 	if not check(player.advance(0.01) == 0, "Signal-driven package advances"):
 		return
 	if not check(replacement_result == 0 and player.is_playing(),
-			"Game I/O callback can replace package playback with raw bytecode"):
+			"Game I/O callback can replace package playback"):
 		return
 	player.set_process(false)
 	if not check(has_event("", "output_signal", []),

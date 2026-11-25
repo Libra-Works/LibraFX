@@ -1,4 +1,5 @@
 #include "LbSpawnableHostInternal.h"
+#include "liberafx/host/LbPackagePreviewContract.h"
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -195,69 +196,345 @@ auto SpawnableHost::setNodeParameter(const std::uint8_t containerId[16],
                                      std::uint32_t component,
                                      bool isInt32,
                                      std::int32_t intValue,
-                                     double floatValue) -> Result {
-  if (impl_->operationActive) return Result::Busy;
-  if (impl_->rootForced || !impl_->rootInstance) return Result::NotReady;
-  if (!nodeId || inputSlot > 255u || component > 255u) return Result::InvalidArgument;
-  if (!isInt32 && !std::isfinite(floatValue)) return Result::InvalidArgument;
+                                     double floatValue) -> Result
+{
+  if (!nodeId)
+  {
+    return Result::InvalidArgument;
+  }
+  auto update = host::ParameterDeltaUpdate{};
+  if (containerId)
+  {
+    std::memcpy(update.containerId.data(), containerId, 16);
+  }
+  std::memcpy(update.nodeId.data(), nodeId, 16);
+  update.inputSlot = inputSlot;
+  update.component = component;
+  update.isInt32 = isInt32;
+  update.intValue = intValue;
+  update.floatValue = floatValue;
+  return setNodeParameters(&update, 1);
+}
 
-  auto applyTo = [&](Instance& inst) noexcept -> Result {
-    ParameterHandle handle{};
-    auto r = inst.bindParameter(nodeId, static_cast<std::uint8_t>(inputSlot),
-                                static_cast<std::uint8_t>(component), handle);
-    if (r != Result::Ok) return r;
-    return isInt32 ? inst.setParameterInt32(handle, intValue)
-                   : inst.setParameter(handle, floatValue);
+auto SpawnableHost::setNodeParameters(const host::ParameterDeltaUpdate *updates,
+                                      std::size_t count) -> Result
+{
+  if (impl_->operationActive)
+  {
+    return Result::Busy;
+  }
+  if (impl_->rootForced || !impl_->rootInstance)
+  {
+    return Result::NotReady;
+  }
+  if (count != 0 && !updates)
+  {
+    return Result::InvalidArgument;
+  }
+  auto operation = OwnerOperation(impl_->operationActive);
+  using TemplateState = Impl::TemplateState;
+  struct StagedOverrides final
+  {
+    TemplateState *state = nullptr;
+    std::vector<TemplateState::ParameterOverride> values;
   };
-
-  auto isZero = true;
-  if (containerId) {
-    for (auto i = 0; i < 16; ++i) {
-      if (containerId[i] != 0) { isZero = false; break; }
-    }
-  }
-  if (isZero) {
-    return applyTo(*impl_->rootInstance);
-  }
-
-  for (auto& state : impl_->templates) {
-    if (std::memcmp(state->data->containerId.data(), containerId, 16) != 0) continue;
-    Impl::TemplateState::ParameterOverride ov{};
-    std::memcpy(ov.nodeId.data(), nodeId, 16);
-    ov.inputSlot = inputSlot;
-    ov.component = component;
-    ov.isInt32 = isInt32;
-    ov.intValue = intValue;
-    ov.floatValue = floatValue;
-    auto updated = false;
-    for (auto& existing : state->parameterOverrides) {
-      if (existing.nodeId == ov.nodeId && existing.inputSlot == ov.inputSlot &&
-          existing.component == ov.component) {
-        existing = ov;
-        updated = true;
-        break;
+  struct StagedCurves final
+  {
+    TemplateState *state = nullptr;
+    spawnable_host_detail::CurveStore values;
+  };
+  struct CurveWrite final
+  {
+    StagedCurves *staged = nullptr;
+    GeneratorInstanceId instanceId = 0;
+  };
+  struct Write final
+  {
+    TemplateState *state = nullptr;
+    GeneratorInstanceId instanceId = 0;
+    ParameterHandle handle{};
+    double previous = 0;
+    bool isInt32 = false;
+    std::int32_t intValue = 0;
+    double floatValue = 0;
+  };
+  try
+  {
+    auto staged = std::vector<StagedOverrides>{};
+    auto curveStaged = std::vector<StagedCurves>{};
+    auto curveWrites = std::vector<CurveWrite>{};
+    auto writes = std::vector<Write>{};
+    for (auto index = std::size_t{}; index < count; ++index)
+    {
+      const auto &update = updates[index];
+      if (update.inputSlot > 255 || update.component > 255)
+      {
+        return Result::InvalidArgument;
+      }
+      if (!update.reset && !update.isInt32 && !std::isfinite(update.floatValue))
+      {
+        return Result::NonFinite;
+      }
+      auto *state = static_cast<TemplateState *>(nullptr);
+      if (isNonzero(update.containerId.data()))
+      {
+        for (auto &candidate : impl_->templates)
+        {
+          if (candidate->data->containerId == update.containerId)
+          {
+            state = candidate.get();
+            break;
+          }
+        }
+        if (!state)
+        {
+          return Result::NodeNotFound;
+        }
+      }
+      const auto &program = state ? state->program : impl_->parentProgram;
+      if (update.isCurve)
+      {
+        auto nodeIndex = std::uint32_t{};
+        auto result = Instance::findCurve(program, update.nodeId.data(), nodeIndex);
+        if (result != Result::Ok)
+        {
+          return result;
+        }
+        if (update.reset && !update.curveKeys.empty())
+        {
+          return Result::InvalidArgument;
+        }
+        result = Instance::validateCurveKeys(update.curveKeys.data(), update.curveKeys.size());
+        if (result != Result::Ok)
+        {
+          return result;
+        }
+        auto stagedItem = std::find_if(curveStaged.begin(), curveStaged.end(),
+            [state](const auto &item) { return item.state == state; });
+        if (stagedItem == curveStaged.end())
+        {
+          auto &original = state ? state->curveOverrides : impl_->rootCurveOverrides;
+          curveStaged.push_back({state, {}});
+          stagedItem = curveStaged.end() - 1;
+          stagedItem->values.items = original.items;
+        }
+        auto &items = stagedItem->values.items;
+        auto existing = std::find_if(items.begin(), items.end(),
+            [&](const auto &item) { return item.nodeId == update.nodeId; });
+        if (update.reset)
+        {
+          if (existing != items.end())
+          {
+            items.erase(existing);
+          }
+        }
+        else if (existing == items.end())
+        {
+          items.push_back({update.nodeId, nodeIndex, update.curveKeys});
+        }
+        else
+        {
+          existing->keys = update.curveKeys;
+        }
+        continue;
+      }
+      auto resetValue = double{};
+      auto result = update.reset
+          ? Instance::defaultParameter(program, update.nodeId.data(),
+                static_cast<std::uint8_t>(update.inputSlot),
+                static_cast<std::uint8_t>(update.component), resetValue)
+          : Instance::validateParameter(program, update.nodeId.data(),
+                static_cast<std::uint8_t>(update.inputSlot),
+                static_cast<std::uint8_t>(update.component), update.isInt32,
+                update.intValue, update.floatValue);
+      if (result != Result::Ok)
+      {
+        return result;
+      }
+      auto capture = [&](Instance &instance, Write &write) noexcept -> Result
+      {
+        auto status = instance.bindParameter(update.nodeId.data(),
+            static_cast<std::uint8_t>(update.inputSlot),
+            static_cast<std::uint8_t>(update.component), write.handle);
+        if (status != Result::Ok)
+        {
+          return status;
+        }
+        return instance.parameter(write.handle, write.previous);
+      };
+      auto write = Write{};
+      write.state = state;
+      write.isInt32 = !update.reset && update.isInt32;
+      write.intValue = update.intValue;
+      write.floatValue = update.reset ? resetValue : update.floatValue;
+      if (!state)
+      {
+        result = capture(*impl_->rootInstance, write);
+        if (result != Result::Ok)
+        {
+          return result;
+        }
+        writes.push_back(write);
+        continue;
+      }
+      auto stagedItem = std::find_if(staged.begin(), staged.end(),
+          [state](const auto &item) { return item.state == state; });
+      if (stagedItem == staged.end())
+      {
+        staged.push_back({state, state->parameterOverrides});
+        stagedItem = staged.end() - 1;
+      }
+      auto overrideValue = TemplateState::ParameterOverride{};
+      overrideValue.nodeId = update.nodeId;
+      overrideValue.inputSlot = update.inputSlot;
+      overrideValue.component = update.component;
+      overrideValue.isInt32 = update.isInt32;
+      overrideValue.intValue = update.intValue;
+      overrideValue.floatValue = update.floatValue;
+      auto existing = std::find_if(stagedItem->values.begin(), stagedItem->values.end(),
+          [&](const auto &item)
+          {
+            return item.nodeId == overrideValue.nodeId && item.inputSlot == overrideValue.inputSlot &&
+                item.component == overrideValue.component;
+          });
+      if (update.reset)
+      {
+        if (existing != stagedItem->values.end())
+        {
+          stagedItem->values.erase(existing);
+        }
+      }
+      else if (existing == stagedItem->values.end())
+      {
+        stagedItem->values.push_back(overrideValue);
+      }
+      else
+      {
+        *existing = overrideValue;
+      }
+      for (const auto &child : state->instances)
+      {
+        write.instanceId = child.id;
+        struct CaptureContext final
+        {
+          decltype(capture) *function;
+          Write *write;
+        } context{&capture, &write};
+        result = state->pool->withInstance(child.id,
+            [](void *context, Instance &instance) noexcept -> Result
+            {
+              auto *captureContext = static_cast<CaptureContext *>(context);
+              return (*captureContext->function)(instance, *captureContext->write);
+            }, &context);
+        if (result != Result::Ok)
+        {
+          return result;
+        }
+        writes.push_back(write);
       }
     }
-    if (!updated) state->parameterOverrides.push_back(ov);
-
-    struct ApplyCtx {
-      const Impl::TemplateState::ParameterOverride* ov;
-    } ctx{&ov};
-    for (const auto& instance : state->instances) {
-      auto r = state->pool->withInstance(instance.id, [](void* p, Instance& inst) noexcept -> Result {
-        const auto* c = static_cast<const ApplyCtx*>(p)->ov;
-        ParameterHandle handle{};
-        auto br = inst.bindParameter(c->nodeId.data(), static_cast<std::uint8_t>(c->inputSlot),
-                                     static_cast<std::uint8_t>(c->component), handle);
-        if (br != Result::Ok) return br;
-        return c->isInt32 ? inst.setParameterInt32(handle, c->intValue)
-                          : inst.setParameter(handle, c->floatValue);
-      }, &ctx);
-      if (r != Result::Ok) return r;
+    for (auto &item : curveStaged)
+    {
+      item.values.rebuildViews();
+      if (!item.state)
+      {
+        curveWrites.push_back({&item, 0});
+      }
+      else
+      {
+        for (const auto &child : item.state->instances)
+        {
+          curveWrites.push_back({&item, child.id});
+        }
+      }
+    }
+    auto applyCurve = [&](const CurveWrite &write, bool rollback) noexcept -> Result
+    {
+      auto &item = *write.staged;
+      auto &store = rollback ? (item.state ? item.state->curveOverrides : impl_->rootCurveOverrides)
+                             : item.values;
+      auto update = [&](Instance &instance) noexcept -> Result
+      {
+        return instance.setCurveOverrides(store.views.data(), store.views.size());
+      };
+      if (!item.state)
+      {
+        return update(*impl_->rootInstance);
+      }
+      return item.state->pool->withInstance(write.instanceId,
+          [](void *context, Instance &instance) noexcept -> Result
+          {
+            return (*static_cast<decltype(update) *>(context))(instance);
+          }, &update);
+    };
+    auto apply = [&](const Write &write, bool rollback) noexcept -> Result
+    {
+      auto applyInstance = [&](Instance &instance) noexcept -> Result
+      {
+        if (rollback)
+        {
+          return instance.setParameter(write.handle, write.previous);
+        }
+        return write.isInt32 ? instance.setParameterInt32(write.handle, write.intValue)
+                             : instance.setParameter(write.handle, write.floatValue);
+      };
+      if (!write.state)
+      {
+        return applyInstance(*impl_->rootInstance);
+      }
+      return write.state->pool->withInstance(write.instanceId,
+          [](void *context, Instance &instance) noexcept -> Result
+          {
+            return (*static_cast<decltype(applyInstance) *>(context))(instance);
+          }, &applyInstance);
+    };
+    for (auto index = std::size_t{}; index < writes.size(); ++index)
+    {
+      auto result = apply(writes[index], false);
+      if (result != Result::Ok)
+      {
+        while (index != 0)
+        {
+          --index;
+          (void)apply(writes[index], true);
+        }
+        return result;
+      }
+    }
+    for (auto index = std::size_t{}; index < curveWrites.size(); ++index)
+    {
+      auto result = applyCurve(curveWrites[index], false);
+      if (result != Result::Ok)
+      {
+        while (index != 0)
+        {
+          --index;
+          (void)applyCurve(curveWrites[index], true);
+        }
+        for (auto previous = writes.size(); previous != 0;)
+        {
+          --previous;
+          (void)apply(writes[previous], true);
+        }
+        return result;
+      }
+    }
+    for (auto &item : staged)
+    {
+      item.state->parameterOverrides.swap(item.values);
+    }
+    for (auto &item : curveStaged)
+    {
+      auto &store = item.state ? item.state->curveOverrides : impl_->rootCurveOverrides;
+      store.items.swap(item.values.items);
+      store.views.swap(item.values.views);
     }
     return Result::Ok;
   }
-  return Result::NodeNotFound;
+  catch (const std::bad_alloc &)
+  {
+    return Result::InsufficientWork;
+  }
 }
 
 auto SpawnableHost::setTimeScale(double ratio) -> Result {

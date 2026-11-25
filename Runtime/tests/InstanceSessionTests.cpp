@@ -1,3 +1,4 @@
+#include "ProgramFixture.h"
 #include "liberafx/LbInstanceSession.h"
 #ifdef NDEBUG
 #undef NDEBUG
@@ -31,17 +32,17 @@ auto perform(InstanceSession& session, InstanceRequest request) -> InstanceCompl
     return completion;
 }
 
-auto scalar(double value) -> std::array<std::uint8_t, 56>
+auto scalar(double value) -> std::vector<std::uint8_t>
 {
-    auto bytes = std::array<std::uint8_t, 56>{};
+    auto bytes = std::vector<std::uint8_t>(16 + 96);
     std::memcpy(bytes.data(), "LFXB", 4);
-    bytes[4] = bytes[6] = bytes[8] = 1;
-    bytes[12 + 15] = bytes[12 + 16] = 1;
-    for (auto index = 12 + 20; index < 12 + 28; ++index) bytes[index] = 0xff;
-    auto bits = std::uint64_t{};
-    std::memcpy(&bits, &value, sizeof(value));
-    for (auto index = 0u; index < 8; ++index)
-        bytes[12 + 28 + index] = static_cast<std::uint8_t>(bits >> (index * 8));
+    bytes[4] = 2;
+    bytes[6] = 1;
+    bytes[8] = 1;
+    bytes[12] = 96;
+    bytes[16 + 15] = bytes[16 + 16] = bytes[16 + 17] = 1;
+    std::fill(bytes.begin() + 16 + 24, bytes.begin() + 16 + 32, 0xff);
+    std::memcpy(bytes.data() + 16 + 32, &value, sizeof(value));
     return bytes;
 }
 
@@ -50,14 +51,17 @@ void nativeTransactions()
     auto firstBytes = scalar(3);
     auto secondBytes = scalar(9);
     auto failureBytes = scalar(9);
-    failureBytes[12 + 16] = 6; // Divide defaults 9 / 0: valid graph, failed initial evaluation.
+    failureBytes[16 + 16] = 6; // Divide defaults 9 / 0: valid graph, failed initial evaluation.
+    firstBytes = runtime_test_fixture::promoteSimpleProgram(firstBytes);
+    secondBytes = runtime_test_fixture::promoteSimpleProgram(secondBytes);
+    failureBytes = runtime_test_fixture::promoteSimpleProgram(failureBytes);
     auto firstProgram = Program{}, secondProgram = Program{}, failureProgram = Program{};
     assert(Program::load(firstBytes.data(), firstBytes.size(), firstProgram) == Result::Ok);
     assert(Program::load(secondBytes.data(), secondBytes.size(), secondProgram) == Result::Ok);
     assert(Program::load(failureBytes.data(), failureBytes.size(), failureProgram) == Result::Ok);
-    alignas(16) auto firstWork = std::array<double, 8>{}, secondWork = std::array<double, 8>{};
-    alignas(16) auto firstDefaults = std::array<double, 8>{}, secondDefaults = std::array<double, 8>{};
-    alignas(16) auto failureWork = std::array<double, 8>{}, failureDefaults = std::array<double, 8>{};
+    alignas(16) auto firstWork = std::array<double, 128>{}, secondWork = std::array<double, 128>{};
+    alignas(16) auto firstDefaults = std::array<double, 128>{}, secondDefaults = std::array<double, 128>{};
+    alignas(16) auto failureWork = std::array<double, 128>{}, failureDefaults = std::array<double, 128>{};
     auto duration = Lifetime{};
     assert(Lifetime::finite(2, duration) == Result::Ok);
     auto first = LifecycleSessionEffect(firstProgram, firstWork.data(), firstWork.size(),
@@ -78,7 +82,7 @@ void nativeTransactions()
     auto value = std::array<double, 4>{};
     auto width = std::uint8_t{};
     auto read = [&]() {
-        assert(session.read(id, firstBytes.data() + 12, value.data(), width) == Result::Ok);
+        assert(session.read(id, firstBytes.data() + 16, value.data(), width) == Result::Ok);
         assert(width == 1);
         return value[0];
     };
@@ -107,10 +111,10 @@ void nativeTransactions()
     assert(read() == 9); // Natural expiry did NOT release the slot or its memory.
     auto foreign = id;
     ++foreign.session.high;
-    assert(session.read(foreign, firstBytes.data() + 12, value.data(), width) == Result::InvalidHandle);
+    assert(session.read(foreign, firstBytes.data() + 16, value.data(), width) == Result::InvalidHandle);
     auto destroyed = perform(session, {InstanceRequestKind::Destroy, id});
     assert(destroyed.result == Result::Ok && destroyed.returnedEffect == &second);
-    assert(session.read(id, firstBytes.data() + 12, value.data(), width) == Result::InvalidHandle);
+    assert(session.read(id, firstBytes.data() + 16, value.data(), width) == Result::InvalidHandle);
     auto recreated = perform(session, {InstanceRequestKind::Create, {}, &first});
     assert(recreated.result == Result::Ok && recreated.instance.slot == id.slot &&
         recreated.instance.generation != id.generation);
@@ -290,12 +294,13 @@ void existingPackageHost()
     bytes[16 + 15] = bytes[16 + 16] = bytes[16 + 17] = 1;
     for (auto index = 16 + 24; index < 16 + 32; ++index) bytes[index] = 0xff;
     auto scalarBytes = scalar(3);
-    std::memcpy(bytes.data() + 16 + 32, scalarBytes.data() + 12 + 28, 8);
+    std::memcpy(bytes.data() + 16 + 32, scalarBytes.data() + 16 + 32, 8);
     auto makeHost = [&]() {
         auto package = SpawnablePackage{};
         package.packageVersion = 1;
         package.autoDestroyWhenIdle = false;
-        package.parentBytecode.assign(bytes.begin(), bytes.end());
+        package.parentBytecode = runtime_test_fixture::promoteSimpleProgram(
+            std::vector<std::uint8_t>(bytes.begin(), bytes.end()));
         auto host = std::unique_ptr<SpawnableHost>{};
         assert(SpawnableHost::create(std::move(package), {}, host) == Result::Ok);
         return host;

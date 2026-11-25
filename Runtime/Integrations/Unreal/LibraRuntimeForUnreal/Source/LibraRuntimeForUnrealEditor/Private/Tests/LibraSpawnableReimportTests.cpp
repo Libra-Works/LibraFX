@@ -2,8 +2,6 @@
 
 #include "LibraSpawnableAsset.h"
 #include "LibraSpawnableFactory.h"
-#include "LibraEffectFactory.h"
-#include "LibraEffectAsset.h"
 #include "../LibraSourceProjectDetails.h"
 #include "AssetToolsModule.h"
 #include "IAssetTypeActions.h"
@@ -63,7 +61,7 @@ bool FLibraAssetFilterTest::RunTest(const FString&)
     {
         return false;
     }
-    for (auto* assetClass : { ULibraEffectAsset::StaticClass(), ULibraSpawnableAsset::StaticClass() })
+    for (auto* assetClass : { ULibraSpawnableAsset::StaticClass() })
     {
         auto actions = assetTools.GetAssetTypeActionsForClass(assetClass).Pin();
         if (!TestTrue(FString::Printf(TEXT("%s has registered type actions"), *assetClass->GetName()),
@@ -174,18 +172,20 @@ bool FLibraSpawnableReimportTest::RunTest(const FString&)
         {
             return false;
         }
-        auto rawFactory = NewObject<ULibraEffectFactory>();
-        if (!TestTrue(TEXT("Package factory recognizes validated content"), factory->FactoryCanImport(sourcePath)) ||
-            !TestFalse(TEXT("Raw factory does not compete for package content"), rawFactory->FactoryCanImport(sourcePath)))
+        if (!TestTrue(TEXT("Package factory recognizes validated .lfxp content"),
+            factory->FactoryCanImport(sourcePath)))
         {
             return false;
         }
-        AddExpectedError(TEXT("Cannot import invalid or unsupported LIBERA FX bytecode"),
-            EAutomationExpectedErrorFlags::Contains, 1);
-        auto rawCanceled = false;
-        TestNull(TEXT("Direct raw factory call rejects package content"), rawFactory->FactoryCreateFile(
-            ULibraEffectAsset::StaticClass(), GetTransientPackage(), NAME_None, RF_Transient,
-            sourcePath, nullptr, GWarn, rawCanceled));
+        auto unsupportedPath = FPaths::ChangeExtension(sourcePath, TEXT("bin"));
+        ON_SCOPE_EXIT { IFileManager::Get().Delete(*unsupportedPath); };
+        if (!TestTrue(TEXT("Isolated unsupported-extension fixture is written"),
+            FFileHelper::SaveArrayToFile(bytes, *unsupportedPath)) ||
+            !TestFalse(TEXT("Package factory rejects an unsupported extension"),
+                factory->FactoryCanImport(unsupportedPath)))
+        {
+            return false;
+        }
 
         auto projectPath = FPaths::ChangeExtension(fixturePath, TEXT("lfxproj"));
         const auto hasSourceProject = IFileManager::Get().FileExists(*projectPath);
@@ -355,7 +355,6 @@ bool FLibraSpawnableReimportTest::RunTest(const FString&)
             return false;
         }
         TestFalse(TEXT("Package factory rejects corrupt content despite the suffix"), factory->FactoryCanImport(sourcePath));
-        TestFalse(TEXT("Raw factory rejects corrupt content despite the suffix"), rawFactory->FactoryCanImport(sourcePath));
         AddExpectedError(TEXT("Cannot import invalid or unsupported LIBERA FX package"),
             EAutomationExpectedErrorFlags::Contains, 1);
         auto invalidCanceled = false;
@@ -503,8 +502,7 @@ bool FLibraSpawnableReimportTest::RunTest(const FString&)
         return true;
     };
 
-    if (!verifyFixture(fixture, requestedKinds, TEXT(".lfxb")) ||
-        !verifyFixture(fixture, requestedKinds, TEXT(".lfxp")))
+    if (!verifyFixture(fixture, requestedKinds, TEXT(".lfxp")))
     {
         return false;
     }

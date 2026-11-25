@@ -31,7 +31,7 @@ int main(int argc, char** argv) {
     using namespace liberafx;
     using namespace particle_benchmarks;
     try {
-        if (argc < 4 || argc > 8) throw std::runtime_error("Usage: particle_host_benchmarks <CPU .lfxb> <instances 1..64> <frames 30..3600> [--interpreter] [--bulk] [--world-workers 1..16]");
+        if (argc < 4 || argc > 8) throw std::runtime_error("Usage: particle_host_benchmarks <CPU .lfxp> <instances 1..64> <frames 30..3600> [--interpreter] [--bulk] [--world-workers 1..16]");
         auto options = SpawnableHostOptions{};
         bool bulk=false;
         auto worldWorkers=std::size_t{};

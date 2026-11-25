@@ -155,9 +155,8 @@ defaults; it does not navigate away or select an out-of-scope node.
 `SpawnableGroupPackage.Compile` emits the parent LFXB, separate template LFXBs,
 capture maps, per-template render configuration, GPU container snapshots and
 executable GPU programs.
-MCP `libera_graph_compile_spawnable` exposes JSON package version 11 without
-CPU particles, version 12 with root CPU programs, or version 13 with nested
-Spawnable ownership or per-template CPU programs.
+The current compiled package contract is package version 13 (LFXP format 5).
+Embedded programs emitted for packages use internal instruction version 11.
 Versions 2 through 8 introduced lifecycle routing, root and Spawnable Delay,
 per-pin CaptureAtSpawn/Live bindings, extended inputs, and local Signal I/O.
 Version 9 adds the root `AutoDestroyWhenIdle` policy. Older hosts must reject
@@ -238,22 +237,10 @@ support, and GPU containers fail explicitly.
 Template GUIDs remain unchanged between runtime instances. GPU containers are
 host payloads and are not flattened into CPU numeric instructions.
 
-For each template, load its LFXB once, create a bounded pool using its container
-GUID, then populate `LibraSpawnableBinding` from the package's signalTypeId,
-input widths, Color flags and templateNodeIds. Load the parent with
-`libra_program_create_spawnable`; evaluate its instance and dispatch its signal
-entry with `libra_dispatch_signal`. Evaluate the parent at the signal's time
-before dispatch, since capture reads the most recent evaluated parent values;
-multiple signals in that frame may reuse that evaluation. The callback only queues captures. Call
-`libra_generator_process_spawns` and drain lifecycle events outside the callback.
-The loader registers the package's signal passthrough type
-989fa5b5-485f-4e75-8542-9c5500000001. A template containing Signal nodes can
-also be loaded with `libra_program_create_spawnable` and zero bindings. These
-are host ABI records and handles, not wire overlays or engine pointers. A pool
-cannot be released while a loaded parent program retains it; release parent
-instances and programs first.
-If a package has no Spawnable Groups and its parent bytecode is v1 or v2,
-load it with `libra_program_create` instead.
+Load the complete LFXP package with `loadSpawnablePackage` and create a
+`SpawnableHost`, or use the package-based `libra_spawnable_host_*` C ABI.
+The host owns the template pools and routes captures and signals. Call it on
+its owner thread; do not extract embedded programs as standalone files.
 
 The portable host does not instantiate engine objects. UE/Unity adapters must
 consume lifecycle and render/GPU payloads separately. Diagnostics should
@@ -275,30 +262,8 @@ the host incorrectly includes them. The package/editor do not yet expose Live
 policy or drive these primitives automatically. Named IO node compilation, C ABI
 game IO, general group routing and automatic engine OnStart integration are not
 implemented by these primitives and must not be advertised as complete.
-Editor-native preview (Root execution ownership):
-CompiledPreviewSender now owns a NativeSpawnableSession through
-EditorNativePreviewSession for lifecycle graphs. Configure the matching native
-library with an absolute LIBERAFX_PREVIEW_NATIVE_LIBRARY, or place the DLL beside
-the editor. Missing native/ABI produces CompileError, never simulated lifetime.
-Root drives actual bounded C++ pools, captures frozen Destroy outputs before
-finalize, and sends evaluated per-instance render defaults. Renderer UUID hashes
-include container, pool-scoped instance ID and template draw node ID.
-UE still receives one inert Scalar LFXB transport shell and render_config;
-its wire Play/Loop flags are zero to prevent engine-owned free-running.
-Scene metadata explicitly says executionOwner=editor-native and
-standaloneEngineLifecycle=false. UE does not load the v2 package or run its pools.
-Pause/resume/equal-time resync retain state without evaluation. Backward seek,
-Stop-to-zero and Loop recreate pools and replay fixed 60Hz steps; forward dropped
-frames execute missing steps. Requested time is sampled down to the 60Hz grid.
-Replay is capped at 120 seconds, scene renderers at 128 and bytes at 1MiB.
-Graph/document changes and disconnect dispose the owner session. Native core
-callbacks still perform no engine SDK operations. Broader authored lifetime
-policies beyond one captured nonnegative scalar node remain outside this contract.
-Existing package-v1 spawn signal descriptors still carry at most four typed
-inputs (16 lanes), and their legacy `then` branch is selected immediately on
-spawn dispatch. Do not map that branch to lifetime Destroy: the compiler and
-host adapter must explicitly replace it with event-kind-3 local routing and
-extend the package/binding contract before exposing larger authoring ports.
+Live preview sends the compiled LFXP package to the engine adapter. The engine
+hosts execution and reports unsupported features or runtime errors explicitly.
 
 EffectLifecycle is a portable owner-thread primitive for an already-initialized
 effect instance. Its caller supplies scaled elapsed seconds and owns the instance
@@ -479,8 +444,37 @@ Flags are exactly 0 or 1.
 
 Distribution convention (unified effect binary)
 ----------------------------------------------
-New editor and converter outputs use .lfxb with this same LFXP package envelope,
-whether or not child templates exist. .lfxp is a legacy import alias, not a new
-export choice. Embedded LFXB instruction blobs keep their existing versions and
-validation. Old raw .lfxb programs remain legacy inputs. Update the engine
-importers together with the exporter; no on-disk signature/version was changed.
+The runtime package format is LFXP format 5, package version 13. It contains
+internal LFXB version 11 programs for the root, templates and CPU stages.
+The intended package filename extension is .lfxp. Editor export naming and
+engine integration migration are coordinated separately; existing plugin
+paths may still expose legacy functionality until those milestones land.
+
+Live parameter deltas
+
+`setNodeParameters` validates every scalar/int32 update before applying the
+batch to the root and all active matching child instances. Child overrides also
+apply to children spawned later. A `reset: true` update removes the child
+override and restores the program default; its JSON object contains only
+`containerId`, `nodeId`, `inputSlot`, `component` and `reset`. FCurve updates
+use `kind: "fcurve"`, `containerId`, `nodeId` and `keys`: up to 10000 ordered
+objects containing finite `time`, `value`, `inSlope`, `outSlope` (absolute value
+at most 1000000) and numeric `interpolation` (0 constant, 1 linear, 2 cubic).
+Times must be strictly increasing; an empty key array evaluates to zero. A
+`reset: true` replaces `keys` and restores the compiled curve. Overrides are
+caller-owned, apply on the next evaluation to active and future child instances,
+and do not mutate the shared Program. SignalKeys deltas remain unsupported.
+Matrix deltas use `kind: "matrix"`, `containerId`,
+`rowNodeIds` (four distinct runtime node IDs) and `values` (16 finite doubles in
+row-major order). To reset, replace `values` with `reset: true`. Rows must be
+editable FloatX4 defaults. The parser expands the entire Matrix to sixteen
+scalar updates; SpawnableHost::setNodeParameters applies the batch atomically.
+Engine adapters must preserve the batch. The editor sender must resolve the four
+runtime row IDs from the authored Matrix; it does not yet send this form.
+
+CPU executable payload
+
+CPU system payloads use version 2 for both mesh and non-mesh emitters. Each
+system carries an emitter definition blob; a zero-length blob means no mesh.
+Version 1 payloads are rejected. This binary payload version is separate from
+the cpuParticleVersion field in render configuration JSON.

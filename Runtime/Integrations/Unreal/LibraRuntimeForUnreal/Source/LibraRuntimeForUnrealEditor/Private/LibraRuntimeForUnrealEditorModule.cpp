@@ -5,7 +5,6 @@
 #include "LibraAssetTypeActions.h"
 #include "LibraEditorPreviewSession.h"
 #include "LibraEditorAssetAdapter.h"
-#include "LibraEffectAsset.h"
 #include "LibraSourceProjectDetails.h"
 #include "LibraSpawnableAsset.h"
 #include "LibraSpawnableAssetDetails.h"
@@ -23,8 +22,6 @@ public:
         auto& assetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>("AssetTools").Get();
         auto category = assetTools.RegisterAdvancedAssetCategory("LibraFX",
             LOCTEXT("AssetCategory", "LIBERA FX"));
-        assetActions.Add(MakeShared<FLibraAssetTypeActions>(ULibraEffectAsset::StaticClass(),
-            LOCTEXT("EffectAssetType", "LIBERA FX Compiled Effect"), category));
         assetActions.Add(MakeShared<FLibraAssetTypeActions>(ULibraSpawnableAsset::StaticClass(),
             LOCTEXT("SpawnableAssetType", "LIBERA FX Spawnable Package"), category));
         for (const auto& actions : assetActions) assetTools.RegisterAssetTypeActions(actions);
@@ -32,8 +29,6 @@ public:
         auto& propertyEditor = FModuleManager::LoadModuleChecked<FPropertyEditorModule>("PropertyEditor");
         propertyEditor.RegisterCustomClassLayout("LibraSpawnableAsset",
             FOnGetDetailCustomizationInstance::CreateStatic(&FLibraSpawnableAssetDetails::MakeInstance));
-        propertyEditor.RegisterCustomClassLayout("LibraEffectAsset",
-            FOnGetDetailCustomizationInstance::CreateStatic(&FLibraEffectAssetDetails::MakeInstance));
         propertyEditor.NotifyCustomizationModuleChanged();
         preview.Start();
     }
@@ -48,7 +43,6 @@ public:
         if (auto* propertyEditor = FModuleManager::GetModulePtr<FPropertyEditorModule>("PropertyEditor"))
         {
             propertyEditor->UnregisterCustomClassLayout("LibraSpawnableAsset");
-            propertyEditor->UnregisterCustomClassLayout("LibraEffectAsset");
             propertyEditor->NotifyCustomizationModuleChanged();
         }
     }

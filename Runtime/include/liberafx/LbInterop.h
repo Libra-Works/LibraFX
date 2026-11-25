@@ -335,8 +335,6 @@ LIBRA_INTEROP_ASSERT(offsetof(LibraSpawnableHostEvent, containerId) == 8 &&
    Buffers are allocated only during create. Bind tokens once before frame loops.
    Tokens are instance-local; never use them with another instance. */
 LIBRA_INTEROP_API uint32_t LIBRA_INTEROP_CALL libra_abi_version(void);
-LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_program_create(
-    const uint8_t* bytes, uint64_t byteCount, LibraProgram* outProgram);
 /* Instances retain program ownership even after its public handle is released. */
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_program_release(LibraProgram program);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_instance_create(
@@ -520,13 +518,6 @@ LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_generator_next_event(
 /* Load a v3 parent using package-provided per-container descriptors. The pools
    are retained by the program; release handles independently. Dispatch only
    enqueues captures; call generator_process_spawns outside the callback. */
-LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_program_create_spawnable(
-    const uint8_t* bytes, uint64_t byteCount, const LibraSpawnableBinding* bindings,
-    uint32_t bindingCount, LibraProgram* outProgram);
-LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_program_create_spawnable_v2(
-    const uint8_t* bytes, uint64_t byteCount, const LibraSpawnableBinding* bindings,
-    uint32_t bindingCount, const LibraSpawnableSignalInputBinding* signalInputs,
-    uint32_t signalInputCount, LibraProgram* outProgram);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_dispatch_signal(
     LibraInstance instance, const uint8_t nodeId[16], double time, uint32_t instructionBudget);
 LIBRA_INTEROP_API LibraResult LIBRA_INTEROP_CALL libra_effect_dispatch_signal(

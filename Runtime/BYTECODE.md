@@ -2,26 +2,17 @@
 
 ## Distribution format
 
-New editor and converter effect exports use one extension, `.lfxb`, and the
-existing versioned `LFXP` package envelope for both simple and lifecycle graphs.
-The embedded program instructions documented below retain the `LFXB` signature;
-they are internal program blobs, not a second new distribution choice.
-`loadSpawnablePackage` loads the unified export. Legacy raw programs still load
-through `Program::load`, and old `.lfxp` packages remain compatible. Determine
-the payload by its validated signature, not the filename. Non-particle exports
-retain container 3/package 11. CPU particle exports use container 4/package 12,
-appending a version-1 numeric CPU payload; older readers reject those versions.
-The 24-byte package header and existing field endianness remain unchanged; see
-[SPAWNABLE-GROUP.txt](SPAWNABLE-GROUP.txt). New exports require updated engine
-importers; the published 2026.11.8 SDK does not recognize package `.lfxb` imports.
-
-The runtime accepts little-endian `LFXB` files. Header byte 6 is the endianness marker (`1` = little-endian); all multibyte integers and IEEE-754 binary64 values are little-endian. GUID bytes use RFC 4122/network byte order. Non-finite constants are invalid.
-
-The wire layout is byte-packed and deliberately retains unaligned fields (including binary64 values in v1). The loader reads integers and doubles bytewise, so a valid file may begin at any byte address. Do not add padding to the wire format or cast its bytes to native structs. Wire alignment is independent of the alignment required by the runtime's caller-owned working buffers.
+Production exports and Live Preview use the unified `.lfxp` package with the
+versioned `LFXP` envelope. The embedded instruction stream documented below
+retains its internal `LFXB` signature; it is not an external file, importer or
+preview format. Engine integrations load the package through the package host,
+not as a standalone program file. The 24-byte package header and existing field
+endianness remain unchanged; see [SPAWNABLE-GROUP.txt](SPAWNABLE-GROUP.txt).
+Use matching editor, converter and engine SDK revisions.
 
 ## Version 1
 
-Version 1 remains the 12-byte header and 44-byte instruction format. It is the compiler output for scalar-only graphs and retains its prior scalar execution behavior.
+Internal instruction version 1 uses the 12-byte header and 44-byte instruction format. It represents scalar-only compiled graph instructions embedded inside the package and retains its scalar execution behavior.
 
 ## Version 2
 
@@ -105,7 +96,7 @@ For v3, `Program::workBytes()` includes four result doubles per instruction plus
 
 ### JSON node metadata
 
-Project node definitions opt in with `runtime: { "kind": "custom", "abiVersion": 1, "execution": "parameter" }` or `"signal"`. The definition's stable `typeId` is the native registration key. Per-port `category` may override legacy `portCategory`; data ports use Float/FloatX2/FloatX3/FloatX4/Color and signal execution ports use type `Signal`. A custom signal node may therefore declare both parameter inputs and exec pins. The compiler also emits the built-in Signal passthrough for ordinary Signal nodes and Group Signal boundaries; the standard native registry supplies its descriptor. Ordinary project-defined nodes without runtime declarations remain editor-only and built-in v1/v2 output remains unchanged. Standalone conversion supports these Signal graphs, but Spawnable and lifecycle graphs still require a package so host metadata is not discarded.
+Project node definitions opt in with `runtime: { "kind": "custom", "abiVersion": 1, "execution": "parameter" }` or `"signal"`. The definition's stable `typeId` is the native registration key. Per-port `category` may override legacy `portCategory`; data ports use Float/FloatX2/FloatX3/FloatX4/Color and signal execution ports use type `Signal`. A custom signal node may therefore declare both parameter inputs and exec pins. The compiler also emits the built-in Signal passthrough for ordinary Signal nodes and Group Signal boundaries; the standard native registry supplies its descriptor. Ordinary project-defined nodes without runtime declarations remain editor-only and built-in v1/v2 output remains unchanged. All exported graphs use `.lfxp` packages, which preserve the host metadata required by Signal, Spawnable and lifecycle graphs.
 
 ## Versions 4 and 5: curves and Signal fan-out
 

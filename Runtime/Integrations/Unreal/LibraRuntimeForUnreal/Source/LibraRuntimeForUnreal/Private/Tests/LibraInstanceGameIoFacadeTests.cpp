@@ -1,7 +1,7 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "LibraEffectComponent.h"
-#include "LibraNativeState.h"
+#include "liberafx/LbVfxRuntime.h"
 #include "LibraSpawnableAsset.h"
 #include "Engine/World.h"
 #include "Misc/AutomationTest.h"
@@ -59,19 +59,20 @@ bool FLibraInstanceGameIoFacadeTest::RunTest(const FString&)
 
     auto templateBytecode = TArray<uint8>{};
     templateBytecode.Append(instanceTemplate->bytecode.data(), static_cast<int32>(instanceTemplate->bytecode.size()));
-    auto compiledTemplate = FCompiledLibraProgram(templateBytecode);
+    auto templateProgram = liberafx::Program{};
+    auto templateLoadResult = liberafx::Program::load(templateBytecode.GetData(), templateBytecode.Num(), templateProgram);
     if (!TestEqual(TEXT("Template bytecode exposes its instance I/O metadata"),
-        compiledTemplate.result, liberafx::Result::Ok))
+        templateLoadResult, liberafx::Result::Ok))
         return false;
 
     auto propertyPort = liberafx::ProgramGameIoPort{};
     auto signalPort = liberafx::ProgramGameIoPort{};
     auto hasPropertyPort = false;
     auto hasSignalPort = false;
-    for (auto index = std::size_t{}; index < compiledTemplate.program.gameIoPortCount(); ++index)
+    for (auto index = std::size_t{}; index < templateProgram.gameIoPortCount(); ++index)
     {
         auto port = liberafx::ProgramGameIoPort{};
-        if (!compiledTemplate.program.gameIoPort(index, port) || !port.name) continue;
+        if (!templateProgram.gameIoPort(index, port) || !port.name) continue;
         if (!hasPropertyPort && port.kind == static_cast<uint8>(liberafx::NamedIoKind::InputProperty))
         {
             propertyPort = port;

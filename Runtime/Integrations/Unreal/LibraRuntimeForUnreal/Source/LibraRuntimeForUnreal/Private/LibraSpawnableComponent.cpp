@@ -7,6 +7,7 @@
 #include "liberafx/host/LbSpawnableDebugJob.h"
 
 #include "LibraNativeState.h"
+#include "LibraNativeNodesInternal.h"
 #include "LibraSpawnableAsset.h"
 #include "LibraSpawnableRenderState.h"
 #include "LibraSkeletalPoseRuntime.h"
@@ -18,6 +19,7 @@
 #include "GameFramework/PlayerController.h"
 #include "liberafx/LbSpawnableHost.h"
 #include "liberafx/LbSpawnablePackage.h"
+#include "liberafx/host/LbPackagePreviewContract.h"
 #include "liberafx/LbCpuParticles.h"
 #include "Misc/ScopeExit.h"
 #include "ProfilingDebugging/CpuProfilerTrace.h"
@@ -694,18 +696,43 @@ auto ULibraSpawnableComponent::SetTimeScale(double ratio) -> ELibraRuntimeResult
 }
 
 auto ULibraSpawnableComponent::SetNodeParameter(const FGuid& containerId, const FGuid& nodeId,
-    uint32 inputSlot, uint32 component, bool isInt32, int32 intValue, float floatValue) -> ELibraRuntimeResult
+    uint32 inputSlot, uint32 component, bool isInt32, int32 intValue, double floatValue) -> ELibraRuntimeResult
+{
+    if (!nodeId.IsValid()) return ELibraRuntimeResult::InvalidArgument;
+    auto update = liberafx::host::ParameterDeltaUpdate{};
+    if (containerId.IsValid()) LibraNodeIdBytes(containerId, update.containerId);
+    LibraNodeIdBytes(nodeId, update.nodeId);
+    update.inputSlot = inputSlot;
+    update.component = component;
+    update.isInt32 = isInt32;
+    update.intValue = intValue;
+    update.floatValue = floatValue;
+    return SetNodeParameters(&update, 1);
+}
+
+auto ULibraSpawnableComponent::SetNodeParameters(
+    const liberafx::host::ParameterDeltaUpdate* updates, std::size_t updateCount) -> ELibraRuntimeResult
 {
     check(IsInGameThread());
+    if (!updates && updateCount != 0) return ELibraRuntimeResult::InvalidArgument;
     if (!NativeHost) return ELibraRuntimeResult::NotReady;
     if (DebugJobPending()) return ELibraRuntimeResult::Busy;
-    if (!nodeId.IsValid()) return ELibraRuntimeResult::InvalidArgument;
-    uint8 nativeContainer[16]{};
-    if (containerId.IsValid()) LibraNodeIdBytes(containerId, nativeContainer);
-    uint8 nativeNode[16]{};
-    LibraNodeIdBytes(nodeId, nativeNode);
-    return ToLibraResult(NativeHost->setNodeParameter(
-        nativeContainer, nativeNode, inputSlot, component, isInt32, intValue, floatValue));
+    auto* current = NativeHost.Get();
+    auto generation = HostGeneration;
+    auto result = current->setNodeParameters(updates, updateCount);
+    if (result != liberafx::Result::Ok) return Report(ToLibraResult(result));
+    if (!bIsPlaying)
+    {
+        result = current->advance(RealTimeSeconds, 0);
+        if (result != liberafx::Result::Ok) return Report(ToLibraResult(result));
+        auto snapshot = current->timeSnapshot();
+        RealTimeSeconds = snapshot.realTime;
+        TimeSeconds = snapshot.effectTime;
+        DrainEvents();
+        if (NativeHost.Get() != current || HostGeneration != generation) return LastResult;
+        if (!RefreshRendering()) return LastResult;
+    }
+    return Report(ELibraRuntimeResult::Ok);
 }
 
 auto ULibraSpawnableComponent::GetInstanceTarget(FGuid containerId, int64 instanceId, int64& generation) -> ELibraRuntimeResult

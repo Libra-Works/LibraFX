@@ -483,7 +483,7 @@ auto validatePacket(const Kernel& kernel, std::uint32_t stage,
 
 auto readContainerManifest(const Bytes& containers, const Bytes& manifest,
     std::vector<std::array<std::uint8_t, 16>>& ids, Array& programs,
-    Array& fluidPrograms, bool& version2, String& error) -> Result
+    Array& fluidPrograms, String& error) -> Result
 {
     if (!containers.empty()) {
         const auto value = parseJson(containers);
@@ -506,49 +506,12 @@ auto readContainerManifest(const Bytes& containers, const Bytes& manifest,
     }
     if (!manifest.empty()) {
         auto outer = Dictionary{};
-        if (!object(parseJson(manifest), outer) || !array(outer, "programs", programs)) {
-            return fail(error, "Invalid GPU program manifest");
+        if (!object(parseJson(manifest), outer) || number(outer, "version") != 4 ||
+            !array(outer, "programs", programs)) {
+            return fail(error, "Invalid current GPU program manifest", Result::UnsupportedBinary);
         }
-        const auto version = number(outer, "version");
-        if (version == 1) {
-            version2 = false;
-            if (outer.has("fluidPrograms")) {
-                return fail(error, "Version 1 GPU manifests cannot contain Fluid2D programs",
-                    Result::UnsupportedBinary);
-            }
-        }
-        else if (version == 2 || version == 3 || version == 4)
-        {
-            version2 = true;
-            if (!array(outer, "fluidPrograms", fluidPrograms)) {
-                return fail(error, "Version 2 GPU manifests require a fluidPrograms array");
-            }
-        }
-        else
-        {
-            return fail(error, "Only GPU program manifest versions 1 through 4 are supported",
-                        Result::UnsupportedBinary);
-        }
-        if (version < 3)
-        {
-            for (auto index = 0; index < fluidPrograms.size(); ++index)
-            {
-                auto fluid = Dictionary{};
-                if (object(fluidPrograms[index], fluid) && fluid.has("automaticPlane"))
-                {
-                    return fail(error, "Fluid output selection requires GPU payload version 3", Result::UnsupportedBinary);
-                }
-            }
-            for (auto index = 0; index < programs.size(); ++index)
-            {
-                auto program = Dictionary{};
-                auto delivery = Dictionary{};
-                if (object(programs[index], program) && object(program.get("unreal", Variant{}), delivery) &&
-                    delivery.has("generatedResources"))
-                {
-                    return fail(error, "Generated resources require GPU payload version 3", Result::UnsupportedBinary);
-                }
-            }
+        if (outer.has("fluidPrograms") && !array(outer, "fluidPrograms", fluidPrograms)) {
+            return fail(error, "GPU fluidPrograms must be an array");
         }
     }
     if (static_cast<std::size_t>(programs.size() + fluidPrograms.size()) != ids.size()) {
@@ -755,12 +718,8 @@ auto readFluid2DSettings(const Dictionary& values, Fluid2DSettings& settings,
 
 auto readFluid2DPrograms(const Array& entries, std::vector<NodeId>& ids,
     const std::vector<std::pair<NodeId, MatrixRows>>& bindings,
-    const bool version2, std::vector<Fluid2DProgram>& programs,
-    String& error) -> Result
+    std::vector<Fluid2DProgram>& programs, String& error) -> Result
 {
-    if (!entries.is_empty() && !version2) {
-        return fail(error, "Fluid2D requires GPU payload version 2", Result::UnsupportedBinary);
-    }
     for (auto index = 0; index < entries.size(); ++index) {
         auto entry = Dictionary{};
         auto settingsValue = Dictionary{};
@@ -1511,9 +1470,9 @@ auto readGeneratedDrawBindings(const Bytes& manifest, const Bytes& renderConfig,
     {
         return Result::Ok;
     }
-    if (value.get_type() != Variant::ARRAY || number(document, "version") < 3)
+    if (value.get_type() != Variant::ARRAY)
     {
-        return fail(error, "Generated draw bindings require GPU payload version 3");
+        return fail(error, "generatedDrawBindings must be an array");
     }
     const auto entries = Array(value);
     auto render = Dictionary{};
@@ -1597,9 +1556,7 @@ auto readEmitters(const Bytes& containers, const Bytes& manifest, const Bytes& r
     auto ids = std::vector<NodeId>{};
     auto programs = godot::Array{};
     auto fluidPrograms = godot::Array{};
-    auto version2 = false;
-    auto result = readContainerManifest(containers, manifest, ids, programs, fluidPrograms,
-        version2, error);
+    auto result = readContainerManifest(containers, manifest, ids, programs, fluidPrograms, error);
     if (result != Result::Ok) {
         return result;
     }
@@ -1651,7 +1608,7 @@ auto readEmitters(const Bytes& containers, const Bytes& manifest, const Bytes& r
         }
         emitters.push_back(std::move(emitter));
     }
-    result = readFluid2DPrograms(fluidPrograms, ids, bindings, version2, fluids, error);
+    result = readFluid2DPrograms(fluidPrograms, ids, bindings, fluids, error);
     if (result != Result::Ok) {
         return result;
     }

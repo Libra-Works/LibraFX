@@ -18,10 +18,13 @@ void require(bool value, const char *message)
         throw std::runtime_error(message);
     }
 }
-void check(Result value)
+void checkAt(Result value, int line)
 {
-    require(value == Result::Ok, "Unexpected effect-world status.");
+    if (value != Result::Ok)
+        throw std::runtime_error("Unexpected effect-world status " +
+            std::to_string(static_cast<int>(value)) + " at line " + std::to_string(line));
 }
+#define check(value) checkAt((value), __LINE__)
 bool reject(void *, Job, void *) noexcept
 {
     return false;

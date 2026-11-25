@@ -19,30 +19,20 @@ var _resource_adapter: Script
 var _hello_sent := false
 
 
-func connect_local(player: Node, invitation: String, public_pem: String) -> Error:
-	return _connect_local(player, invitation, public_pem, false)
-
-
 ## Uses a dedicated, idle player with its asset bindings already configured.
 func connect_package_local(player: Node, invitation: String, public_pem: String) -> Error:
-	return _connect_local(player, invitation, public_pem, true)
-
-
-func _connect_local(player: Node, invitation: String, public_pem: String, package_mode: bool) -> Error:
-	if not is_inside_tree() or not is_instance_valid(player) or not player.is_inside_tree() \
-			or not player.has_method("apply_preview_frame") or not player.has_method("reset_preview_stream"):
+	if not is_inside_tree() or not is_instance_valid(player) or not player.is_inside_tree():
 		return ERR_INVALID_PARAMETER
-	if package_mode and (not player.has_method("play_package") or not player.has_method("advance") \
-			or not player.has_method("get_playback_generation") or not player.has_method("is_playing") \
-			or not player.has_method("get_gpu_error") or not player.has_method("stop")):
+	if not player.has_method("play_package") or not player.has_method("advance") \
+				or not player.has_method("get_playback_generation") or not player.has_method("is_playing") \
+				or not player.has_method("get_gpu_error") or not player.has_method("stop"):
 		return ERR_UNAVAILABLE
-	if package_mode and player.call("is_playing"):
+	if player.call("is_playing"):
 		return ERR_BUSY
-	var package_script: Script
-	if package_mode:
-		package_script = load(get_script().resource_path.get_base_dir().path_join("liberafx_package_preview.gd"))
-		if package_script == null:
-			return ERR_FILE_NOT_FOUND
+	var package_script: Script = load(
+			get_script().resource_path.get_base_dir().path_join("liberafx_package_preview.gd"))
+	if package_script == null:
+		return ERR_FILE_NOT_FOUND
 	var info: Variant = JSON.parse_string(invitation)
 	if not info is Dictionary or info.get("type") != "librafx_preview_connection" or info.get("version") != 1:
 		return ERR_INVALID_DATA
@@ -84,18 +74,15 @@ func _connect_local(player: Node, invitation: String, public_pem: String, packag
 	socket.handshake_headers = PackedStringArray(["X-LiberaFx-Preview-Token: " + token])
 	# The editor listener is IPv4; localhost may resolve to ::1 first.
 	var url := "wss://127.0.0.1:%d/preview?protocol=3" % port
-	if package_mode:
-		url += "&godotPackagePreview=1"
+	url += "&godotPackagePreview=1"
 	var result := socket.connect_to_url(url,
 			TLSOptions.client(trust, "localhost"))
 	if result != OK:
 		return result
 	disconnect_preview()
 	_player = player
-	_player.call("reset_preview_stream")
-	if package_mode:
-		_package_preview = package_script.new()
-		_package_preview.call("initialize", player)
+	_package_preview = package_script.new()
+	_package_preview.call("initialize", player)
 	var adapter_path: String = (get_script() as Script).resource_path.get_base_dir().path_join("liberafx_resource_adapter.gd")
 	if ResourceLoader.exists(adapter_path):
 		_resource_adapter = load(adapter_path) as Script
@@ -113,8 +100,6 @@ func disconnect_preview() -> void:
 	if _package_preview != null:
 		_package_preview.call("close")
 		_package_preview = null
-	if is_instance_valid(_player):
-		_player.call("reset_preview_stream")
 	_player = null
 	_resync_pending = false
 	_hello_sent = false
@@ -193,26 +178,11 @@ func _process(_delta: float) -> void:
 					return
 				package_preview_ready.emit(int(outcome["sequence"]))
 			continue
-		var result: int = _player.call("apply_preview_frame", bytes)
-		if result == 6: # Core Result::QueueRejected means the delta requires a new baseline.
-			if not _resync_pending:
-				var send_result := _peer.send_text('{"type":"resync"}')
-				if send_result != OK:
-					disconnect_preview()
-					connection_closed.emit()
-					return
-				_resync_pending = true
-		elif result != 0:
-			frame_rejected.emit(result)
-			return
-		elif bytes.size() >= 48 and bytes.decode_u16(6) in [1, 3]:
-			_resync_pending = false
 	if _package_preview != null:
-		var tick_result: int = _package_preview.call("tick")
+		var tick_result: int = int(_package_preview.call("tick"))
 		if tick_result != 0:
 			preview_error.emit(str(_package_preview.get("error")))
 			frame_rejected.emit(tick_result)
-			disconnect_preview()
 
 
 func _exit_tree() -> void:

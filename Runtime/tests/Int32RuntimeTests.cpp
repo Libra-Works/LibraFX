@@ -1,4 +1,5 @@
 #include "liberafx/LbVfxRuntime.h"
+#include "liberafx/LbSpawnablePackage.h"
 
 #ifdef NDEBUG
 #undef NDEBUG
@@ -61,13 +62,16 @@ auto fixture(const char* name) -> std::vector<std::uint8_t>
     auto path = std::filesystem::path(directory) / name;
     auto stream = std::ifstream(path, std::ios::binary);
     assert(stream.good());
-    return {std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>()};
+    auto bytes = std::vector<std::uint8_t>(std::istreambuf_iterator<char>(stream), {});
+    auto package = liberafx::SpawnablePackage{};
+    assert(liberafx::loadSpawnablePackage(bytes.data(), bytes.size(), package) == liberafx::Result::Ok);
+    return std::move(package.parentBytecode);
 }
 
 auto nodeId(const std::vector<std::uint8_t>& bytes, std::uint8_t opcode,
             std::size_t occurrence = 0) -> const std::uint8_t*
 {
-    assert(bytes.size() >= 16 && read16(bytes.data() + 4) == 10);
+    assert(bytes.size() >= 16 && read16(bytes.data() + 4) == 11);
     auto count = read32(bytes.data() + 8);
     for (auto index = 0u; index < count; ++index)
     {
@@ -90,7 +94,7 @@ struct Loaded {
 void initialize(Loaded& loaded, const std::vector<std::uint8_t>& bytes)
 {
     assert(liberafx::Program::load(bytes.data(), bytes.size(), loaded.program) == liberafx::Result::Ok);
-    assert(loaded.program.version() == 10);
+    assert(loaded.program.version() == 11);
     assert(loaded.program.workBytes() / sizeof(double) <= loaded.work.size());
     assert(loaded.program.parameterValueCount() <= loaded.defaults.size());
     assert(loaded.instance.initialize(loaded.program, loaded.work.data(),
@@ -161,7 +165,7 @@ void verifyFailure(const char* filename, std::uint8_t opcode,
 
 void verifyOverrides()
 {
-    auto bytes = fixture("Int32Add.lfxb");
+    auto bytes = fixture("Int32Add.lfxp");
     auto loaded = Loaded{};
     initialize(loaded, bytes);
     auto left = parameter(loaded, nodeId(bytes, 48, 0));
@@ -173,7 +177,7 @@ void verifyOverrides()
 
 void verifyConversions()
 {
-    auto bytes = fixture("Conversions.lfxb");
+    auto bytes = fixture("Conversions.lfxp");
     auto loaded = Loaded{};
     initialize(loaded, bytes);
     auto source = nodeId(bytes, 1);
@@ -211,7 +215,7 @@ void verifyConversions()
 
 void verifyMalformedMetadata()
 {
-    auto bytes = fixture("Int32Add.lfxb");
+    auto bytes = fixture("Int32Add.lfxp");
     auto malformed = bytes;
     auto table = malformed.size() - (8 + 3 * 8);
     malformed[table + 8] = 1; // The first Int32 literal is falsely marked as Float.
@@ -229,20 +233,20 @@ int main()
         std::cout << "LIBERAFX_INT32_FIXTURE_DIR must name compiler-produced Int32 fixtures.\n";
         return 77;
     }
-    verifyArithmetic("Int32Add.lfxb", 49, 17);
-    verifyArithmetic("Int32Subtract.lfxb", 50, 11);
-    verifyArithmetic("Int32Multiply.lfxb", 51, 42);
-    verifyArithmetic("Int32Divide.lfxb", 52, 4);
-    verifyArithmetic("GroupBoundary.lfxb", 51, -51);
+    verifyArithmetic("Int32Add.lfxp", 49, 17);
+    verifyArithmetic("Int32Subtract.lfxp", 50, 11);
+    verifyArithmetic("Int32Multiply.lfxp", 51, 42);
+    verifyArithmetic("Int32Divide.lfxp", 52, 4);
+    verifyArithmetic("GroupBoundary.lfxp", 51, -51);
 
-    verifyFailure("Int32Add.lfxb", 49, std::numeric_limits<std::int32_t>::max(), 1,
+    verifyFailure("Int32Add.lfxp", 49, std::numeric_limits<std::int32_t>::max(), 1,
         liberafx::Result::ArithmeticOverflow);
-    verifyFailure("Int32Subtract.lfxb", 50, std::numeric_limits<std::int32_t>::min(), 1,
+    verifyFailure("Int32Subtract.lfxp", 50, std::numeric_limits<std::int32_t>::min(), 1,
         liberafx::Result::ArithmeticOverflow);
-    verifyFailure("Int32Multiply.lfxb", 51, std::numeric_limits<std::int32_t>::max(), 2,
+    verifyFailure("Int32Multiply.lfxp", 51, std::numeric_limits<std::int32_t>::max(), 2,
         liberafx::Result::ArithmeticOverflow);
-    verifyFailure("Int32Divide.lfxb", 52, 1, 0, liberafx::Result::DivideByZero);
-    verifyFailure("Int32Divide.lfxb", 52, std::numeric_limits<std::int32_t>::min(), -1,
+    verifyFailure("Int32Divide.lfxp", 52, 1, 0, liberafx::Result::DivideByZero);
+    verifyFailure("Int32Divide.lfxp", 52, std::numeric_limits<std::int32_t>::min(), -1,
         liberafx::Result::ArithmeticOverflow);
 
     verifyOverrides();

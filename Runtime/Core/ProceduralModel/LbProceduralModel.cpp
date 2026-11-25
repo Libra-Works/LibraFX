@@ -454,7 +454,12 @@ LibraResult LIBRA_INTEROP_CALL libra_procedural_model_evaluate(LibraProceduralMo
     const auto actualPivotChanged = instance->resolvedPivot.x != instance->staging.pivot.x ||
         instance->resolvedPivot.y != instance->staging.pivot.y || instance->resolvedPivot.z != instance->staging.pivot.z;
     instance->resolvedPivot = instance->staging.pivot;
-    std::swap(instance->published, instance->staging);
+    instance->published.vertices.swap(instance->staging.vertices);
+    instance->published.indices.swap(instance->staging.indices);
+    std::swap(instance->published.bounds, instance->staging.bounds);
+    std::swap(instance->published.pivot, instance->staging.pivot);
+    std::swap(instance->published.indexTopology, instance->staging.indexTopology);
+    std::swap(instance->published.indexSignature, instance->staging.indexSignature);
     instance->ownsGeometry = true;
     instance->previousDescriptor = *descriptor;
     if (count != 0)

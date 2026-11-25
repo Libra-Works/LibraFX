@@ -28,7 +28,7 @@ func run() -> void:
 			for consumer in [first, second]:
 				if not check(consumer.set_mesh_binding("/Game/LibraTests/GeneratedMesh.GeneratedMesh", mesh) == 0 and consumer.set_material_binding("/Game/LibraTests/GeneratedMaterial.GeneratedMaterial", material) == 0, "Explicit project material and mesh bindings"):
 					return
-		var package := FileAccess.get_file_as_bytes("res://" + mode + ".lfxb")
+		var package := FileAccess.get_file_as_bytes("res://" + mode + ".lfxp")
 		if not check(first.play_package(package) == 0, mode + " compiled package loads: " + first.get_gpu_error()):
 			return
 		first.set_process(false)

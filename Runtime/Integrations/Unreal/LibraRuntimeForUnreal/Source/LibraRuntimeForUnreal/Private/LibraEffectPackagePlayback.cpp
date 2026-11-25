@@ -23,7 +23,6 @@ auto ULibraEffectComponent::SetPackage(ULibraSpawnableAsset* newPackage) -> ELib
     }
     Stop();
     if (Package && LastResult != ELibraRuntimeResult::Ok) return LastResult;
-    Effect = nullptr;
     Package = newPackage;
     GpuEffect = nullptr;
     ReleaseGpuPlayback();
@@ -35,9 +34,6 @@ auto ULibraEffectComponent::SetPackage(ULibraSpawnableAsset* newPackage) -> ELib
 auto ULibraEffectComponent::PlayPackage(bool bRestart) -> ELibraRuntimeResult
 {
     if (!GetOwner()) return LastResult = ELibraRuntimeResult::NotReady;
-    if (bProfileNodes || bProfileAccessors || bRecordProfiling)
-        return ReportPackageError(ELibraRuntimeResult::UnsupportedBinary,
-            TEXT("Effect packages do not yet support standalone bytecode profiling flags."));
     if (!PackagePlayback)
     {
         PackagePlayback = NewObject<ULibraSpawnableComponent>(GetOwner(), NAME_None, RF_Transient);
@@ -51,6 +47,9 @@ auto ULibraEffectComponent::PlayPackage(bool bRestart) -> ELibraRuntimeResult
     auto playback = PackagePlayback;
     auto restart = bRestart || playback->Package != Package;
     playback->Package = Package;
+    playback->EffectAxes = EffectAxes;
+    playback->HostUnitsPerMetre = HostUnitsPerMetre;
+    playback->bUseSharedSimulation = bUseSharedSimulation;
     playback->AssetBindings = AssetBindings;
     playback->GpuSpawnPerSecond = GpuSpawnPerSecond;
     playback->MaxActivePerTemplate = MaxActivePerTemplate;
@@ -94,6 +93,23 @@ auto ULibraEffectComponent::AttachPackageDebugger(int64 generation, FGuid contai
     auto result = PackagePlayback->AttachExecutionDebugger(generation, containerId, instanceId, invitation);
     SyncPackageState();
     return result;
+}
+
+auto ULibraEffectComponent::SetNodeParameters(
+    const liberafx::host::ParameterDeltaUpdate* updates, std::size_t updateCount) -> ELibraRuntimeResult
+{
+    check(IsInGameThread());
+    if (!Package || !PackagePlayback)
+    {
+        return LastResult = ELibraRuntimeResult::NotReady;
+    }
+    auto playback = PackagePlayback;
+    auto result = playback->SetNodeParameters(updates, updateCount);
+    if (PackagePlayback == playback)
+    {
+        SyncPackageState();
+    }
+    return LastResult = result;
 }
 
 void ULibraEffectComponent::ReleasePackagePlayback()
@@ -167,7 +183,7 @@ auto ULibraEffectComponent::ForceTerminate() -> ELibraRuntimeResult
 {
     check(IsInGameThread());
     if (!Package || !PackagePlayback)
-        return LastResult = Effect ? ELibraRuntimeResult::UnsupportedBinary : ELibraRuntimeResult::NotReady;
+        return LastResult = ELibraRuntimeResult::NotReady;
     auto playback = PackagePlayback;
     auto result = playback->ForceTerminate();
     if (PackagePlayback == playback) SyncPackageState();

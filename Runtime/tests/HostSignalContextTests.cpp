@@ -39,9 +39,12 @@ void authoredQuality()
     using namespace liberafx;
     auto directory = std::getenv("LIBERAFX_QUALITY_FIXTURE_DIR");
     if (!directory) return;
-    auto file = std::ifstream(std::filesystem::path(directory) / "AuthoredQuality.lfxb", std::ios::binary);
+    auto file = std::ifstream(std::filesystem::path(directory) / "AuthoredQuality.lfxp", std::ios::binary);
     assert(file.good());
-    auto bytes = std::vector<std::uint8_t>(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
+    auto packageBytes = std::vector<std::uint8_t>(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
+    auto loadedPackage = SpawnablePackage{};
+    assert(loadSpawnablePackage(packageBytes.data(), packageBytes.size(), loadedPackage) == Result::Ok);
+    const auto& bytes = loadedPackage.parentBytecode;
     auto identities = std::ifstream(std::filesystem::path(directory) / "AuthoredQuality.ids", std::ios::binary);
     auto ids = std::array<SignalFieldId, 6>{};
     for (auto& id : ids) identities.read(reinterpret_cast<char*>(id.data()), id.size());
@@ -118,10 +121,10 @@ void authoredQuality()
     }
 
     auto packageFile = std::ifstream(std::filesystem::path(directory) / "AuthoredQuality.lfxp", std::ios::binary);
-    auto packageBytes = std::vector<std::uint8_t>(std::istreambuf_iterator<char>(packageFile),
+    auto hostBytes = std::vector<std::uint8_t>(std::istreambuf_iterator<char>(packageFile),
         std::istreambuf_iterator<char>());
     auto package = SpawnablePackage{};
-    assert(loadSpawnablePackage(packageBytes.data(), packageBytes.size(), package) == Result::Ok);
+    assert(loadSpawnablePackage(hostBytes.data(), hostBytes.size(), package) == Result::Ok);
     auto host = std::unique_ptr<SpawnableHost>{};
     assert(SpawnableHost::create(std::move(package), {}, host) == Result::Ok);
     assert(host->setHostQuality({HostQualityAvailability::Known, HostQualityTier::Ultra,

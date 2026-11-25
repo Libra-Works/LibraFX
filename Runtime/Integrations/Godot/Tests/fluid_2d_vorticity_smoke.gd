@@ -19,8 +19,8 @@ func run() -> void:
 	owner.add_child(confined)
 	baseline.set_process(false)
 	confined.set_process(false)
-	var base_package := FileAccess.get_file_as_bytes("res://fluid-only.lfxb")
-	var confined_package := FileAccess.get_file_as_bytes("res://vorticity.lfxb")
+	var base_package := FileAccess.get_file_as_bytes("res://fluid-only.lfxp")
+	var confined_package := FileAccess.get_file_as_bytes("res://vorticity.lfxp")
 	if not check(baseline.play_package(base_package) == 0, "Legacy fluid package loads: " + baseline.get_gpu_error()):
 		return
 	if not check(confined.play_package(confined_package) == 0, "Compiler vorticity package loads: " + confined.get_gpu_error()):

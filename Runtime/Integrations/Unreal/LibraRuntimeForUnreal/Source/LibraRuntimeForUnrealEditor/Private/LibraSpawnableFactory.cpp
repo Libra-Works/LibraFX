@@ -11,8 +11,7 @@ DEFINE_LOG_CATEGORY_STATIC(LogLibraSpawnableImport, Log, All);
 auto ULibraSpawnableFactory::ReadPackage(const FString& filename, TArray<uint8>& bytes) -> bool
 {
     auto extension = FPaths::GetExtension(filename);
-    if (!extension.Equals(TEXT("lfxb"), ESearchCase::IgnoreCase) &&
-        !extension.Equals(TEXT("lfxp"), ESearchCase::IgnoreCase))
+    if (!extension.Equals(TEXT("lfxp"), ESearchCase::IgnoreCase))
     {
         return false;
     }
@@ -49,8 +48,7 @@ ULibraSpawnableFactory::ULibraSpawnableFactory()
     SupportedClass = ULibraSpawnableAsset::StaticClass();
     bEditorImport = true;
     bCreateNew = false;
-    Formats.Add(TEXT("lfxb;LIBERA FX compiled package"));
-    Formats.Add(TEXT("lfxp;LIBERA FX legacy package alias"));
+    Formats.Add(TEXT("lfxp;LIBERA FX compiled effect package"));
 }
 
 auto ULibraSpawnableFactory::FactoryCanImport(const FString& filename) -> bool

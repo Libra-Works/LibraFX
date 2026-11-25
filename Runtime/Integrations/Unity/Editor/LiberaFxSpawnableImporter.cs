@@ -9,8 +9,8 @@ using UnityEngine;
 
 namespace LiberaFx.Unity.Editor
 {
-    // One owner for both extensions: the envelope, not the suffix, selects the asset.
-    [ScriptedImporter(2, new[] { "lfxb", "lfxp" })]
+    // The supported package extension and LFXP envelope must agree.
+    [ScriptedImporter(3, new[] { "lfxp" })]
     public sealed class LiberaFxSpawnableImporter : ScriptedImporter
     {
         [SerializeField] private LiberaFxUnityRenderAssetBinding[] resourceOverrides = Array.Empty<LiberaFxUnityRenderAssetBinding>();
@@ -49,26 +49,15 @@ namespace LiberaFx.Unity.Editor
             try
             {
                 var bytes = File.ReadAllBytes(context.assetPath);
-                if (HasSignature(bytes, "LFXP"))
-                {
-                    var asset = ScriptableObject.CreateInstance<LiberaFxSpawnableAsset>();
-                    asset.name = Path.GetFileNameWithoutExtension(context.assetPath);
-                    asset.SetPackageBytes(bytes);
-                    ResolvePackageBindings(bytes, context, out var resolvedAssets, out var resolvedMaterials);
-                    asset.SetResolvedBindings(resolvedAssets, resourceOverrides, resolvedMaterials, materialOverrides);
-                    // Keep the legacy local ID so scene/prefab references survive reimport.
-                    context.AddObjectToAsset("package", asset);
-                    context.SetMainObject(asset);
-                }
-                else
-                {
-                    ValidateBytes(bytes);
-                    var asset = ScriptableObject.CreateInstance<LiberaFxProgramAsset>();
-                    asset.name = Path.GetFileNameWithoutExtension(context.assetPath);
-                    asset.SetProgramBytes(bytes);
-                    context.AddObjectToAsset("program", asset);
-                    context.SetMainObject(asset);
-                }
+                ValidateBytes(bytes);
+                var asset = ScriptableObject.CreateInstance<LiberaFxSpawnableAsset>();
+                asset.name = Path.GetFileNameWithoutExtension(context.assetPath);
+                asset.SetPackageBytes(bytes);
+                ResolvePackageBindings(bytes, context, out var resolvedAssets, out var resolvedMaterials);
+                asset.SetResolvedBindings(resolvedAssets, resourceOverrides, resolvedMaterials, materialOverrides);
+                // Preserve the established local ID so scene/prefab references survive reimport.
+                context.AddObjectToAsset("package", asset);
+                context.SetMainObject(asset);
             }
             catch (Exception error)
             {
@@ -188,19 +177,10 @@ namespace LiberaFx.Unity.Editor
 
         internal static void ValidateBytes(byte[] bytes)
         {
-            if (HasSignature(bytes, "LFXP"))
-            {
-                // Use the existing native loader, not a second envelope parser.
-                using (var validation = new NativeSpawnableHost(bytes)) { }
-            }
-            else if (HasSignature(bytes, "LFXB"))
-            {
-                using (var validation = new NativeProgram(bytes)) { }
-            }
-            else
-            {
-                throw new InvalidDataException("Expected an LFXP package or legacy LFXB program.");
-            }
+            if (!HasSignature(bytes, "LFXP"))
+                throw new InvalidDataException("Expected a compiled .lfxp package (LFXP signature).");
+            // Use the native package loader, not a second envelope parser.
+            using (var validation = new NativeSpawnableHost(bytes)) { }
         }
 
         private static bool HasSignature(byte[] bytes, string signature)

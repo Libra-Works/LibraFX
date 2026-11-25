@@ -78,7 +78,7 @@ auto parse(const std::uint8_t* bytes, std::size_t count,
     auto reader = Reader(bytes, count);
     auto version = std::uint32_t{};
     auto systemCount = std::uint32_t{};
-    if (!reader.u32(version) || (version != 1 && version != 2) || !reader.u32(systemCount) || systemCount > 1024)
+    if (!reader.u32(version) || version != 2 || !reader.u32(systemCount) || systemCount > 1024)
     {
         return Result::InvalidBinary;
     }
@@ -125,8 +125,10 @@ auto parse(const std::uint8_t* bytes, std::size_t count,
                 }
             }
         }
-        if (version >= 2 && (!reader.blob(system->emitterDefinitionBytes) || system->emitterDefinitionBytes.size() > 4096))
+        if (!reader.blob(system->emitterDefinitionBytes) || system->emitterDefinitionBytes.size() > 4096)
+        {
             return Result::InvalidBinary;
+        }
         systems.push_back(std::move(system));
     }
     return reader.remaining() == 0 ? Result::Ok : Result::InvalidBinary;
@@ -209,7 +211,8 @@ auto System::initialize(const CustomNodeDescriptor* registry, std::size_t regist
     auto totalMemory = (std::size_t{(15 * sizeof(double) + sizeof(std::uint64_t) + sizeof(std::uint8_t))} + sizeof(ParticleVM)) * capacity;
     for (auto& stage : stages)
     {
-        if (stage.bytes.size() < 16 || std::memcmp(stage.bytes.data(), "LFXB", 4) != 0)
+        if (stage.bytes.size() < 16 || std::memcmp(stage.bytes.data(), "LFXB", 4) != 0 ||
+            stage.bytes[4] != 11 || stage.bytes[5] != 0)
         {
             return Result::InvalidBinary;
         }

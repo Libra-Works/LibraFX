@@ -1,3 +1,4 @@
+#include "ProgramFixture.h"
 #include "liberafx/LbCoordinateBasis.h"
 #include "liberafx/LbSpawnableHost.h"
 #ifdef NDEBUG
@@ -66,6 +67,7 @@ auto clocks() -> SpawnablePackage {
         for (auto input = 0u; input < 4; ++input) std::memset(op + 48 + input * 8, 255, 4);
         std::memset(op + 208, 255, 16);
     }
+    package.parentBytecode = runtime_test_fixture::promoteSimpleProgram(package.parentBytecode);
     return package;
 }
 void timeScale() {

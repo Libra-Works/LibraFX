@@ -1,3 +1,6 @@
+#include "liberafx/LbSpawnablePackage.h"
+#include <algorithm>
+#include "ProgramFixture.h"
 #include "liberafx/LbEffectLifecycle.h"
 #ifdef NDEBUG
 #undef NDEBUG
@@ -60,12 +63,20 @@ void write32(std::array<std::uint8_t, 16 + 2 * 256>& bytes, std::size_t offset, 
 void compiledFixture(const char* directory)
 {
     auto root = std::string(directory) + "\\";
-    auto binary = std::ifstream(root + "Launch.lfxb", std::ios::binary);
+    auto binary = std::ifstream(root + "Fireworks.lfxp", std::ios::binary);
     auto identity = std::ifstream(root + "Fireworks.native-fixture", std::ios::binary);
     assert(binary && identity);
-    auto bytes = std::vector<std::uint8_t>(std::istreambuf_iterator<char>(binary), {});
+    auto packageBytes = std::vector<std::uint8_t>(std::istreambuf_iterator<char>(binary), {});
     auto ids = std::vector<std::uint8_t>(std::istreambuf_iterator<char>(identity), {});
-    assert(bytes.size() >= 12 && ids.size() == 8 + 11 * 16);
+    assert(ids.size() == 8 + 11 * 16);
+    auto package = liberafx::SpawnablePackage{};
+    assert(liberafx::loadSpawnablePackage(packageBytes.data(), packageBytes.size(), package) == liberafx::Result::Ok);
+    auto child = std::find_if(package.templates.begin(), package.templates.end(), [&](const auto& item) {
+        return std::memcmp(item.containerId.data(), ids.data() + 8 + 16, 16) == 0;
+    });
+    assert(child != package.templates.end());
+    const auto& bytes = child->bytecode;
+    assert(bytes.size() >= 16);
     auto count = std::uint32_t{};
     for (auto i = 0u; i < 4; ++i) count |= std::uint32_t{bytes[8 + i]} << (i * 8);
     auto bindings = std::vector<liberafx::CustomNodeBinding>(count);
@@ -124,11 +135,13 @@ int main(int argc, char** argv)
     descriptor.branchCount = 1;
     descriptor.function = onStart;
     descriptor.context = &context;
+    auto programBytes = runtime_test_fixture::promoteSimpleProgram(
+        std::vector<std::uint8_t>(bytes.begin(), bytes.end()), &descriptor, 1);
     auto bindings = std::array<liberafx::CustomNodeBinding, 2>{};
     auto program = liberafx::Program{};
-    assert(liberafx::Program::load(bytes.data(), bytes.size(), &descriptor, 1,
+    assert(liberafx::Program::load(programBytes.data(), programBytes.size(), &descriptor, 1,
                                   bindings.data(), bindings.size(), program) == Result::Ok);
-    alignas(16) auto work = std::array<double, 16>{};
+    alignas(16) auto work = std::array<double, 128>{};
     alignas(16) auto defaults = std::array<double, 32>{};
     auto instance = liberafx::Instance{};
     assert(instance.initialize(program, work.data(), work.size(), defaults.data(), defaults.size()) == Result::Ok);
@@ -157,7 +170,7 @@ int main(int argc, char** argv)
     assert(lifecycle.finish() == Result::Ok);
     assert(lifecycle.drain(5) == Result::NotReady && lifecycle.finish() == Result::NotReady);
 
-    alignas(16) auto zeroWork = std::array<double, 16>{};
+    alignas(16) auto zeroWork = std::array<double, 128>{};
     alignas(16) auto zeroDefaults = std::array<double, 32>{};
     auto zeroInstance = liberafx::Instance{};
     assert(zeroInstance.initialize(program, zeroWork.data(), zeroWork.size(), zeroDefaults.data(), zeroDefaults.size()) == Result::Ok);
@@ -169,7 +182,7 @@ int main(int argc, char** argv)
     assert(zero.stop() == Result::Ok);
     assert(zero.finish() == Result::NotReady && zero.drain(0) == Result::NotReady);
 
-    alignas(16) auto stopWork = std::array<double, 16>{};
+    alignas(16) auto stopWork = std::array<double, 128>{};
     alignas(16) auto stopDefaults = std::array<double, 32>{};
     auto stopInstance = liberafx::Instance{};
     assert(stopInstance.initialize(program, stopWork.data(), stopWork.size(), stopDefaults.data(), stopDefaults.size()) == Result::Ok);
@@ -179,7 +192,7 @@ int main(int argc, char** argv)
            std::isinf(sample.remaining) && sample.normalizedAge == 0 && !sample.expired);
     assert(stopped.stop() == Result::Ok && stopped.advance(10, sample) == Result::NotReady);
 
-    alignas(16) auto naturalEndWork = std::array<double, 16>{};
+    alignas(16) auto naturalEndWork = std::array<double, 128>{};
     auto naturalEndInstance = liberafx::Instance{};
     assert(naturalEndInstance.initialize(program, naturalEndWork.data(), naturalEndWork.size()) == Result::Ok);
     auto naturalEnd = liberafx::EffectLifecycle(naturalEndInstance);
@@ -201,7 +214,7 @@ int main(int argc, char** argv)
     assert(naturalEnd.destroy(signalId.data(), 3) == Result::Ok && context.calls == destroyCalls + 1);
     assert(naturalEnd.finish() == Result::Ok);
 
-    alignas(16) auto scheduledWork = std::array<double, 16>{};
+    alignas(16) auto scheduledWork = std::array<double, 128>{};
     auto scheduledInstance = liberafx::Instance{};
     assert(scheduledInstance.initialize(program, scheduledWork.data(), scheduledWork.size()) == Result::Ok);
     auto scheduled = liberafx::EffectLifecycle(scheduledInstance);
@@ -235,13 +248,13 @@ int main(int argc, char** argv)
            context.calls == scheduledDestroyCalls + 1);
     assert(scheduled.finish() == Result::Ok);
 
-    alignas(16) auto deferredWork = std::array<double, 16>{};
+    alignas(16) auto deferredWork = std::array<double, 128>{};
     auto deferredContext = StartContext{};
     auto deferredDescriptor = descriptor;
     deferredDescriptor.context = &deferredContext;
     auto deferredBindings = std::array<liberafx::CustomNodeBinding, 2>{};
     auto deferredProgram = liberafx::Program{};
-    assert(liberafx::Program::load(bytes.data(), bytes.size(), &deferredDescriptor, 1,
+    assert(liberafx::Program::load(programBytes.data(), programBytes.size(), &deferredDescriptor, 1,
         deferredBindings.data(), deferredBindings.size(), deferredProgram) == Result::Ok);
     auto deferredInstance = liberafx::Instance{};
     assert(deferredInstance.initialize(deferredProgram, deferredWork.data(), deferredWork.size()) == Result::Ok);
@@ -263,7 +276,7 @@ int main(int argc, char** argv)
     assert(deferred.nextDeferredSignal(deferredTime, hasDeferred) == Result::Ok && !hasDeferred);
     assert(deferred.finish() == Result::Ok);
 
-    alignas(16) auto queueWork = std::array<double, 16>{};
+    alignas(16) auto queueWork = std::array<double, 128>{};
     auto queueInstance = liberafx::Instance{};
     assert(queueInstance.initialize(program, queueWork.data(), queueWork.size()) == Result::Ok);
     auto queue = liberafx::EffectLifecycle(queueInstance);
@@ -272,7 +285,7 @@ int main(int argc, char** argv)
     assert(queue.schedule(1, 129) == Result::QueueRejected);
     assert(queue.stop() == Result::Ok && queue.nextScheduled(scheduledEvent, hasScheduled) == Result::NotReady);
 
-    alignas(16) auto failedWork = std::array<double, 16>{};
+    alignas(16) auto failedWork = std::array<double, 128>{};
     alignas(16) auto failedDefaults = std::array<double, 32>{};
     auto failedInstance = liberafx::Instance{};
     assert(failedInstance.initialize(program, failedWork.data(), failedWork.size(), failedDefaults.data(), failedDefaults.size()) == Result::Ok);
@@ -286,7 +299,7 @@ int main(int argc, char** argv)
            context.calls == callsBeforeFailedStart + 1);
     assert(failed.stop() == Result::Ok);
 
-    alignas(16) auto destroyFailureWork = std::array<double, 16>{};
+    alignas(16) auto destroyFailureWork = std::array<double, 128>{};
     auto destroyFailureInstance = liberafx::Instance{};
     assert(destroyFailureInstance.initialize(program, destroyFailureWork.data(), destroyFailureWork.size()) == Result::Ok);
     auto destroyFailure = liberafx::EffectLifecycle(destroyFailureInstance);
@@ -317,11 +330,13 @@ int main(int argc, char** argv)
     descriptors[1].outputWidth = 1;
     descriptors[1].function = failEvaluation;
     descriptors[1].context = &evaluationContext;
+    auto currentFailure = runtime_test_fixture::promoteSimpleProgram(
+        std::vector<std::uint8_t>(failureBytes.begin(), failureBytes.end()), descriptors.data(), descriptors.size());
     auto failureBindings = std::array<liberafx::CustomNodeBinding, 2>{};
     auto failureProgram = liberafx::Program{};
-    assert(liberafx::Program::load(failureBytes.data(), failureBytes.size(), descriptors.data(),
+    assert(liberafx::Program::load(currentFailure.data(), currentFailure.size(), descriptors.data(),
         descriptors.size(), failureBindings.data(), failureBindings.size(), failureProgram) == Result::Ok);
-    alignas(16) auto evaluationWork = std::array<double, 16>{};
+    alignas(16) auto evaluationWork = std::array<double, 128>{};
     auto evaluationInstance = liberafx::Instance{};
     assert(evaluationInstance.initialize(failureProgram, evaluationWork.data(), evaluationWork.size()) == Result::Ok);
     auto evaluation = liberafx::EffectLifecycle(evaluationInstance);
@@ -330,7 +345,7 @@ int main(int argc, char** argv)
            evaluationContext.calls == 1);
     assert(evaluation.stop() == Result::Ok);
 
-    alignas(16) auto laterWork = std::array<double, 16>{};
+    alignas(16) auto laterWork = std::array<double, 128>{};
     auto laterInstance = liberafx::Instance{};
     assert(laterInstance.initialize(failureProgram, laterWork.data(), laterWork.size()) == Result::Ok);
     auto later = liberafx::EffectLifecycle(laterInstance);
@@ -340,7 +355,7 @@ int main(int argc, char** argv)
     assert(later.advance(1, sample) == Result::NotReady && evaluationContext.calls == 2);
     assert(later.stop() == Result::Ok);
 
-    alignas(16) auto capturedWork = std::array<double, 16>{};
+    alignas(16) auto capturedWork = std::array<double, 128>{};
     auto capturedInstance = liberafx::Instance{};
     assert(capturedInstance.initialize(failureProgram, capturedWork.data(), capturedWork.size()) == Result::Ok);
     auto captured = liberafx::EffectLifecycle(capturedInstance);

@@ -38,7 +38,7 @@ namespace LiberaFx.Unity.Editor
                 image = new Texture2D(256, 256, TextureFormat.RGBA32, false);
                 foreach (var mode in new[] { "generated-sprite", "generated-flexible", "generated-material", "generated-material-dye", "generated-material-fields" })
                 {
-                    File.Copy(Path.Combine(fixtures, mode + ".lfxb"), folder + "/" + mode + ".lfxp");
+                    File.Copy(Path.Combine(fixtures, mode + ".lfxp"), folder + "/" + mode + ".lfxp");
                     AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
                     var package = AssetDatabase.LoadAssetAtPath<LiberaFxSpawnableAsset>(folder + "/" + mode + ".lfxp");
                     Require(package, "Compiled package import failed.");

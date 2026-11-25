@@ -1,10 +1,11 @@
 #include "liberafx/LbLivePreview.h"
 #include "liberafx/host/LbPackagePreviewContract.h"
 
+#include <charconv>
 #include <cmath>
-#include <cstdlib>
 #include <cstring>
 #include <string_view>
+#include <utility>
 
 namespace liberafx::livepreview {
 namespace {
@@ -66,8 +67,9 @@ auto decodeFrame(const void* data, std::size_t size, FrameView& out) noexcept ->
     if ((kind == 1 && (base != 0 || length == 0 || length > maxProgramBytes)) ||
         (kind == 2 && length != 0) ||
         (kind == 3 && (base != 0 || length > maxErrorBytes || !validUtf8(p + headerBytes, length))) ||
-        ((kind == 4 || kind == 5) && (read64(p + 8) != 0 || base != 0 || time != 0 || rate != 0 ||
-            flags != 0 || length == 0 || length > (kind == 4 ? maxErrorBytes : maxSceneBytes) ||
+        ((kind == 4 || kind == 5) && ((kind == 4 && read64(p + 8) != 0) ||
+            base != 0 || time != 0 || rate != 0 || flags != 0 || length == 0 ||
+            length > (kind == 4 ? maxErrorBytes : maxSceneBytes) ||
             !validUtf8(p + headerBytes, length))))
         return DecodeResult::InvalidFrame;
     out = {static_cast<Kind>(kind), read64(p + 8), base, time, rate, flags, p + headerBytes, length};
@@ -76,8 +78,19 @@ auto decodeFrame(const void* data, std::size_t size, FrameView& out) noexcept ->
 
 auto SequenceCursor::validate(const FrameView& frame) const noexcept -> SequenceResult
 {
-    if (frame.kind == Kind::Control || frame.kind == Kind::Scene) return SequenceResult::Resync;
+    if (frame.kind == Kind::Control)
+    {
+        return SequenceResult::Resync;
+    }
+    if (frame.kind == Kind::Scene && (!hasProgram_ || !hasSequence_ || frame.sequence == 0))
+    {
+        return SequenceResult::Resync;
+    }
     if (hasSequence_ && frame.sequence < sequence_) return SequenceResult::Stale;
+    if (frame.kind == Kind::Scene && frame.sequence == sequence_)
+    {
+        return SequenceResult::Stale;
+    }
     if (frame.kind == Kind::Playback) {
         if (!hasProgram_ || !hasSequence_ || frame.baseSequence != sequence_ ||
             frame.sequence == sequence_) return SequenceResult::Resync;
@@ -153,63 +166,88 @@ struct JsonCursor final {
         }
         return false;
     }
-    auto readNumber(double& out) noexcept -> bool {
+    auto readNumber(double& out) noexcept -> bool
+    {
         skipWs();
-        if (pos >= size) return false;
-        const auto start = pos;
-        while (pos < size) {
-            const auto ch = data[pos];
-            if ((ch >= '0' && ch <= '9') || ch == '-' || ch == '+' || ch == '.' || ch == 'e' || ch == 'E')
+        auto start = pos;
+        if (pos < size && data[pos] == '-')
+        {
+            ++pos;
+        }
+        if (pos >= size)
+        {
+            return false;
+        }
+        if (data[pos] == '0')
+        {
+            ++pos;
+        }
+        else if (data[pos] >= '1' && data[pos] <= '9')
+        {
+            while (pos < size && data[pos] >= '0' && data[pos] <= '9')
+            {
                 ++pos;
-            else
-                break;
-        }
-        if (pos == start) return false;
-        char buf[64];
-        const auto len = pos - start;
-        if (len >= sizeof(buf)) return false;
-        std::memcpy(buf, data + start, len);
-        buf[len] = '\0';
-        char* end = nullptr;
-        out = std::strtod(buf, &end);
-        return end == buf + len && std::isfinite(out);
-    }
-    auto skipValue() noexcept -> bool {
-        const auto ch = peek();
-        if (ch == '"') {
-            std::string_view dummy;
-            return readString(dummy);
-        }
-        if (ch == 't' || ch == 'f') {
-            bool dummy = false;
-            return readBool(dummy);
-        }
-        if (ch == 'n' && size - pos >= 4 && std::memcmp(data + pos, "null", 4) == 0) {
-            pos += 4;
-            return true;
-        }
-        if (ch == '{') {
-            ++pos;
-            if (consume('}')) return true;
-            while (true) {
-                std::string_view key;
-                if (!readString(key) || !consume(':') || !skipValue()) return false;
-                if (consume('}')) return true;
-                if (!consume(',')) return false;
             }
         }
-        if (ch == '[') {
+        else
+        {
+            return false;
+        }
+        if (pos < size && data[pos] == '.')
+        {
             ++pos;
-            if (consume(']')) return true;
-            while (true) {
-                if (!skipValue()) return false;
-                if (consume(']')) return true;
-                if (!consume(',')) return false;
+            auto digits = pos;
+            while (pos < size && data[pos] >= '0' && data[pos] <= '9')
+            {
+                ++pos;
+            }
+            if (pos == digits)
+            {
+                return false;
             }
         }
-        double dummy = 0;
-        return readNumber(dummy);
+        if (pos < size && (data[pos] == 'e' || data[pos] == 'E'))
+        {
+            ++pos;
+            if (pos < size && (data[pos] == '+' || data[pos] == '-'))
+            {
+                ++pos;
+            }
+            auto digits = pos;
+            while (pos < size && data[pos] >= '0' && data[pos] <= '9')
+            {
+                ++pos;
+            }
+            if (pos == digits)
+            {
+                return false;
+            }
+        }
+        auto result = std::from_chars(data + start, data + pos, out);
+        return result.ec == std::errc{} && result.ptr == data + pos && std::isfinite(out);
     }
+    template <typename T>
+    auto readInteger(T& out) noexcept -> bool
+    {
+        skipWs();
+        auto start = pos;
+        if (pos < size && data[pos] == '-')
+        {
+            ++pos;
+        }
+        auto digits = pos;
+        while (pos < size && data[pos] >= '0' && data[pos] <= '9')
+        {
+            ++pos;
+        }
+        if (pos == digits || (pos - digits > 1 && data[digits] == '0'))
+        {
+            return false;
+        }
+        auto parsed = std::from_chars(data + start, data + pos, out);
+        return parsed.ec == std::errc{} && parsed.ptr == data + pos;
+    }
+
 };
 
 auto hexNibble(char ch, std::uint8_t& out) noexcept -> bool {
@@ -220,10 +258,16 @@ auto hexNibble(char ch, std::uint8_t& out) noexcept -> bool {
 }
 
 auto parseGuid(std::string_view text, std::array<std::uint8_t, 16>& out) noexcept -> bool {
+    if (text.size() != 36 || text[8] != '-' || text[13] != '-' ||
+        text[18] != '-' || text[23] != '-')
+    {
+        return false;
+    }
     std::uint8_t nibbles[32]{};
     std::size_t count = 0;
-    for (const auto ch : text) {
-        if (ch == '-') continue;
+    for (auto index = std::size_t{0}; index < text.size(); ++index) {
+        auto ch = text[index];
+        if (index == 8 || index == 13 || index == 18 || index == 23) continue;
         if (count >= 32 || !hexNibble(ch, nibbles[count])) return false;
         ++count;
     }
@@ -233,87 +277,369 @@ auto parseGuid(std::string_view text, std::array<std::uint8_t, 16>& out) noexcep
     return true;
 }
 
-auto parseUpdateObject(JsonCursor& cur, ParameterDeltaUpdate& out) noexcept -> bool {
-    if (!cur.consume('{')) return false;
-    if (cur.consume('}')) return false;
-    bool hasNodeId = false;
-    while (true) {
-        std::string_view key;
-        if (!cur.readString(key) || !cur.consume(':')) return false;
-        if (key == "containerId") {
-            std::string_view val;
-            if (!cur.readString(val) || !parseGuid(val, out.containerId)) return false;
-        } else if (key == "nodeId") {
-            std::string_view val;
-            if (!cur.readString(val) || !parseGuid(val, out.nodeId)) return false;
-            hasNodeId = true;
-        } else if (key == "inputSlot") {
-            double v = 0;
-            if (!cur.readNumber(v) || v < 0 || v > 1000000) return false;
-            out.inputSlot = static_cast<std::uint32_t>(v);
-        } else if (key == "component") {
-            double v = 0;
-            if (!cur.readNumber(v) || v < 0 || v > 3) return false;
-            out.component = static_cast<std::uint32_t>(v);
-        } else if (key == "isInt32") {
-            if (!cur.readBool(out.isInt32)) return false;
-        } else if (key == "intValue") {
-            double v = 0;
-            if (!cur.readNumber(v)) return false;
-            out.intValue = static_cast<std::int32_t>(v);
-        } else if (key == "floatValue") {
-            double v = 0;
-            if (!cur.readNumber(v)) return false;
-            out.floatValue = static_cast<float>(v);
-        } else {
-            if (!cur.skipValue()) return false;
-        }
-        if (cur.consume('}')) break;
-        if (!cur.consume(',')) return false;
+auto parseCurveKeys(JsonCursor& cur, std::vector<CurveKey>& keys) -> bool
+{
+    if (!cur.consume('['))
+    {
+        return false;
     }
-    return hasNodeId;
+    if (cur.consume(']'))
+    {
+        return true;
+    }
+    while (true)
+    {
+        if (keys.size() >= 10000 || !cur.consume('{') || cur.consume('}'))
+        {
+            return false;
+        }
+        auto item = CurveKey{};
+        auto fields = std::uint32_t{};
+        while (true)
+        {
+            auto key = std::string_view{};
+            if (!cur.readString(key) || !cur.consume(':'))
+            {
+                return false;
+            }
+            auto bit = key == "time" ? 1u : key == "value" ? 2u :
+                key == "inSlope" ? 4u : key == "outSlope" ? 8u :
+                key == "interpolation" ? 16u : 0u;
+            if (!bit || (fields & bit))
+            {
+                return false;
+            }
+            fields |= bit;
+            if (bit == 16u)
+            {
+                auto interpolation = std::uint32_t{};
+                if (!cur.readInteger(interpolation) || interpolation > 2)
+                {
+                    return false;
+                }
+                item.interpolation = static_cast<std::uint8_t>(interpolation);
+            }
+            else
+            {
+                auto& number = bit == 1u ? item.time : bit == 2u ? item.value :
+                    bit == 4u ? item.inSlope : item.outSlope;
+                if (!cur.readNumber(number) || std::abs(number) > 1000000)
+                {
+                    return false;
+                }
+            }
+            if (cur.consume('}'))
+            {
+                break;
+            }
+            if (!cur.consume(','))
+            {
+                return false;
+            }
+        }
+        if (fields != 31u || (!keys.empty() && item.time <= keys.back().time))
+        {
+            return false;
+        }
+        keys.push_back(item);
+        if (cur.consume(']'))
+        {
+            return true;
+        }
+        if (!cur.consume(','))
+        {
+            return false;
+        }
+    }
 }
+
+struct ParsedMatrix final {
+    bool present = false;
+    std::array<std::array<std::uint8_t, 16>, 4> rowNodeIds{};
+    std::array<double, 16> values{};
+};
+
+auto parseUpdateObject(JsonCursor& cur, ParameterDeltaUpdate& out,
+                       ParsedMatrix& matrix) -> bool
+{
+    if (!cur.consume('{') || cur.consume('}'))
+    {
+        return false;
+    }
+    auto fields = std::uint32_t{0};
+    while (true)
+    {
+        auto key = std::string_view{};
+        if (!cur.readString(key) || !cur.consume(':'))
+        {
+            return false;
+        }
+        auto bit = key == "containerId" ? 1u : key == "nodeId" ? 2u :
+            key == "inputSlot" ? 4u : key == "component" ? 8u :
+            key == "isInt32" ? 16u : key == "intValue" ? 32u :
+            key == "floatValue" ? 64u : key == "reset" ? 128u :
+            key == "kind" ? 256u : key == "rowNodeIds" ? 512u :
+            key == "values" ? 1024u : key == "keys" ? 2048u : 0u;
+        if (bit == 0 || (fields & bit) != 0)
+        {
+            return false;
+        }
+        fields |= bit;
+        if (key == "containerId" || key == "nodeId")
+        {
+            auto value = std::string_view{};
+            auto& id = key == "containerId" ? out.containerId : out.nodeId;
+            if (!cur.readString(value) || !parseGuid(value, id))
+            {
+                return false;
+            }
+        }
+        else if (key == "inputSlot")
+        {
+            if (!cur.readInteger(out.inputSlot) || out.inputSlot > 255)
+            {
+                return false;
+            }
+        }
+        else if (key == "component")
+        {
+            if (!cur.readInteger(out.component) || out.component > 3)
+            {
+                return false;
+            }
+        }
+        else if (key == "isInt32")
+        {
+            if (!cur.readBool(out.isInt32))
+            {
+                return false;
+            }
+        }
+        else if (key == "intValue")
+        {
+            if (!cur.readInteger(out.intValue))
+            {
+                return false;
+            }
+        }
+        else if (key == "reset")
+        {
+            if (!cur.readBool(out.reset))
+            {
+                return false;
+            }
+        }
+        else if (key == "kind")
+        {
+            auto value = std::string_view{};
+            if (!cur.readString(value) || (value != "matrix" && value != "fcurve"))
+            {
+                return false;
+            }
+            matrix.present = value == "matrix";
+            out.isCurve = value == "fcurve";
+        }
+        else if (key == "keys")
+        {
+            if (!parseCurveKeys(cur, out.curveKeys))
+            {
+                return false;
+            }
+        }
+        else if (key == "rowNodeIds")
+        {
+            if (!cur.consume('['))
+            {
+                return false;
+            }
+            for (auto index = std::size_t{}; index < matrix.rowNodeIds.size(); ++index)
+            {
+                auto value = std::string_view{};
+                if ((index != 0 && !cur.consume(',')) || !cur.readString(value) ||
+                    !parseGuid(value, matrix.rowNodeIds[index]))
+                {
+                    return false;
+                }
+                for (auto previous = std::size_t{}; previous < index; ++previous)
+                {
+                    if (matrix.rowNodeIds[index] == matrix.rowNodeIds[previous])
+                    {
+                        return false;
+                    }
+                }
+            }
+            if (!cur.consume(']'))
+            {
+                return false;
+            }
+        }
+        else if (key == "values")
+        {
+            if (!cur.consume('['))
+            {
+                return false;
+            }
+            for (auto index = std::size_t{}; index < matrix.values.size(); ++index)
+            {
+                if ((index != 0 && !cur.consume(',')) || !cur.readNumber(matrix.values[index]))
+                {
+                    return false;
+                }
+            }
+            if (!cur.consume(']'))
+            {
+                return false;
+            }
+        }
+        else if (!cur.readNumber(out.floatValue))
+        {
+            return false;
+        }
+        if (cur.consume('}'))
+        {
+            break;
+        }
+        if (!cur.consume(','))
+        {
+            return false;
+        }
+    }
+    if (out.isCurve)
+    {
+        auto required = 1u | 2u | 256u | (out.reset ? 128u : 2048u);
+        return fields == required || (!out.reset && fields == (required | 128u));
+    }
+    if (matrix.present)
+    {
+        return out.reset ? fields == (1u | 128u | 256u | 512u)
+                         : fields == (1u | 256u | 512u | 1024u);
+    }
+    return out.reset ? fields == 143u : (fields == 127u || fields == 255u);
+}
+}
+
+static auto parseParameterDeltaJsonImpl(const char* jsonUtf8, std::size_t length,
+    std::vector<ParameterDeltaUpdate>& outUpdates, std::uint64_t* outSequence) -> Result
+{
+    outUpdates.clear();
+    if (!jsonUtf8 || length == 0 || length > livepreview::maxSceneBytes)
+    {
+        return Result::InvalidArgument;
+    }
+    auto parsedUpdates = std::vector<ParameterDeltaUpdate>{};
+    auto cur = JsonCursor{jsonUtf8, length, 0};
+    if (!cur.consume('{') || cur.consume('}'))
+    {
+        return Result::InvalidArgument;
+    }
+    auto hasType = false;
+    auto hasUpdates = false;
+    auto hasSequence = false;
+    auto sequence = std::uint64_t{};
+    while (true)
+    {
+        auto key = std::string_view{};
+        if (!cur.readString(key) || !cur.consume(':'))
+        {
+            return Result::InvalidArgument;
+        }
+        if (key == "type")
+        {
+            auto value = std::string_view{};
+            if (hasType || !cur.readString(value))
+            {
+                return Result::InvalidArgument;
+            }
+            if (value != "parameter_delta")
+            {
+                return Result::UnsupportedBinary;
+            }
+            hasType = true;
+        }
+        else if (key == "updates")
+        {
+            if (hasUpdates || !cur.consume('['))
+            {
+                return Result::InvalidArgument;
+            }
+            hasUpdates = true;
+            if (!cur.consume(']'))
+            {
+                while (true)
+                {
+                    auto update = ParameterDeltaUpdate{};
+                    auto matrix = ParsedMatrix{};
+                    if (!parseUpdateObject(cur, update, matrix))
+                    {
+                        return Result::InvalidArgument;
+                    }
+                    if (matrix.present)
+                    {
+                        for (auto row = std::size_t{}; row < matrix.rowNodeIds.size(); ++row)
+                        {
+                            for (auto column = std::size_t{}; column < 4; ++column)
+                            {
+                                auto lane = update;
+                                lane.nodeId = matrix.rowNodeIds[row];
+                                lane.component = static_cast<std::uint32_t>(column);
+                                lane.floatValue = matrix.values[row * 4 + column];
+                                parsedUpdates.push_back(lane);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        parsedUpdates.push_back(update);
+                    }
+                    if (cur.consume(']'))
+                    {
+                        break;
+                    }
+                    if (!cur.consume(','))
+                    {
+                        return Result::InvalidArgument;
+                    }
+                }
+            }
+        }
+        else if (key == "sequence")
+        {
+            if (hasSequence || !cur.readInteger(sequence))
+            {
+                return Result::InvalidArgument;
+            }
+            hasSequence = true;
+        }
+        else
+        {
+            return Result::InvalidArgument;
+        }
+        if (cur.consume('}'))
+        {
+            break;
+        }
+        if (!cur.consume(','))
+        {
+            return Result::InvalidArgument;
+        }
+    }
+    cur.skipWs();
+    if (cur.pos != cur.size || !hasType || !hasUpdates || !hasSequence)
+    {
+        return Result::InvalidArgument;
+    }
+    outUpdates = std::move(parsedUpdates);
+    if (outSequence)
+    {
+        *outSequence = sequence;
+    }
+    return Result::Ok;
 }
 
 auto parseParameterDeltaJson(const char* jsonUtf8, std::size_t length,
     std::vector<ParameterDeltaUpdate>& outUpdates) -> Result
 {
-    outUpdates.clear();
-    if (!jsonUtf8 || length == 0 || length > livepreview::maxSceneBytes) return Result::InvalidArgument;
-    JsonCursor cur{jsonUtf8, length, 0};
-    if (!cur.consume('{')) return Result::InvalidArgument;
-    if (cur.consume('}')) return Result::InvalidArgument;
-    bool isParameterDelta = false;
-    bool hasUpdates = false;
-    while (true) {
-        std::string_view key;
-        if (!cur.readString(key) || !cur.consume(':')) return Result::InvalidArgument;
-        if (key == "type") {
-            std::string_view val;
-            if (!cur.readString(val)) return Result::InvalidArgument;
-            if (val != "parameter_delta") return Result::UnsupportedBinary;
-            isParameterDelta = true;
-        } else if (key == "updates") {
-            if (!cur.consume('[')) return Result::InvalidArgument;
-            hasUpdates = true;
-            if (!cur.consume(']')) {
-                while (true) {
-                    ParameterDeltaUpdate update{};
-                    if (!parseUpdateObject(cur, update)) return Result::InvalidArgument;
-                    outUpdates.push_back(update);
-                    if (cur.consume(']')) break;
-                    if (!cur.consume(',')) return Result::InvalidArgument;
-                }
-            }
-        } else {
-            if (!cur.skipValue()) return Result::InvalidArgument;
-        }
-        if (cur.consume('}')) break;
-        if (!cur.consume(',')) return Result::InvalidArgument;
-    }
-    cur.skipWs();
-    if (cur.pos != cur.size || !isParameterDelta || !hasUpdates) return Result::InvalidArgument;
-    return Result::Ok;
+    return parseParameterDeltaJsonImpl(jsonUtf8, length, outUpdates, nullptr);
 }
 
 auto applyParameterDeltaJson(SpawnableHost& host, const char* jsonUtf8, std::size_t length) -> Result
@@ -321,12 +647,7 @@ auto applyParameterDeltaJson(SpawnableHost& host, const char* jsonUtf8, std::siz
     std::vector<ParameterDeltaUpdate> updates;
     const auto parsed = parseParameterDeltaJson(jsonUtf8, length, updates);
     if (parsed != Result::Ok) return parsed;
-    for (const auto& u : updates) {
-        const auto res = host.setNodeParameter(
-            u.containerId.data(), u.nodeId.data(), u.inputSlot, u.component, u.isInt32, u.intValue, u.floatValue);
-        if (res != Result::Ok) return res;
-    }
-    return Result::Ok;
+    return host.setNodeParameters(updates.data(), updates.size());
 }
 
 auto dispatchPackagePreviewFrame(const livepreview::FrameView& frame, IPackagePreviewAdapter& adapter) -> Result
@@ -340,9 +661,21 @@ auto dispatchPackagePreviewFrame(const livepreview::FrameView& frame, IPackagePr
         return adapter.setPlayback(playing, frame.playbackRate);
     case livepreview::Kind::Scene: {
         std::vector<ParameterDeltaUpdate> updates;
-        const auto parsed = parseParameterDeltaJson(
-            reinterpret_cast<const char*>(frame.payload), frame.payloadLength, updates);
+        auto sequence = std::uint64_t{};
+        const auto parsed = parseParameterDeltaJsonImpl(
+            reinterpret_cast<const char*>(frame.payload), frame.payloadLength, updates, &sequence);
         if (parsed != Result::Ok) return parsed;
+        if (frame.sequence != 0 && frame.sequence != sequence)
+        {
+            return Result::InvalidArgument;
+        }
+        for (const auto& update : updates)
+        {
+            if (update.isCurve && !adapter.supportsCurveDeltas())
+            {
+                return Result::UnsupportedBinary;
+            }
+        }
         return adapter.applyParameterDelta(updates.data(), updates.size());
     }
     default:

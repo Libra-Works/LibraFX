@@ -1,3 +1,4 @@
+#include "ProgramFixture.h"
 #include "liberafx/LbCpuParticles.h"
 #include "liberafx/LbSpawnableHost.h"
 #include "liberafx/LbParticleAtlas.h"
@@ -13,7 +14,8 @@ namespace liberafx::cpu_particle_tests {
 using Bytes = std::vector<std::uint8_t>;
 auto emptyProgram() -> Bytes
 {
-    return {'L', 'F', 'X', 'B', 2, 0, 1, 0, 0, 0, 0, 0, 96, 0, 0, 0};
+    return runtime_test_fixture::promoteSimpleProgram(
+        {'L', 'F', 'X', 'B', 2, 0, 1, 0, 0, 0, 0, 0, 96, 0, 0, 0});
 }
 void u32(Bytes& bytes, std::uint32_t value)
 {
@@ -34,7 +36,7 @@ void number(Bytes& bytes, double value)
 auto payload(std::uint32_t capacity, std::uint32_t burst, double rate) -> Bytes
 {
     auto bytes = Bytes{};
-    u32(bytes, 1);
+    u32(bytes, 2);
     u32(bytes, 1);
     bytes.resize(24, 0);
     bytes[8] = 1;
@@ -53,6 +55,7 @@ auto payload(std::uint32_t capacity, std::uint32_t burst, double rate) -> Bytes
         bytes.insert(bytes.end(), program.begin(), program.end());
         u32(bytes, 0);
     }
+    u32(bytes, 0);
     return bytes;
 }
 auto inlineJob(void*, Job job, void* context) noexcept -> bool
@@ -85,7 +88,8 @@ void poolTests()
     auto program = Program{};
     assert(Program::load(programBytes.data(), programBytes.size(), program) == Result::Ok);
     auto root = Instance{};
-    assert(root.initialize(program, nullptr, 0) == Result::Ok);
+    alignas(16) auto work = std::array<double, 128>{};
+    assert(root.initialize(program, work.data(), work.size()) == Result::Ok);
     assert(root.updateAsync(0, inlineJob, nullptr) == Result::Ok);
     assert(world->advance(root, 0, true, {}) == Result::Ok);
     auto id = std::array<std::uint8_t, 16>{1};
@@ -109,7 +113,12 @@ void poolTests()
     assert(world->advance(root, 0, true, {}) == Result::Ok);
     assert(world->advance(root, 1, true, {}) == Result::InsufficientWork);
     assert(world->activeCount() == 0); // Emission is rejected, not silently truncated.
-    bytes[0] = 2;
+    bytes[0] = 1;
+    assert(CpuParticleWorld::create(bytes.data(), bytes.size(), nullptr, 0, world) == Result::InvalidBinary);
+    bytes[0] = 3;
+    assert(CpuParticleWorld::create(bytes.data(), bytes.size(), nullptr, 0, world) == Result::InvalidBinary);
+    bytes = payload(2, 0, 3);
+    bytes.pop_back();
     assert(CpuParticleWorld::create(bytes.data(), bytes.size(), nullptr, 0, world) == Result::InvalidBinary);
 }
 void scopedNodeTests()
@@ -164,7 +173,7 @@ void compiledFixture(const char* path)
     auto bytes = Bytes(std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>{});
     auto package = SpawnablePackage{};
     assert(loadSpawnablePackage(bytes.data(), bytes.size(), package) == Result::Ok);
-    assert(package.packageVersion == 12 && package.cpuPrograms.size() > 24);
+    assert(package.packageVersion == 13 && package.cpuPrograms.size() > 24);
     auto id = std::array<std::uint8_t, 16>{};
     std::copy_n(package.cpuPrograms.data() + 8, 16, id.data());
     auto systemMetadata = std::vector<std::unique_ptr<cpu_particle_detail::System>>{};

@@ -25,13 +25,11 @@ auto ULibraEffectComponent::SetGpuEffect(ULibraGpuEffectAsset* newEffect) -> ELi
     {
         return LastResult;
     }
-    Effect = nullptr;
     Package = nullptr;
     if (PackagePlayback)
     {
         PackagePlayback->Package = nullptr;
     }
-    NativeState.Reset();
     ReleaseGpuPlayback();
     GpuEffect = newEffect;
     LastError.Reset();
@@ -41,7 +39,7 @@ auto ULibraEffectComponent::SetGpuEffect(ULibraGpuEffectAsset* newEffect) -> ELi
 auto ULibraEffectComponent::EnsureGpuPlayback() -> ELibraRuntimeResult
 {
     check(IsInGameThread());
-    if (!GpuEffect || Effect || Package)
+    if (!GpuEffect || Package)
     {
         return ELibraRuntimeResult::InvalidArgument;
     }

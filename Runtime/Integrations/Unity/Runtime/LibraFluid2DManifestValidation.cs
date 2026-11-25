@@ -24,8 +24,8 @@ namespace LiberaFx.Unity
         internal float ignitionTemperature = .5f, heatYield = 2, coolingRate = 1, sourceTemperature = 1;
         internal LibraFluid2DForceNode[] forces = System.Array.Empty<LibraFluid2DForceNode>();
     }
-    // JsonUtility silently accepts missing fields and duplicate keys. Version 2
-    // must be checked before deserializing and before any GPU state is created.
+    // JsonUtility silently accepts missing fields and duplicate keys. The current
+    // manifest schema is checked before any GPU state is created.
     internal static partial class LibraFluid2DManifestValidation
     {
         private static readonly string[] IntegerFields =
@@ -43,11 +43,11 @@ namespace LiberaFx.Unity
         {
             var result = new LiberaFxGpuResourceManifest();
             var root = Object(new Reader(json).Read(), "GPU manifest");
-            if (!root.TryGetValue("version", out var version) || !(version is double n) || (n != 2 && n != 3 && n!=4))
-                throw new InvalidOperationException("Invalid GPU manifest version.");
+            if (!root.TryGetValue("version", out var version) || !(version is double n) || n != 4)
+                throw new InvalidOperationException("GPU manifest must use the current schema.");
             var programs = Array(root, "programs");
-            var fluids = Array(root, "fluidPrograms");
-            if ((fluids.Count == 0 && n!=4) || programs.Count + fluids.Count > 16)
+            var fluids = OptionalArray(root, "fluidPrograms");
+            if (programs.Count + fluids.Count > 16)
                 throw new InvalidOperationException("GPU manifest program count is invalid.");
             var ids = new HashSet<string>(StringComparer.Ordinal);
             foreach (var item in programs)
@@ -59,7 +59,6 @@ namespace LiberaFx.Unity
                     var delivery = Object(deliveryValue, "particle delivery");
                     if (delivery.TryGetValue("generatedResources", out var generatedValue))
                     {
-                        if (n < 3) throw new InvalidOperationException("Generated resources require GPU payload version 3.");
                         var generated = Object(generatedValue, "generated resources");
                         if (generated.Count > 64) throw new InvalidOperationException("Too many generated resources.");
                         var bindings = new List<LiberaFxGeneratedGpuResource>();
@@ -89,8 +88,8 @@ namespace LiberaFx.Unity
                 var automatic = true;
                 if (fluid.TryGetValue("automaticPlane", out var planeValue))
                 {
-                    if (n < 3 || !(planeValue is bool plane))
-                        throw new InvalidOperationException("Automatic plane selection requires version 3 and a boolean.");
+                    if (!(planeValue is bool plane))
+                        throw new InvalidOperationException("Automatic plane selection must be a boolean.");
                     automatic = plane;
                 }
                 result.automaticPlanes.Add(fluidId, automatic);
@@ -171,7 +170,7 @@ namespace LiberaFx.Unity
                 foreach (var reference in references)
                     if (!fluidIds.Contains(reference.producerNodeId))
                         throw new InvalidOperationException("Generated texture producer is not a fluid in this execution scope.");
-            result.drawBindings = ReadDrawBindings(root, n, fluidIds);
+            result.drawBindings = ReadDrawBindings(root, fluidIds);
             return result;
         }
 
@@ -218,6 +217,12 @@ namespace LiberaFx.Unity
             value as Dictionary<string, object> ?? throw new InvalidOperationException("Expected object: " + name);
         private static List<object> Array(Dictionary<string, object> obj, string name) =>
             Required(obj, name) as List<object> ?? throw new InvalidOperationException("Expected array: " + name);
+
+        private static List<object> OptionalArray(Dictionary<string, object> obj, string name)
+        {
+            if (!obj.TryGetValue(name, out var value)) return new List<object>();
+            return value as List<object> ?? throw new InvalidOperationException("Expected array: " + name);
+        }
 
         private sealed class Reader
         {

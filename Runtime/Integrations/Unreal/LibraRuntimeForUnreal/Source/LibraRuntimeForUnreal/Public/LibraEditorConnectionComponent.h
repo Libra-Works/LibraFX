@@ -6,10 +6,8 @@
 #include "LibraRuntimeTypes.h"
 #include "LibraEditorConnectionComponent.generated.h"
 
-class ULibraEffectAsset;
 class ULibraEffectComponent;
 class ULibraSpawnableAsset;
-class ULibraSpawnableComponent;
 struct FLibraEditorConnectionState;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnLibraPreviewUpdated,
@@ -26,9 +24,6 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Libra Editor")
     TObjectPtr<ULibraEffectComponent> Target;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Libra Editor")
-    TObjectPtr<ULibraSpawnableComponent> SpawnableTarget;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Libra Editor")
     FString Host = TEXT("127.0.0.1");
@@ -61,13 +56,6 @@ public:
     FString Status;
 
     TFunction<FString(const FString&)> EditorAssetRequestHandler;
-    TFunction<void(const FString&, int64)> EditorSceneConfigHandler;
-    TFunction<FString(int64, double)> EditorRenderStatusHandler;
-    TFunction<void(const FString&, int64)> EditorGpuConfigHandler;
-    TFunction<void(int64, bool, double, bool, double)> EditorGpuPlaybackHandler;
-    TFunction<void()> EditorGpuResetHandler;
-    TFunction<void(const FVector&)> EditorPreviewMotionHandler;
-    TFunction<FString(int64)> EditorGpuStatusHandler;
 
     bool QueueEditorMessage(const FString& message);
 
@@ -102,11 +90,8 @@ private:
     FGuid ViewerId = FGuid::NewGuid();
 
     UPROPERTY(Transient)
-    TObjectPtr<ULibraEffectAsset> PreviewEffect;
+    TObjectPtr<ULibraSpawnableAsset> PreviewPackage;
 
     UPROPERTY(Transient)
-    TObjectPtr<ULibraEffectAsset> OriginalEffect;
-
-    UPROPERTY(Transient)
-    TObjectPtr<ULibraSpawnableAsset> PreviewSpawnablePackage;
+    TObjectPtr<ULibraSpawnableAsset> OriginalPackage;
 };

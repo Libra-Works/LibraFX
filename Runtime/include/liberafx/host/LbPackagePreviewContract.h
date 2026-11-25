@@ -17,7 +17,10 @@ struct ParameterDeltaUpdate final {
     std::uint32_t component = 0;
     bool isInt32 = false;
     std::int32_t intValue = 0;
-    float floatValue = 0.0f;
+    double floatValue = 0.0;
+    bool reset = false;
+    bool isCurve = false;
+    std::vector<CurveKey> curveKeys;
 };
 
 // Every engine preview integration must implement all methods of this contract.
@@ -27,6 +30,8 @@ public:
     [[nodiscard]] virtual auto loadPackage(const std::uint8_t* bytes, std::size_t byteCount,
         bool playing, double playbackRate) -> Result = 0;
     [[nodiscard]] virtual auto setPlayback(bool playing, double playbackRate) -> Result = 0;
+    // Older adapters cannot safely interpret an FCurve as scalar lanes.
+    [[nodiscard]] virtual auto supportsCurveDeltas() const noexcept -> bool { return false; }
     [[nodiscard]] virtual auto applyParameterDelta(const ParameterDeltaUpdate* updates,
         std::size_t updateCount) -> Result = 0;
     virtual void resetPreview() = 0;

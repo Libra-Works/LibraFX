@@ -67,7 +67,7 @@ spawnable-playmode-verification.txt and deletes only its temporary import.
 Use a bounded process timeout. This check needs no GPU or Unity Test Framework.
 
 Checks:
-  Actual native DLL P/Invoke evaluates the C#-generated .lfxb fixture.
+  Actual native DLL P/Invoke evaluates the C#-generated .lfxp fixture.
   C/C# POD contracts, native default mutation, cube position/color updates.
   Shared Mesh/Material handles and MaterialPropertyBlock (no material clones).
   Native atlas frames 0/8 change Unity UV offset/scale with correct row flip.

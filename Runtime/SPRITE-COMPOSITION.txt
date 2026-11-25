@@ -50,6 +50,6 @@ The same compiler-produced package and expectations are used for:
 * Unreal packaged game playback: Automation RunTests
   Libra.Runtime.SpriteComposition.GamePackage with
   -LibraSpriteCompositionFixture=<absolute-directory>. The editor automation
-  runner creates a game world, plays the package through ULibraEffectComponent,
+  runner creates a game world, plays the package through ULibraSpawnableComponent,
   checks both real mesh components and their materials at five fixed times,
   then verifies that Stop removes both meshes without removing the owner root.

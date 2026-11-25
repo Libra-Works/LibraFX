@@ -9,7 +9,7 @@ using Object = UnityEngine.Object;
 namespace LiberaFx.Unity
 {
     /// <summary>
-    /// Real component instances, not NativeInstanceSession's numerical facade.
+    /// Package-backed Unity component instances.
     /// Construct/pump/list/close on main thread; Submit/TakeCompletion on workers.
     /// Keep this object alive until producers have joined and completions drained.
     /// </summary>

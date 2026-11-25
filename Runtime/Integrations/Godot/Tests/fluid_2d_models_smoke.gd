@@ -11,7 +11,7 @@ func run() -> void:
 	player.set_process(false)
 	var results := {}
 	for mode: String in ["free-surface", "free-surface-source", "shallow-water", "shallow-water-source", "combustion", "cold-fuel", "force-acceleration", "force-noise", "force-curl", "force-masked", "force-masked-empty"]:
-		if not check(player.play_package(FileAccess.get_file_as_bytes("res://" + mode + ".lfxb")) == 0, mode + " loads: " + player.get_gpu_error()):
+		if not check(player.play_package(FileAccess.get_file_as_bytes("res://" + mode + ".lfxp")) == 0, mode + " loads: " + player.get_gpu_error()):
 			return
 		var initial: Dictionary = player._test_read_fluid_fields()
 		if not check(initial.get("result", -1) == 0, mode + " initial fields available"):
@@ -77,7 +77,7 @@ func run() -> void:
 
 
 func verify_reaction(player: Variant) -> bool:
-	if not check(player.play_package(FileAccess.get_file_as_bytes("res://combustion-oracle.lfxb")) == 0, "Reaction oracle loads"):
+	if not check(player.play_package(FileAccess.get_file_as_bytes("res://combustion-oracle.lfxp")) == 0, "Reaction oracle loads"):
 		return false
 	for frame in range(60):
 		if not check(player.advance(1.0 / 60.0) == 0, "Reaction warms"):

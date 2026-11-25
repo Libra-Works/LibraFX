@@ -6,9 +6,16 @@
 #include <fstream>
 #include <iterator>
 #include <string>
+#if defined(_MSC_VER) && defined(_DEBUG)
+#include <crtdbg.h>
+#endif
 
 auto main(int argc, char** argv) -> int
 {
+#if defined(_MSC_VER) && defined(_DEBUG)
+    _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+    _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
+#endif
     assert(liberafx::host::validateLiveRestart(nullptr, 0) != liberafx::Result::Ok);
     if (argc != 2) return 77; // Explicit compiler fixtures required; never fabricate acceptance.
     auto read = [&](const char* name) {

@@ -1,3 +1,4 @@
+#include "ProgramFixture.h"
 #include "liberafx/LbSpawnableHostPool.h"
 #include "liberafx/LbEffectWorld.h"
 #include <algorithm>
@@ -66,6 +67,7 @@ SpawnablePackage basic() {
     package.parentBytecode.resize(16+96);
     package.parentBytecode[16+15]=1; package.parentBytecode[16+16]=1; package.parentBytecode[16+17]=1;
     std::fill_n(package.parentBytecode.data()+16+24,8,0xff);
+    package.parentBytecode = runtime_test_fixture::promoteSimpleProgram(package.parentBytecode);
     return package;
 }
 void instanceCleanup() {
@@ -87,9 +89,11 @@ void instanceCleanup() {
     auto* record=bytes.data()+16; record[15]=1; record[16]=40; record[17]=1;
     std::copy_n(descriptor.typeId,16,record+24); record[40]=1;
     for (auto slot=0u;slot<4;++slot) { std::fill_n(record+48+slot*8,4,0xff); std::fill_n(record+208+slot*4,4,0xff); }
+    bytes = runtime_test_fixture::promoteSimpleProgram(bytes);
+    record = bytes.data() + 16;
     auto binding=CustomNodeBinding{}; auto program=Program{};
     check(Program::load(bytes.data(),bytes.size(),&descriptor,1,&binding,1,program));
-    alignas(16) std::array<double,32> work{}; auto instance=Instance{}; counts.instance=&instance;
+    alignas(16) std::array<double,128> work{}; auto instance=Instance{}; counts.instance=&instance;
     check(instance.initialize(program,work.data(),work.size()));
     auto handle=ValueHandle{}; check(instance.bindValue(record,handle));
     check(instance.updateAsync(0,[](void*,Job run,void* context) noexcept { run(context); return true; },nullptr));

@@ -39,9 +39,8 @@ callbacks stay on the caller thread and cannot be pooled. Their owner phase
 runs after worker jobs join. Rebuild project modules with the matching SDK.
 
 Separation (no Unity APIs in the C++ Core):
-  canonical .lfxb (LFXP) -> owned native SpawnableHost -> package component
-  legacy raw LFXB -> owned native Program -> Instance evaluates numeric ports
-       -> one libra_evaluate P/Invoke fills cached POD arrays
+  canonical .lfxp (LFXP) -> owned native SpawnableHost -> package component
+       -> package host advances and supplies cached POD values
        -> MonoBehaviour.LateUpdate applies effect-owned render data and matrices.
        -> one selected Built-in/SRP camera callback submits direct Graphics draws.
 The C++ work/default buffers are NOT Unity GPU buffers. The engine adapter owns
@@ -140,28 +139,7 @@ shader compile without that fallback does not prove that Camera.Render drew.
    including Editor when desired. Do not import a Windows DLL as a macOS plugin.
    Windows requires the matching Visual C++ Redistributable; do not deploy Debug.
    Restart the Editor after replacing a loaded native plugin.
-3. Use the GameObject > LiberaFx menu to create a cube, animated 4x4 atlas or
-   dynamic quad sample. Editor code creates shared sample material/atlas assets
-   only once. Enter Play mode. Native time -> scalar gain/default -> splat/color
-   drives cube movement/color; the same time port drives sprite atlas frames.
-   Dynamic mode also uses the native scalar output to deform the cached quad.
-4. For new exports, use LiberaFxSpawnableComponent as described below, even
-   for scalar-only root graphs. For legacy raw LFXB only, add LiberaFxRenderer,
-   assign your Mesh/shared Material or sprite Texture, and drag the directly
-   imported LiberaFxProgramAsset into Legacy Program. Existing .bytes TextAssets
-   still work in Compiled Program; leave Legacy Program empty in that case.
-   Do NOT rename a new LFXP package to .bytes or convert binary to text.
-   Leaving BOTH program fields empty selects the bundled generated v2 sample.
-5. Set node GUIDs to the compiled graph's output instruction IDs:
-     Position: scalar X or Vector2/3/4 (XYZ used)
-     Color: four components, already evaluated by native Core
-     Atlas Frame: scalar, multiplied by Frames Per Second in this example
-     Deformation: scalar height delta for the two top vertices (dynamic mode)
-   Set Default Node/Input Slot/Component to a disconnected numeric input. Leave
-   Default Node empty if unused. Sample gain is node ...0002, slot 1, lane 0.
-   SetDefaultGain mutates that bound native default without reloading the graph.
-   Numeric values applied to Unity floats must be representable as finite floats.
-
+3. Import a compiler-produced `.lfxp` package created from an editable `.lfxproj` with the matching Converter. Add `LiberaFxSpawnableComponent`, assign the imported package and required Unity bindings, then enter Play Mode. Use a package with visible draw outputs to verify rendering; successful import alone proves only package validation.
 The supplied Atlas Unlit shader is a built-in-pipeline example. For URP/HDRP use
 an appropriate unlit shader/Shader Graph with _Color, _MainTex and _AtlasRect:
   textureUV = _AtlasRect.xy + meshUV * _AtlasRect.zw
@@ -169,8 +147,7 @@ The adapter converts Core top-left-origin atlas rows to Unity bottom-left UVs.
 It assigns sharedMaterial and a cached MaterialPropertyBlock, never .material.
 Model meshes/materials are borrowed serialized Unity assets, not destroyed.
 Owned quad meshes are destroyed on disable; native instances are released on
-disable. Do not configure SetupCubeSample/SetupAtlasSample on an active object:
-create an inactive object, add/configure its component, then activate it.
+disable. Configure the Spawnable component and its package before activation.
 
 ABI and ownership
 -----------------
@@ -218,13 +195,7 @@ adapter; use `NativeSpawnableHost` or `LiberaFxSpawnableComponent` for LFXP.
 
 Spawnable package playback
 --------------------------
-The single Unity `LiberaFxSpawnableImporter` owns `.lfxb` and legacy `.lfxp`.
-It routes by signature and validates with the installed native runtime before
-creating an asset. New `.lfxb` exports contain the existing LFXP package envelope,
-including scalar-only roots; `.lfxp` remains an input alias. Both import as
-`LiberaFxSpawnableAsset`. Raw LFXB imports as `LiberaFxProgramAsset` for the
-legacy renderer instead. Corrupt/unsupported inputs and a missing/incompatible
-native plugin produce an import error, not a placeholder asset.
+The Unity `LiberaFxSpawnableImporter` imports `.lfxp` packages and validates them with the installed native runtime before creating an asset. The imported asset is a `LiberaFxSpawnableAsset`. Corrupt or unsupported package data, or a missing/incompatible native plugin, produces an import error rather than a placeholder asset.
 
 Add `LiberaFxSpawnableComponent` to an object and
 assign that asset, and assign a `LiberaFxUnityBindingAsset` created from
@@ -236,21 +207,9 @@ Bind every asset referenced by the root and all templates before Play; missing
 or unsupported bindings fail preflight before native OnStart or spawn events,
 with the reason in `LastError`.
 
-Package reimport keeps the existing "package" local asset ID; component/prefab
-references and the separate binding asset's Unity resource references remain
-intact. This does not migrate a raw-program asset into a package asset in place.
-When replacing an old raw export with a new package export, import at a new path
-and assign it to the package component; do not keep the old renderer reference.
+Package reimport keeps the existing local asset ID, component/prefab references and the separate binding asset's Unity resource references intact. Re-import the updated `.lfxp` package and verify its resource identities and bindings before playback.
 
-Focused importer verification (not executed as part of this format change):
-in a dedicated installed Unity project, set LIBERAFX_VERIFICATION_PROJECT to
-that absolute project directory and LIBERAFX_UNITY_SPAWNABLE_FIXTURE to an
-existing compiler-produced LFXP package (.lfxb or legacy .lfxp). Invoke
-LiberaFx.Unity.Editor.LiberaFxUnifiedImportVerification.RunBatch with Unity's
--executeMethod. It uses a unique temporary Assets folder and deletes only that
-folder. It checks both suffixes, legacy raw byte execution, stable package IDs,
-prefab/binding/resource references after reimport, and corrupt-input rejection.
-It does not establish rendered pixels or Play Mode behavior.
+Focused importer verification (not executed as part of this format change): in a dedicated installed Unity project, set `LIBERAFX_VERIFICATION_PROJECT` to that absolute project directory and `LIBERAFX_UNITY_SPAWNABLE_FIXTURE` to an existing compiler-produced `.lfxp` package. Invoke `LiberaFx.Unity.Editor.LiberaFxUnifiedImportVerification.RunBatch` with Unity's `-executeMethod`. It uses and deletes only a unique temporary Assets folder. It checks `.lfxp` package validation, stable package IDs, prefab/binding/resource references after reimport, and corrupt-input rejection. It does not establish rendered pixels or Play Mode behavior.
 
 The component drives the shared native package host using Unity's scaled
 `Time.deltaTime`, exposes Spawn/Stop/Destroy/Signal and named game-I/O events
@@ -321,9 +280,8 @@ Each GPU node GUID is mixed into that scope seed. GPU resources
 end with their CPU owner on Stop/natural finalization. Root GPU together with
 `AutoDestroyWhenIdle` is rejected because this adapter cannot truthfully drain
 GPU work after CPU idle; use `AutoDestroyWhenIdle=false`, then call
-`RequestNaturalEnd` or `Stop`. Legacy packages with authored GPU snapshots but
-without executable GPU programs must be re-exported. CPU-only legacy packages
-remain supported.
+`RequestNaturalEnd` or `Stop`. Packages containing authored GPU snapshots but without executable GPU
+programs must be re-exported. CPU-only `.lfxp` packages remain supported.
 
 The host event callbacks run synchronously on Unity's main thread. Use their
 container GUID bytes and pool-scoped instance IDs to associate engine objects.
@@ -376,50 +334,19 @@ earlier tests are not player/IL2CPP,
 console or cross-platform validation. Current direct-draw/Spawnable checks,
 commands, fixtures and limits are recorded in `Editor\Tests\VALIDATION.txt`.
 
-Low-level lifetime API
-----------------------
-NativeInstance.StartLifetime starts a root with an explicit duration or an
-infinite lifetime; StartCapturedLifetime instead reads a Life Time node at
-initial evaluation. An optional cached NativeSignal selects On Start; pass null
-if absent. AdvanceLifetime takes absolute elapsed seconds and returns a
-NativeLifetimeSample. Expired means the root reached its deadline, not that
-children or delayed work are finished. ReadValues obtains the last evaluation
-without evaluating again. FCurves do not extend the lifetime.
-
-The host must track children and pending work, process their events in time
-order, and call DrainLifetime as needed after the root expires. Only after that
-work is complete should it call DispatchNaturalDestroy (if an On Destroy
-signal exists), wait for any work it creates, and call FinishLifetime.
-StopLifetime is an explicit interruption and does not fire natural Destroy.
-Check every NativeResult, and dispose the instance when no longer needed.
-These are low-level calls only; `NativeInstance` does not host Spawnable
-packages. `NativeSpawnableHost` is the low-level lifecycle/package bridge.
-`LiberaFxSpawnableComponent` additionally owns Unity root and per-instance
-render scopes when supplied a complete `LiberaFxUnityBindingAsset`.
-
-Program creation COPIES bytecode and owns v3 builtin binding storage. v1/v2/v3
-and supported v4/v5 load through the real Core validator; unknown non-builtin custom nodes fail.
-Instances own fixed-capacity work/default/handle vectors allocated only at create.
-Instances retain their Program after program handle release. Handles are never
-reused. Repeated release, null storage and unknown handles return errors.
-Bind once; tokens are local to their instance and value/parameter namespaces.
-Calls are globally serialized; evaluate is synchronous on the caller via the
-inline scheduler and reports completed evaluation errors. This prioritizes
-safety over parallel instance throughput. No engine/Unity calls run in Core.
-Output arrays and inputs are borrowed for one call only; no aliases allowed.
-On errors do not render output arrays; batch output may be partially written.
-All pointers must address valid storage of the declared size. A native ABI
-cannot validate arbitrary dangling pointers or detect a fabricated byte count.
-Bad bytecode, null pointers, nonfinite data and stale public handles are handled
-with result codes; allocation/other C++ exceptions never cross the ABI.
-Release instances before unloading the plugin. Managed wrappers are IDisposable;
-OnDisable is the normal release path, finalizers are only a fallback.
+Package-only runtime contract
+-----------------------------
+Unity playback uses complete compiled `.lfxp` / LFXP packages through
+`LiberaFxSpawnableComponent` or the package-backed `NativeSpawnableHost`. The
+retired standalone `NativeProgram` / `NativeInstance` execution path is not a
+playback API. Only `.lfxp` packages are imported. Use the package's lifecycle,
+values, named game I/O, and parameter-delta APIs instead.
 
 iOS / IL2CPP
 ------------
 For iOS link Core + LbInterop.cpp statically into the Xcode player (build for iOS,
 not a desktop dylib), keep cdecl exports visible, and ensure linker dead-strip
-does not remove exported libra_* functions. P/Invoke uses __Internal on iOS
+does not remove the package-host `libra_*` exports. P/Invoke uses __Internal on iOS
 players and liberafx_native elsewhere. Android needs the target ABI's .so and
 matching Plugin Inspector selection. These platforms were not built here.
 Forward P/Invoke uses pinned blittable arrays, not Marshal.Copy or delegates.

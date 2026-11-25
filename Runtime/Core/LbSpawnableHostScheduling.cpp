@@ -257,11 +257,6 @@ auto SpawnableHost::Impl::beginAutoEnd(double at) -> Result {
   {
     return Result::Ok;
   }
-  for (const auto &state : templates) {
-    if (state->pool->activeCount() != 0) {
-      return Result::Ok;
-    }
-  }
   if (!scheduledRoutes.empty()) {
     return Result::Ok;
   }

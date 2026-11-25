@@ -22,9 +22,9 @@ func run() -> void:
 			RenderingServer.get_video_adapter_vendor())
 	if not check(DisplayServer.get_name() != "headless", "A real display backend is required"):
 		return
-	if not await exercise("plane", "res://flexible-plane.lfxb", true):
+	if not await exercise("plane", "res://flexible-plane.lfxp", true):
 		return
-	if not await exercise("cpu", "res://cpu-particles.lfxb", false):
+	if not await exercise("cpu", "res://cpu-particles.lfxp", false):
 		return
 	if not await exercise_model_batch():
 		return
@@ -299,7 +299,7 @@ func exercise_failure() -> bool:
 	mesh.material = material
 	if not check(player.set_texture_binding(TEXTURE_IDENTITY, ImageTexture.create_from_image(texture_image)) == 0 and
 			player.set_mesh_binding("/Engine/BasicShapes/Cube.Cube", mesh) == 0 and
-			player.play_package(FileAccess.get_file_as_bytes("res://camera-failure-plane.lfxb")) == 0,
+			player.play_package(FileAccess.get_file_as_bytes("res://camera-failure-plane.lfxp")) == 0,
 			"failure: mixed ModelDraw and camera-facing plane loads"):
 		return false
 	player.set_process(false)

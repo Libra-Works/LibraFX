@@ -2,9 +2,11 @@ Libra GPU particle adapter
 
 Fluid2D in Spawnable packages
 -----------------------------
-GPU executable payload version 3 adds generated Texture2D references on particle
-programs: unreal.generatedResources maps the resource ID to producerNodeId and
-outputId (currently DyeOutput). The producer must be a fluid in the same scope.
+The current GPU manifest uses schema version 4. Optional `fluidPrograms` and
+`generatedDrawBindings` are identified by their presence; a particle program may
+carry optional `unreal.generatedResources` references by type, not by an older
+manifest-version branch. Generated textures map a resource ID to producerNodeId
+and outputId. The producer must be a fluid in the same scope.
 Leave those resource IDs out of the Unity binding asset's static textures array;
 the scope binds its native RenderTexture before starting the particle runtime.
 Keep the updated Libra/GPU Particle Billboard shader with the runtime: it handles
@@ -13,7 +15,7 @@ _LibraGpuTexturePremultiplied and _LibraGpuTextureFlipY and implement their mean
 The optional fluid automaticPlane flag controls its separate source-plane draw;
 the editor defaults consumed sources to false. Compute and output allocation
 continue while that plane is hidden. Stop/restart owns both lifetimes.
-LibraFluid2DGeneratedVerification.Run consumes generated-output.json/.lfxb from
+LibraFluid2DGeneratedVerification.Run consumes generated-output.json/.lfxp from
 LIBERAFX_FLUID_FIXTURES and writes its framebuffer/proof to
 LIBERAFX_FLUID_UNITY_OUTPUT. GPU readback in that test is diagnostic only.
 
@@ -30,8 +32,8 @@ and zero-field controls. Run in an isolated graphics-enabled Unity project.
 
 An authored 2D smoke/ink GPU container is played by the existing Spawnable
 component, in root and spawned scopes. No additional component, renderer or
-per-fluid GameObject is required. Version 2 GPU executable payloads can mix
-particle programs and FluidPrograms; particle programs retain their existing
+per-fluid GameObject is required. A current GPU manifest may contain particle
+`programs` and optional `fluidPrograms`; particle programs retain their existing
 explicit Unity bindings. The fluid renderer must be builtin:fluid-alpha.
 The package includes the fixed LibraFluid2D.compute, its .meta, the
 LibraFluid2DResources asset, and LibraFluid2DDraw shader. Keep these together:
@@ -74,7 +76,7 @@ verifies the actual compiler LFXP importer, root Play/advance/zero-delta pause,
 framebuffer, Stop and blank restart. RunNestedPackage checks native Spawn,
 authored two-second child lifetime completion, restart and Stop.
 RunCompiledScopes uses LIBERAFX_FLUID_FIXTURES containing fluid-only, mixed
-and nested JSON plus mixed.lfxb, imports its actual particle shader/metadata,
+and nested JSON plus mixed.lfxp, imports its actual particle shader/metadata,
 and plays the mixed LFXP with both GPU backends. All use the same isolated
 output variable. The continuous root fixtures require AutoDestroyWhenIdle=false;
 this is the existing GPU lifecycle policy, not a fluid-specific workaround.
@@ -187,7 +189,7 @@ ColorOutput RGBA16F straight display, FieldOutput RGBA32F local velocity.xy,
 density/depth and temperature. VelocityOutput/DensityOutput are typed views
 of FieldOutput, without copies. Storage is 144 bytes/cell before overhead.
 
-Version 3 generatedDrawBindings connect same-scope fluid outputs to ordinary
+The optional `generatedDrawBindings` field connects same-scope fluid outputs to ordinary
 Sprite/Flexible Plane main textures (ColorOutput only) or explicitly bound
 material texture parameters. The compiled builtin:generated-texture marker
 requires an executable producer reference. It is not an engine asset fallback.

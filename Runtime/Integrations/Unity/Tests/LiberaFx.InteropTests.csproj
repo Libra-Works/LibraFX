@@ -12,6 +12,5 @@
     <Compile Include="..\Runtime\LiberaFxCoordinates.cs" />
     <Compile Include="..\Runtime\LiberaFxExecutionDebugger.cs" />
     <Compile Include="..\Runtime\LiberaFxHostQuality.cs" />
-    <Compile Include="..\Runtime\LiberaFxSampleProgram.cs" />
   </ItemGroup>
 </Project>

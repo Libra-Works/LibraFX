@@ -11,7 +11,7 @@ func run() -> void:
 	var player: Variant = load_player(owner)
 	player.set_process(false)
 	for mode: String in ["generated-fields", "generated-mask"]:
-		if not check(player.play_package(FileAccess.get_file_as_bytes("res://" + mode + ".lfxb")) == 0, mode + " package loads: " + player.get_gpu_error()):
+		if not check(player.play_package(FileAccess.get_file_as_bytes("res://" + mode + ".lfxp")) == 0, mode + " package loads: " + player.get_gpu_error()):
 			return
 		for frame in range(120):
 			if not check(player.advance(1.0 / 60.0) == 0, mode + " field consumer advances"):
@@ -31,7 +31,7 @@ func run() -> void:
 			if not check((state[17] != 0) == (density > .01), "Particle Alive matches the raw density threshold mask: " + str(density)):
 				return
 		player.stop()
-		if not check(player.play_package(FileAccess.get_file_as_bytes("res://" + mode + ".lfxb")) == 0 and player.advance(0.0) == 0, "Field consumer restarts cleanly"):
+		if not check(player.play_package(FileAccess.get_file_as_bytes("res://" + mode + ".lfxp")) == 0 and player.advance(0.0) == 0, "Field consumer restarts cleanly"):
 			return
 		var restarted: Dictionary = player._test_read_gpu_particles(0)
 		if not check(restarted.state[17] == 0, "Restart clears particle storage"):

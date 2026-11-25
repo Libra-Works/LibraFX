@@ -1,6 +1,6 @@
 @tool
 extends EditorImportPlugin
-## Imports .lfxb and .lfxp compiled effect packages as LibraFxPackage resources.
+## Imports .lfxp compiled effect packages as LibraFxPackage resources.
 
 const PackageScript := preload("liberafx_package.gd")
 
@@ -14,7 +14,7 @@ func _get_visible_name() -> String:
 
 
 func _get_recognized_extensions() -> PackedStringArray:
-	return PackedStringArray(["lfxb", "lfxp"])
+	return PackedStringArray(["lfxp"])
 
 
 func _get_save_extension() -> String:
@@ -47,7 +47,7 @@ func _import(source_file: String, save_path: String, _options: Dictionary,
 	if bytes.size() < 24:
 		return ERR_FILE_CORRUPT
 	var magic := bytes.slice(0, 4).get_string_from_ascii()
-	if magic != "LFXB" and magic != "LFXP":
+	if magic != "LFXP":
 		return ERR_INVALID_DATA
 	var pkg: Resource = PackageScript.new()
 	pkg.set("package_bytes", bytes)

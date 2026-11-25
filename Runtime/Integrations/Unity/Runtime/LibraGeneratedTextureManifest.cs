@@ -6,10 +6,9 @@ namespace LiberaFx.Unity
     internal static partial class LibraFluid2DManifestValidation
     {
         private static LiberaFxGeneratedRenderTexturePayload[] ReadDrawBindings(Dictionary<string, object> root,
-            double version, HashSet<string> fluidIds)
+            HashSet<string> fluidIds)
         {
             if (!root.ContainsKey("generatedDrawBindings")) return System.Array.Empty<LiberaFxGeneratedRenderTexturePayload>();
-            if (version != 3) throw new InvalidOperationException("Generated draw textures require GPU payload version 3.");
             var values = Array(root, "generatedDrawBindings");
             if (values.Count > 64) throw new InvalidOperationException("Too many generated draw texture bindings.");
             var result = new List<LiberaFxGeneratedRenderTexturePayload>();

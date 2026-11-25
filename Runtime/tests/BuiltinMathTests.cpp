@@ -1,4 +1,6 @@
+#include "ProgramFixture.h"
 #include "liberafx/LbVfxRuntime.h"
+#include "liberafx/LbSpawnablePackage.h"
 #include "liberafx/math/LbMatrixMath.h"
 #ifdef NDEBUG
 #undef NDEBUG
@@ -25,13 +27,14 @@ void write32(Bytes& bytes, std::size_t offset, std::uint32_t value)
 {
     for (auto i = 0u; i < 4; ++i) bytes[offset + i] = static_cast<std::uint8_t>(value >> (8 * i));
 }
-void writeDouble(Bytes& bytes, std::size_t offset, double value)
+template <typename Buffer>
+void writeDouble(Buffer& bytes, std::size_t offset, double value)
 {
     auto bits = std::uint64_t{};
     std::memcpy(&bits, &value, 8);
     for (auto i = 0u; i < 8; ++i) bytes[offset + i] = static_cast<std::uint8_t>(bits >> (8 * i));
 }
-auto fixture(const CustomNodeDescriptor& descriptor) -> Bytes
+auto fixture(const CustomNodeDescriptor& descriptor) -> std::vector<std::uint8_t>
 {
     auto bytes = Bytes{};
     std::memcpy(bytes.data(), "LFXB", 4);
@@ -50,7 +53,8 @@ auto fixture(const CustomNodeDescriptor& descriptor) -> Bytes
     {
         writeDouble(bytes, 96 + 2 * 32, 2);
     }
-    return bytes;
+    return runtime_test_fixture::promoteSimpleProgram(
+        std::vector<std::uint8_t>(bytes.begin(), bytes.end()), &descriptor, 1);
 }
 auto enqueue(void*, Job job, void* context) noexcept -> bool { job(context); return true; }
 auto overrideNode(CustomNodeInvocation& call) noexcept -> Result { call.outputs[0] = 42; return Result::Ok; }
@@ -82,11 +86,14 @@ int main(int argc, char** argv)
     if (argc >= 2)
     {
         auto file = std::ifstream(argv[1], std::ios::binary);
-        auto compiled = std::vector<std::uint8_t>(std::istreambuf_iterator<char>(file), {});
+        auto packageBytes = std::vector<std::uint8_t>(std::istreambuf_iterator<char>(file), {});
+        auto package = SpawnablePackage{};
+        assert(loadSpawnablePackage(packageBytes.data(), packageBytes.size(), package) == Result::Ok);
+        auto& compiled = package.parentBytecode;
         auto compiledBinding = CustomNodeBinding{};
         auto compiledProgram = Program{};
         assert(Program::load(compiled.data(), compiled.size(), nullptr, 0, &compiledBinding, 1, compiledProgram) == Result::Ok);
-        alignas(16) auto compiledWork = std::array<double, 4>{};
+        alignas(16) auto compiledWork = std::array<double, 128>{};
         auto compiledInstance = Instance{};
         assert(compiledInstance.initialize(compiledProgram, compiledWork.data(), compiledWork.size()) == Result::Ok);
         assert(compiledInstance.updateAsync(0, enqueue, nullptr) == Result::Ok);
@@ -95,11 +102,14 @@ int main(int argc, char** argv)
     if (argc >= 3)
     {
         auto file = std::ifstream(argv[2], std::ios::binary);
-        auto compiled = std::vector<std::uint8_t>(std::istreambuf_iterator<char>(file), {});
+        auto packageBytes = std::vector<std::uint8_t>(std::istreambuf_iterator<char>(file), {});
+        auto package = SpawnablePackage{};
+        assert(loadSpawnablePackage(packageBytes.data(), packageBytes.size(), package) == Result::Ok);
+        auto& compiled = package.parentBytecode;
         auto bindings = std::array<CustomNodeBinding, 3>{};
         auto program = Program{};
         assert(Program::load(compiled.data(), compiled.size(), nullptr, 0, bindings.data(), bindings.size(), program) == Result::Ok);
-        alignas(16) auto work = std::array<double, 12>{};
+        alignas(16) auto work = std::array<double, 128>{};
         auto instance = Instance{};
         assert(instance.initialize(program, work.data(), work.size()) == Result::Ok);
         assert(instance.updateAsync(1.5707963267948966, enqueue, nullptr) == Result::Ok);
@@ -114,7 +124,7 @@ int main(int argc, char** argv)
         auto program = Program{};
         assert(Program::load(bytes.data(), bytes.size(), nullptr, 0, &binding, 1, program) == Result::Ok);
         assert(binding.descriptor == &registry[i]);
-        alignas(16) auto work = std::array<double, 16>{};
+        alignas(16) auto work = std::array<double, 128>{};
         auto instance = Instance{};
         assert(instance.initialize(program, work.data(), work.size()) == Result::Ok);
         assert(instance.setTimeContext(0, 0) == Result::Ok);
@@ -128,7 +138,7 @@ int main(int argc, char** argv)
         auto binding = CustomNodeBinding{};
         auto program = Program{};
         assert(Program::load(bytes.data(), bytes.size(), nullptr, 0, &binding, 1, program) == Result::Ok);
-        alignas(16) auto work = std::array<double, 16>{};
+        alignas(16) auto work = std::array<double, 128>{};
         auto instance = Instance{};
         assert(instance.initialize(program, work.data(), work.size()) == Result::Ok);
         assert(instance.updateAsync(0, enqueue, nullptr) == Result::Ok);
@@ -153,7 +163,7 @@ int main(int argc, char** argv)
         auto binding = CustomNodeBinding{};
         auto program = Program{};
         assert(Program::load(bytes.data(), bytes.size(), nullptr, 0, &binding, 1, program) == Result::Ok);
-        alignas(16) auto work = std::array<double, 16>{};
+        alignas(16) auto work = std::array<double, 128>{};
         auto defaults = std::array<double, 16>{};
         auto instance = Instance{};
         assert(instance.initialize(program, work.data(), work.size(), defaults.data(), defaults.size()) == Result::Ok);
@@ -169,7 +179,7 @@ int main(int argc, char** argv)
         auto zeroProgram = Program{};
         auto zeroBinding = CustomNodeBinding{};
         assert(Program::load(zeroBytes.data(), zeroBytes.size(), nullptr, 0, &zeroBinding, 1, zeroProgram) == Result::Ok);
-        alignas(16) auto zeroWork = std::array<double, 16>{};
+        alignas(16) auto zeroWork = std::array<double, 128>{};
         auto zero = Instance{};
         assert(zero.initialize(zeroProgram, zeroWork.data(), zeroWork.size()) == Result::Ok);
         assert(zero.updateAsync(0, enqueue, nullptr) == Result::Ok && zero.result() == Result::Ok);
@@ -181,7 +191,7 @@ int main(int argc, char** argv)
     auto binding = CustomNodeBinding{};
     auto program = Program{};
     assert(Program::load(bytes.data(), bytes.size(), nullptr, 0, &binding, 1, program) == Result::Ok);
-    alignas(16) auto work = std::array<double, 4>{};
+    alignas(16) auto work = std::array<double, 128>{};
     auto defaults = std::array<double, 16>{};
     auto instance = Instance{};
     assert(instance.initialize(program, work.data(), work.size(), defaults.data(), defaults.size()) == Result::Ok);

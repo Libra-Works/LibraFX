@@ -351,7 +351,7 @@ int main(int argc, char** argv)
         auto start = Id{}, position = Id{};
         std::memcpy(start.data(), ids.data() + 8, 16);
         std::memcpy(position.data(), ids.data() + 8 + 5 * 16, 16);
-        run(read(folder / "Fireworks.lfxp"), start, position);
+        run(read(folder / "Fireworks.persistent.lfxp"), start, position);
         std::cout << "Scoped force/EndRequest C ABI checks passed.\n";
         const auto* rootCpu = argc == 4 ? argv[2] : std::getenv("LIBERAFX_ROOT_CPU_FIXTURE");
         const auto* scopedCpu = argc == 4 ? argv[3] : std::getenv("LIBERAFX_SCOPED_CPU_FIXTURE");

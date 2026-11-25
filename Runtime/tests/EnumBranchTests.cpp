@@ -228,6 +228,53 @@ void appendEnumMetadata(std::vector<std::uint8_t>& bytes, std::uint32_t nodeCoun
     write16(header + 14, 0);
 }
 
+void appendCurrentMetadata(std::vector<std::uint8_t>& bytes, std::size_t count)
+{
+    bytes[4] = 11;
+    auto logical = bytes.size();
+    bytes.resize(logical + 16, 0);
+    std::memcpy(bytes.data() + logical, "LFLE", 4);
+    write16(bytes.data() + logical + 4, 1);
+    write32(bytes.data() + logical + 12, 16);
+    auto types = bytes.size();
+    bytes.resize(types + 8 + count * 8, 0);
+    std::memcpy(bytes.data() + types, "LFTY", 4);
+    write16(bytes.data() + types + 4, 1);
+    write16(bytes.data() + types + 6, 8);
+    for (auto index = std::size_t{}; index < count; ++index)
+    {
+        auto current = bytes.data() + nodeOffset(index);
+        auto record = bytes.data() + types + 8 + index * 8;
+        auto opcode = current[16];
+        if (opcode == customParameterOpcode || opcode == customSignalOpcode)
+        {
+            write32(current + 44, static_cast<std::uint32_t>(current[112]) |
+                (static_cast<std::uint32_t>(current[113]) << 8) |
+                (static_cast<std::uint32_t>(current[114]) << 16) |
+                (static_cast<std::uint32_t>(current[115]) << 24));
+            write32(current + 112, 0);
+            record[0] = opcode == customSignalOpcode ? 0 : 1;
+        }
+        else if (opcode == enumValueOpcode)
+        {
+            record[0] = 7; record[1] = 1; record[2] = 7;
+        }
+        else if (opcode == enumSelectOpcode)
+        {
+            record[0] = 1; record[1] = 1; record[2] = 7;
+        }
+        else if (opcode == branchTimeOpcode)
+        {
+            record[0] = 1;
+        }
+        else
+        {
+            record[0] = 1; record[1] = opcode == 6 ? 2 : 1;
+            record[2] = 1; record[3] = opcode == 6 ? 1 : 0;
+        }
+    }
+}
+
 auto makeValueProgram(bool branchTime, bool divide, bool explicitDefault) -> std::vector<std::uint8_t>
 {
     constexpr auto count = std::size_t{5};
@@ -247,6 +294,7 @@ auto makeValueProgram(bool branchTime, bool divide, bool explicitDefault) -> std
         {0, -1, {1}, {}, false}};
     appendEnumMetadata(bytes, count, 4, explicitDefault ? 1 : noInput,
         cases, guards, {-7, 0, 0, 0}, true);
+    appendCurrentMetadata(bytes, count);
     return bytes;
 }
 
@@ -273,6 +321,7 @@ auto makeCustomStateProgram() -> std::vector<std::uint8_t>
     auto cases = std::vector<Case>{{0, 1, {0, 0, 0, 0}}, {1, 2, {42, 0, 0, 0}}};
     auto guards = std::vector<Guard>{{0, -1, {0}, {}, false}, {0, -1, {1}, {}, false}};
     appendEnumMetadata(bytes, count, 3, noInput, cases, guards, {-7, 0, 0, 0}, true);
+    appendCurrentMetadata(bytes, count);
     return bytes;
 }
 
@@ -295,6 +344,7 @@ auto makeSignalProgram(const std::array<std::uint8_t, 16>& signalType) -> std::v
     auto cases = std::vector<Case>{{0, noInput, {0, 0, 0, 0}}};
     auto guards = std::vector<Guard>{{0, -1, {0}, {}, false}};
     appendEnumMetadata(bytes, count, 0, noInput, cases, guards, {0, 0, 0, 0}, false);
+    appendCurrentMetadata(bytes, count);
     return bytes;
 }
 
@@ -555,8 +605,44 @@ void verifySignalSuppressionAndPausedDelay()
 
 }
 
+void verifyCurrentEnumParameter()
+{
+    auto bytes = std::vector<std::uint8_t>(16 + instructionSize);
+    makeEnumValue(bytes, 0, 0);
+    appendEnumMetadata(bytes, 1, 0, noInput, {}, {}, {}, false);
+    bytes[4] = 11;
+    auto offset = bytes.size();
+    bytes.resize(offset + 16, 0);
+    std::memcpy(bytes.data() + offset, "LFLE", 4);
+    write16(bytes.data() + offset + 4, 1);
+    write32(bytes.data() + offset + 12, 16);
+    offset = bytes.size();
+    bytes.resize(offset + 16, 0);
+    std::memcpy(bytes.data() + offset, "LFTY", 4);
+    write16(bytes.data() + offset + 4, 1);
+    write16(bytes.data() + offset + 6, 8);
+    bytes[offset + 8] = 7;
+    bytes[offset + 9] = 1;
+    bytes[offset + 10] = 7;
+    auto program = Program{};
+    assert(loadSimple(bytes, program) == Result::Ok);
+    alignas(64) auto work = std::array<double, 128>{};
+    alignas(64) auto defaults = std::array<double, 128>{};
+    auto instance = Instance{};
+    assert(instance.initialize(program, work.data(), work.size(), defaults.data(), defaults.size()) == Result::Ok);
+    auto handle = ParameterHandle{};
+    assert(instance.bindParameter(bytes.data() + nodeOffset(0), 0, 0, handle) == Result::Ok);
+    assert(instance.setParameterInt32(handle, -2147483647) == Result::Ok);
+    auto value = double{};
+    assert(instance.parameter(handle, value) == Result::Ok && value == -2147483647);
+    assert(Instance::validateParameter(program, bytes.data() + nodeOffset(0), 0, 0, true, 2147483647, 0) == Result::Ok);
+    assert(update(instance, 0) == Result::Ok);
+    checkValue(instance, bytes.data() + nodeOffset(0), -2147483647);
+}
+
 int main()
 {
+    verifyCurrentEnumParameter();
     verifyInactiveDivideAndDefaults();
     verifyBranchClockPausesAndResumes();
     verifyCallerOwnedStateIsPreserved();

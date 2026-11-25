@@ -1,3 +1,5 @@
+#include "liberafx/LbSpawnablePackage.h"
+#include "ProgramFixture.h"
 #include "liberafx/LbVfxRuntime.h"
 #include "liberafx/platform/LbProfileRecorder.h"
 
@@ -87,7 +89,7 @@ auto curveFixture(std::uint8_t interpolation) -> std::vector<std::uint8_t>
     auto second = first + 40;
     writeDouble(bytes, second, 1);
     writeDouble(bytes, second + 8, 1);
-    return bytes;
+    return runtime_test_fixture::promoteSimpleProgram(bytes);
 }
 
 void verifyCurve(std::uint8_t interpolation, double time, double expected)
@@ -95,9 +97,9 @@ void verifyCurve(std::uint8_t interpolation, double time, double expected)
     auto bytes = curveFixture(interpolation);
     auto program = liberafx::Program{};
     assert(liberafx::Program::load(bytes.data(), bytes.size(), program) == liberafx::Result::Ok);
-    assert(program.version() == 4 && program.nodeCount() == 1 &&
-           program.workBytes() == 4 * sizeof(double) && program.workAlignment() == 16);
-    alignas(16) auto work = std::array<double, 4>{};
+    assert(program.version() == 11 && program.nodeCount() == 1 &&
+           program.workBytes() >= 4 * sizeof(double) && program.workAlignment() == 16);
+    alignas(16) auto work = std::array<double, 128>{};
     auto defaults = std::array<double, 16>{};
     auto instance = liberafx::Instance{};
     auto queue = Queue{};
@@ -110,8 +112,44 @@ void verifyCurve(std::uint8_t interpolation, double time, double expected)
     assert(std::abs(value - expected) < 1e-12);
 }
 
+void verifyCurveOverrides()
+{
+    auto bytes = curveFixture(1);
+    auto program = liberafx::Program{};
+    assert(liberafx::Program::load(bytes.data(), bytes.size(), program) == liberafx::Result::Ok);
+    auto first = liberafx::Instance{};
+    auto second = liberafx::Instance{};
+    alignas(16) auto firstWork = std::array<double, 128>{};
+    alignas(16) auto secondWork = std::array<double, 128>{};
+    assert(first.initialize(program, firstWork.data(), firstWork.size()) == liberafx::Result::Ok);
+    assert(second.initialize(program, secondWork.data(), secondWork.size()) == liberafx::Result::Ok);
+    auto index = std::uint32_t{};
+    assert(liberafx::Instance::findCurve(program, bytes.data() + 16, index) == liberafx::Result::Ok);
+    auto keys = std::array<liberafx::CurveKey, 2>{{{0, 10, 0, 0, 1}, {1, 20, 0, 0, 1}}};
+    auto view = liberafx::CurveOverrideView{index, keys.data(), keys.size()};
+    assert(first.setCurveOverrides(&view, 1) == liberafx::Result::Ok);
+    auto queue = Queue{};
+    assert(first.updateAsync(0.5, enqueue, &queue) == liberafx::Result::Ok);
+    assert(first.setCurveOverrides(nullptr, 0) == liberafx::Result::Busy);
+    run(queue);
+    auto result = double{};
+    assert(first.value(bytes.data() + 16, result) == liberafx::Result::Ok && result == 15);
+    assert(second.updateAsync(0.5, enqueue, &queue) == liberafx::Result::Ok);
+    run(queue);
+    assert(second.value(bytes.data() + 16, result) == liberafx::Result::Ok && result == 0.5);
+    auto invalid = keys;
+    invalid[1].time = 0;
+    auto bad = liberafx::CurveOverrideView{index, invalid.data(), invalid.size()};
+    assert(first.setCurveOverrides(&bad, 1) == liberafx::Result::InvalidArgument);
+    assert(first.setCurveOverrides(nullptr, 0) == liberafx::Result::Ok);
+    assert(first.updateAsync(0.5, enqueue, &queue) == liberafx::Result::Ok);
+    run(queue);
+    assert(first.value(bytes.data() + 16, result) == liberafx::Result::Ok && result == 0.5);
+}
+
 void verifyCurveBytecode()
 {
+    verifyCurveOverrides();
     verifyCurve(0, 0.5, 0);
     verifyCurve(1, 0.25, 0.25);
     verifyCurve(2, 0.5, 0.75);
@@ -152,7 +190,7 @@ auto fixture() -> std::vector<std::uint8_t>
     writeDouble(bytes, 12 + 28, 3);
     write32(bytes, 12 + 2 * 44 + 20, 0);
     write32(bytes, 12 + 2 * 44 + 24, 1);
-    return bytes;
+    return runtime_test_fixture::promoteSimpleProgram(bytes);
 }
 
 void verify(const std::vector<std::uint8_t>& bytes)
@@ -162,21 +200,22 @@ void verify(const std::vector<std::uint8_t>& bytes)
     auto shiftedProgram = liberafx::Program{};
     assert(liberafx::Program::load(shiftedBytes.data() + 1, bytes.size(), shiftedProgram) ==
            liberafx::Result::Ok);
-    assert(shiftedProgram.workAlignment() == alignof(double));
+    auto required = (shiftedProgram.workBytes() + sizeof(double) - 1) / sizeof(double);
+    assert(required <= 256 && shiftedProgram.workAlignment() <= 16);
 
-    alignas(16) auto misalignedWorkStorage = std::array<std::uint8_t, 25>{};
+    alignas(16) auto misalignedWorkStorage = std::array<std::uint8_t, 2049>{};
     misalignedWorkStorage.fill(0xa5);
     auto misalignedWork = reinterpret_cast<double*>(misalignedWorkStorage.data() + 1);
     auto shiftedInstance = liberafx::Instance{};
-    assert(shiftedInstance.initialize(shiftedProgram, misalignedWork, 3) ==
+    assert(shiftedInstance.initialize(shiftedProgram, misalignedWork, required) ==
            liberafx::Result::InvalidArgument);
     for (auto byte : misalignedWorkStorage) assert(byte == 0xa5);
-    auto alignedWork = std::array<double, 3>{};
-    alignas(16) auto misalignedDefaultsStorage = std::array<std::uint8_t, 49>{};
+    alignas(16) auto alignedWork = std::array<double, 256>{};
+    alignas(16) auto misalignedDefaultsStorage = std::array<std::uint8_t, 385>{};
     misalignedDefaultsStorage.fill(0x5a);
     auto misalignedDefaults = reinterpret_cast<double*>(misalignedDefaultsStorage.data() + 1);
     assert(shiftedInstance.initialize(shiftedProgram, alignedWork.data(), alignedWork.size(),
-                                      misalignedDefaults, 6) == liberafx::Result::InvalidArgument);
+                                      misalignedDefaults, 48) == liberafx::Result::InvalidArgument);
     for (auto byte : misalignedDefaultsStorage) assert(byte == 0x5a);
 
     auto profileCounters = std::array<liberafx::ProfileCounter, 16>{};
@@ -184,7 +223,7 @@ void verify(const std::vector<std::uint8_t>& bytes)
     recorder.initialize(profileCounters.data(), profileCounters.size());
     auto profiledProgram = liberafx::Program{};
     assert(liberafx::Program::load(bytes.data(), bytes.size(), profiledProgram, recorder.hooks()) == liberafx::Result::Ok);
-    auto profiledWork = std::array<double, 3>{};
+    alignas(16) auto profiledWork = std::array<double, 256>{};
     auto profiled = liberafx::Instance{};
     assert(profiled.setProfiling(recorder.hooks(true, true)) == liberafx::Result::Ok);
     assert(profiled.initialize(profiledProgram, profiledWork.data(), profiledWork.size()) == liberafx::Result::Ok);
@@ -198,7 +237,7 @@ void verify(const std::vector<std::uint8_t>& bytes)
     assert(profile.exclusiveNs <= profile.inclusiveNs);
     assert(recorder.read(static_cast<size_t>(liberafx::ProfileEvent::Count) + 2, profile) && profile.calls == 1);
     auto profiledValue = double{};
-    auto profiledId = bytes.data() + 12 + 2 * 44;
+    auto profiledId = bytes.data() + 16 + 2 * 256;
     assert(profiled.value(profiledId, profiledValue) == liberafx::Result::Ok && profiledValue == 10);
     assert(profiled.setProfiling({}) == liberafx::Result::Ok);
     assert(profiled.updateAsync(8, liberafx::JobScheduler{enqueue, &profiledQueue}) == liberafx::Result::Ok);
@@ -209,14 +248,14 @@ void verify(const std::vector<std::uint8_t>& bytes)
     assert(recorder.read(static_cast<size_t>(liberafx::ProfileEvent::Count) + 2, profile) && profile.calls == 1);
     auto program = liberafx::Program{};
     assert(liberafx::Program::load(bytes.data(), bytes.size(), program) == liberafx::Result::Ok);
-    assert(program.nodeCount() == 3 && program.workBytes() == 3 * sizeof(double));
-    auto work = std::array<double, 3>{};
-    auto workOther = std::array<double, 3>{};
+    assert(program.nodeCount() == 3 && program.workBytes() >= 12 * sizeof(double));
+    alignas(16) auto work = std::array<double, 256>{};
+    alignas(16) auto workOther = std::array<double, 256>{};
     auto instance = liberafx::Instance{};
     auto other = liberafx::Instance{};
-    assert(instance.initialize(program, work.data(), 2) == liberafx::Result::InsufficientWork);
-    assert(instance.initialize(program, work.data(), 3) == liberafx::Result::Ok);
-    assert(other.initialize(program, workOther.data(), 3) == liberafx::Result::Ok);
+    assert(instance.initialize(program, work.data(), required - 1) == liberafx::Result::InsufficientWork);
+    assert(instance.initialize(program, work.data(), work.size()) == liberafx::Result::Ok);
+    assert(other.initialize(program, workOther.data(), workOther.size()) == liberafx::Result::Ok);
     auto first = Queue{};
     auto second = Queue{};
     assert(instance.updateAsync(7, enqueue, &first) == liberafx::Result::Ok);
@@ -228,20 +267,20 @@ void verify(const std::vector<std::uint8_t>& bytes)
     firstWorker.join();
     secondWorker.join();
     auto value = double{};
-    auto id = bytes.data() + 12 + 2 * 44;
+    auto id = bytes.data() + 16 + 2 * 256;
     assert(instance.value(id, value) == liberafx::Result::Ok && value == 10);
     assert(other.value(id, value) == liberafx::Result::Ok && value == 5);
     assert(instance.capacityGrowthCount() == 0);
 
-    auto parameterWork = std::array<double, 3>{};
-    auto parameterDefaults = std::array<double, 6>{};
+    alignas(16) auto parameterWork = std::array<double, 256>{};
+    auto parameterDefaults = std::array<double, 48>{};
     auto parameterInstance = liberafx::Instance{};
     auto parameterQueue = Queue{};
     assert(parameterInstance.initialize(program, parameterWork.data(), parameterWork.size(),
                                         parameterDefaults.data(), parameterDefaults.size()) == liberafx::Result::Ok);
     assert(parameterInstance.updateAsync(7, enqueue, &parameterQueue) == liberafx::Result::Ok);
     run(parameterQueue);
-    auto scalarId = bytes.data() + 12;
+    auto scalarId = bytes.data() + 16;
     assert(parameterInstance.setParameter(scalarId, 0, 0, 4) == liberafx::Result::Ok);
     assert(parameterInstance.updateAsync(7, enqueue, &parameterQueue) == liberafx::Result::Ok);
     run(parameterQueue);
@@ -290,7 +329,7 @@ auto typedFixture() -> std::vector<std::uint8_t>
         writeNode(7 + component, 23, 2, 1, 0, 2, 0xffffffffu);
         bytes[16 + (7 + component) * 96 + 21] = static_cast<std::uint8_t>(component);
     }
-    return bytes;
+    return runtime_test_fixture::promoteSimpleProgram(bytes);
 }
 
 struct CustomCounters {
@@ -482,28 +521,34 @@ void verifySignalFanout()
     write32(bytes, 16 + 3 * 256 + 208, 4);
     write32(bytes, 16 + 5 * 256, 3);
     write32(bytes, 16 + 5 * 256 + 4, 4);
+    auto legacyFixture = bytes;
+    bytes = runtime_test_fixture::promoteSimpleProgram(bytes, descriptors.data(), descriptors.size());
     auto bindings = std::array<liberafx::CustomNodeBinding, 5>{};
     auto program = liberafx::Program{};
     auto load = [&](const auto& data) {
         return liberafx::Program::load(data.data(), data.size(), descriptors.data(),
             descriptors.size(), bindings.data(), bindings.size(), program);
     };
-    assert(load(bytes) == liberafx::Result::Ok && program.workBytes() == 168);
-    alignas(16) auto work = std::array<double, 21>{};
+    assert(load(bytes) == liberafx::Result::Ok && program.workBytes() >= 160);
+    alignas(16) auto work = std::array<double, 512>{};
     auto instance = liberafx::Instance{};
     auto queue = Queue{};
     assert(instance.initialize(program, work.data(), work.size()) == liberafx::Result::Ok);
     assert(instance.updateAsync(0, enqueue, &queue) == liberafx::Result::Ok);
     run(queue);
     assert(instance.dispatchSignal(bytes.data() + 16, 0, 6) == liberafx::Result::Ok);
-    assert(log.count == 6 && (log.nodes == std::array<unsigned, 16>{0, 1, 2, 3, 4, 4}));
+    assert(log.count == 6 && (log.nodes == std::array<unsigned, 16>{0, 1, 3, 4, 2, 4}));
     log.count = 0;
     assert(instance.dispatchSignal(bytes.data() + 16, 0, 3) == liberafx::Result::InstructionBudgetExceeded);
-    assert(log.count == 3 && log.nodes[0] == 0 && log.nodes[1] == 1 && log.nodes[2] == 2);
+    assert(log.count == 3 && log.nodes[0] == 0 && log.nodes[1] == 1 && log.nodes[2] == 3);
+    assert(instance.dispatchGeneratedSignals(10) == liberafx::Result::Ok);
+    assert(log.count == 6);
     log.count = 0;
     log.failNode = 2;
     assert(instance.dispatchSignal(bytes.data() + 16, 0, 10) == liberafx::Result::InvalidArgument);
-    assert(log.count == 3);
+    assert(log.count == 5);
+    log.failNode = 99;
+    assert(instance.dispatchGeneratedSignals(10) == liberafx::Result::Ok);
 
     auto delayed = DeferredTestContext{&log, 1};
     descriptors[0].function = recordDeferred;
@@ -512,10 +557,18 @@ void verifySignalFanout()
     assert(instance.dispatchSignal(bytes.data() + 16, 0, 10) == liberafx::Result::NotReady);
     auto storage = std::array<liberafx::DeferredSignal, 2>{};
     assert(instance.setDeferredSignalStorage(storage.data(), storage.size()) == liberafx::Result::Ok);
-    assert(instance.dispatchSignal(bytes.data() + 16, 0, 10) == liberafx::Result::Ok);
+    assert(instance.dispatchGeneratedSignals(10) == liberafx::Result::Ok);
     delayed.delay = 0.5;
     assert(instance.dispatchSignal(bytes.data() + 16, 0, 10) == liberafx::Result::Ok);
     assert(instance.dispatchSignal(bytes.data() + 16, 0, 10) == liberafx::Result::QueueRejected);
+    assert(instance.initialize(program, work.data(), work.size()) == liberafx::Result::Ok);
+    assert(instance.updateAsync(0, enqueue, &queue) == liberafx::Result::Ok);
+    run(queue);
+    assert(instance.setDeferredSignalStorage(storage.data(), storage.size()) == liberafx::Result::Ok);
+    delayed.delay = 1;
+    assert(instance.dispatchSignal(bytes.data() + 16, 0, 10) == liberafx::Result::Ok);
+    delayed.delay = 0.5;
+    assert(instance.dispatchSignal(bytes.data() + 16, 0, 10) == liberafx::Result::Ok);
     auto due = double{};
     auto has = false;
     assert(instance.nextDeferredSignal(due, has) == liberafx::Result::Ok && has && due == 0.5);
@@ -525,8 +578,8 @@ void verifySignalFanout()
     run(queue);
     log.count = 0;
     assert(instance.dispatchDeferredSignal(0.5, 10) == liberafx::Result::Ok);
-    assert(log.count == 5 && (log.nodes[0] == 1 && log.nodes[1] == 2 &&
-                              log.nodes[2] == 3 && log.nodes[3] == 4 && log.nodes[4] == 4));
+    assert(log.count == 5 && (log.nodes[0] == 1 && log.nodes[1] == 3 &&
+                              log.nodes[2] == 4 && log.nodes[3] == 2 && log.nodes[4] == 4));
     assert(instance.nextDeferredSignal(due, has) == liberafx::Result::Ok && has && due == 1);
     assert(instance.updateAsync(1, enqueue, &queue) == liberafx::Result::Ok);
     run(queue);
@@ -535,14 +588,16 @@ void verifySignalFanout()
     assert(instance.dispatchDeferredSignal(1, 10) == liberafx::Result::InvalidArgument);
     assert(instance.nextDeferredSignal(due, has) == liberafx::Result::Ok && !has);
     log = {};
+    assert(instance.dispatchGeneratedSignals(10) == liberafx::Result::Ok);
+    log = {};
     delayed.delay = -1;
     assert(instance.dispatchSignal(bytes.data() + 16, 1, 10) == liberafx::Result::InvalidArgument);
     delayed.delay = std::numeric_limits<double>::infinity();
-    assert(instance.dispatchSignal(bytes.data() + 16, 1, 10) == liberafx::Result::InvalidArgument);
+    assert(instance.dispatchGeneratedSignals(10) == liberafx::Result::InvalidArgument);
     delayed.delay = std::numeric_limits<double>::quiet_NaN();
-    assert(instance.dispatchSignal(bytes.data() + 16, 1, 10) == liberafx::Result::InvalidArgument);
+    assert(instance.dispatchGeneratedSignals(10) == liberafx::Result::InvalidArgument);
     delayed.delay = 0;
-    assert(instance.dispatchSignal(bytes.data() + 16, 1, 10) == liberafx::Result::Ok);
+    assert(instance.dispatchGeneratedSignals(10) == liberafx::Result::Ok);
     assert(instance.clearDeferredSignals() == liberafx::Result::Ok);
     assert(instance.nextDeferredSignal(due, has) == liberafx::Result::Ok && !has);
     log = {};
@@ -560,19 +615,20 @@ void verifySignalFanout()
     assert(instance.dispatchDeferredSignal(2, 10) == liberafx::Result::Ok);
     assert(instance.nextDeferredSignal(due, has) == liberafx::Result::Ok && has && due == 2);
     assert(instance.dispatchDeferredSignal(2, 10) == liberafx::Result::Ok);
-    assert(log.count == 6 && log.nodes[0] == 1 && log.nodes[1] == 2 &&
-           log.nodes[2] == 3 && log.nodes[3] == 4 && log.nodes[4] == 4 && log.nodes[5] == 2);
+    assert(log.count == 6 && log.nodes[0] == 1 && log.nodes[1] == 3 &&
+           log.nodes[2] == 4 && log.nodes[3] == 2 && log.nodes[4] == 4 && log.nodes[5] == 2);
     descriptors[0].function = recordFanout;
     descriptors[0].context = &contexts[0];
 
-    auto oneExtra = bytes;
+    auto oneExtra = legacyFixture;
     write32(oneExtra, 16 + 228, 1);
     oneExtra.resize(oneExtra.size() - 4);
+    oneExtra = runtime_test_fixture::promoteSimpleProgram(oneExtra, descriptors.data(), descriptors.size());
     auto alignedProgram = liberafx::Program{};
     auto alignedBindings = std::array<liberafx::CustomNodeBinding, 5>{};
     assert(liberafx::Program::load(oneExtra.data(), oneExtra.size(), descriptors.data(),
         descriptors.size(), alignedBindings.data(), alignedBindings.size(), alignedProgram) == liberafx::Result::Ok);
-    assert(alignedProgram.workBytes() == 168);
+    assert(alignedProgram.workBytes() >= 160);
 
     auto malformed = bytes;
     write32(malformed, 16 + 224, 4);
@@ -585,7 +641,7 @@ void verifySignalFanout()
     assert(load(malformed) == liberafx::Result::InvalidBinary);
     malformed = bytes;
     write16(malformed, 4, 4);
-    assert(load(malformed) == liberafx::Result::InvalidBinary);
+    assert(load(malformed) == liberafx::Result::UnsupportedBinary);
 }
 
 void verifyCustom()
@@ -610,14 +666,15 @@ void verifyCustom()
         descriptors[index].context = index == 0 ? static_cast<void*>(&sourceCounters) :
             index == 1 ? static_cast<void*>(&firstCounters) : static_cast<void*>(&secondCounters);
     }
+    bytes = runtime_test_fixture::promoteSimpleProgram(bytes, descriptors.data(), descriptors.size());
     auto program = liberafx::Program{};
     auto bindings = std::array<liberafx::CustomNodeBinding, 3>{};
     assert(liberafx::Program::load(bytes.data(), bytes.size(), descriptors.data(), descriptors.size(),
                                    bindings.data(), bindings.size(), program) == liberafx::Result::Ok);
-    assert(program.version() == 3 && program.workBytes() == 12 * sizeof(double));
+    assert(program.version() == 11 && program.workBytes() >= 12 * sizeof(double));
     assert(program.workAlignment() == 16 && program.defaultsAlignment() == alignof(double));
-    alignas(16) auto work = std::array<double, 12>{};
-    alignas(16) auto otherWork = std::array<double, 12>{};
+    alignas(16) auto work = std::array<double, 128>{};
+    alignas(16) auto otherWork = std::array<double, 128>{};
     auto defaults = std::array<double, 48>{};
     auto otherDefaults = std::array<double, 48>{};
     {
@@ -678,7 +735,7 @@ void verifyCustom()
     auto customVersionFourProgram = liberafx::Program{};
     assert(liberafx::Program::load(customVersionFour.data(), customVersionFour.size(),
         descriptors.data(), descriptors.size(), customVersionFourBindings.data(),
-        customVersionFourBindings.size(), customVersionFourProgram) == liberafx::Result::Ok);
+        customVersionFourBindings.size(), customVersionFourProgram) == liberafx::Result::UnsupportedBinary);
     mixed.resize(16 + 4 * 256 + 2 * 40);
     write16(mixed, 4, 4);
     write32(mixed, 8, 4);
@@ -696,12 +753,13 @@ void verifyCustom()
     mixed[curveKeys + 32] = 1;
     writeDouble(mixed, curveKeys + 40, 1);
     writeDouble(mixed, curveKeys + 48, 5);
+    mixed = runtime_test_fixture::promoteSimpleProgram(mixed, descriptors.data(), descriptors.size());
     auto mixedProgram = liberafx::Program{};
     auto mixedBindings = std::array<liberafx::CustomNodeBinding, 4>{};
     assert(liberafx::Program::load(mixed.data(), mixed.size(), descriptors.data(), descriptors.size(),
                                    mixedBindings.data(), mixedBindings.size(), mixedProgram) ==
            liberafx::Result::Ok);
-    alignas(16) auto mixedWork = std::array<double, 16>{};
+    alignas(16) auto mixedWork = std::array<double, 128>{};
     auto mixedDefaults = std::array<double, 64>{};
     auto mixedInstance = liberafx::Instance{};
     auto mixedQueue = Queue{};
@@ -734,8 +792,8 @@ void verifyCustom()
     }
     assert(liberafx::Program::load(bytes.data(), bytes.size(), stateDescriptors.data(), stateDescriptors.size(),
                                    bindings.data(), bindings.size(), program) == liberafx::Result::Ok);
-    assert(program.workBytes() == 264 && program.workAlignment() == 64);
-    alignas(64) auto stateWork = std::array<double, 33>{};
+    assert(program.workBytes() >= 264 && program.workAlignment() == 64);
+    alignas(64) auto stateWork = std::array<double, 128>{};
     auto stateDefaults = std::array<double, 48>{};
     auto failedInstance = liberafx::Instance{};
     assert(failedInstance.initialize(program, stateWork.data(), stateWork.size(),
@@ -813,11 +871,12 @@ void verifyCustomSignal()
         descriptors[index].context = index == 0 ? static_cast<void*>(&sourceCounters) :
             index == 1 ? static_cast<void*>(&branchCounters) : static_cast<void*>(&endCounters);
     }
+    bytes = runtime_test_fixture::promoteSimpleProgram(bytes, descriptors.data(), descriptors.size());
     auto program = liberafx::Program{};
     auto bindings = std::array<liberafx::CustomNodeBinding, 3>{};
     assert(liberafx::Program::load(bytes.data(), bytes.size(), descriptors.data(), descriptors.size(),
                                    bindings.data(), bindings.size(), program) == liberafx::Result::Ok);
-    alignas(16) auto work = std::array<double, 12>{};
+    alignas(16) auto work = std::array<double, 128>{};
     auto defaults = std::array<double, 48>{};
     auto instance = liberafx::Instance{};
     assert(instance.initialize(program, work.data(), work.size(), defaults.data(), defaults.size()) ==
@@ -830,8 +889,10 @@ void verifyCustomSignal()
     assert(instance.bindSignal(entryId, entryHandle) == liberafx::Result::Ok);
     assert(instance.dispatchSignal(entryHandle, 0, 1) == liberafx::Result::InstructionBudgetExceeded);
     assert(branchCounters.calls == 1 && endCounters.calls == 0);
+    assert(instance.dispatchGeneratedSignals(2) == liberafx::Result::Ok);
+    assert(branchCounters.calls == 1 && endCounters.calls == 1);
     assert(instance.dispatchSignal(entryHandle, 0, 2) == liberafx::Result::Ok);
-    assert(branchCounters.calls == 2 && endCounters.calls == 1 && endCounters.observed == 1);
+    assert(branchCounters.calls == 2 && endCounters.calls == 2 && endCounters.observed == 1);
     auto context = ReentrantSignalContext{};
     auto reentrantDescriptors = descriptors;
     reentrantDescriptors[1].function = reentrantSignal;
@@ -840,7 +901,7 @@ void verifyCustomSignal()
     auto reentrantProgram = liberafx::Program{};
     assert(liberafx::Program::load(bytes.data(), bytes.size(), reentrantDescriptors.data(),
         reentrantDescriptors.size(), reentrantBindings.data(), reentrantBindings.size(), reentrantProgram) == liberafx::Result::Ok);
-    alignas(16) auto reentrantWork = std::array<double, 12>{};
+    alignas(16) auto reentrantWork = std::array<double, 128>{};
     auto reentrantDefaults = std::array<double, 48>{};
     auto reentrantInstance = liberafx::Instance{};
     context.instance = &reentrantInstance;
@@ -857,15 +918,16 @@ void verifyTyped(const std::vector<std::uint8_t>& bytes)
 {
     auto program = liberafx::Program{};
     assert(liberafx::Program::load(bytes.data(), bytes.size(), program) == liberafx::Result::Ok);
-    assert(program.version() == 2 && program.nodeCount() == 11);
-    assert(program.workBytes() == 11 * 4 * sizeof(double));
-    auto work = std::array<double, 44>{};
-    auto defaults = std::array<double, 88>{};
+    assert(program.version() == 11 && program.nodeCount() == 11);
+    assert(program.workBytes() >= 11 * 4 * sizeof(double));
+    alignas(16) auto work = std::array<double, 128>{};
+    auto defaults = std::array<double, 176>{};
     assert(program.parameterValueCount() == defaults.size());
     auto instance = liberafx::Instance{};
     auto queue = Queue{};
-    assert(instance.initialize(program, work.data(), 43) == liberafx::Result::InsufficientWork);
-    assert(instance.initialize(program, work.data(), 44, defaults.data(), defaults.size()) == liberafx::Result::Ok);
+    auto required = (program.workBytes() + sizeof(double) - 1) / sizeof(double);
+    assert(instance.initialize(program, work.data(), required - 1) == liberafx::Result::InsufficientWork);
+    assert(instance.initialize(program, work.data(), work.size(), defaults.data(), defaults.size()) == liberafx::Result::Ok);
     assert(instance.capacityGrowthCount() == 0);
     assert(instance.updateAsync(0, enqueue, &queue) == liberafx::Result::Ok);
     auto vectorId = bytes.data() + 16;
@@ -874,31 +936,31 @@ void verifyTyped(const std::vector<std::uint8_t>& bytes)
     assert(instance.result() == liberafx::Result::Ok);
     auto values = std::array<double, 4>{};
     auto count = std::uint8_t{};
-    auto maskId = bytes.data() + 16 + 96;
+    auto maskId = bytes.data() + 16 + 256;
     assert(instance.valueComponents(maskId, values.data(), count) == liberafx::Result::Ok);
     assert(count == 2 && values[0] == 2.5 && values[1] == 2);
-    auto breakId = bytes.data() + 16 + 2 * 96;
+    auto breakId = bytes.data() + 16 + 2 * 256;
     assert(instance.valueComponents(breakId, values.data(), count) == liberafx::Result::Ok);
     assert(count == 4 && values[0] == 2 && values[1] == -3 && values[2] == 4.5 && values[3] == 2.5);
-    auto colorId = bytes.data() + 16 + 4 * 96;
+    auto colorId = bytes.data() + 16 + 4 * 256;
     assert(instance.valueComponents(colorId, values.data(), count) == liberafx::Result::Ok);
     assert(count == 4 && values[0] == 2 && values[1] == -3 && values[2] == 4.5 && values[3] == 2.5);
-    auto multiplyId = bytes.data() + 16 + 5 * 96;
+    auto multiplyId = bytes.data() + 16 + 5 * 256;
     assert(instance.valueComponents(multiplyId, values.data(), count) == liberafx::Result::Ok);
     assert(count == 4 && values[0] == 4 && values[1] == 9 && values[2] == 20.25 && values[3] == 6.25);
-    auto extendedId = bytes.data() + 16 + 6 * 96;
+    auto extendedId = bytes.data() + 16 + 6 * 256;
     assert(instance.valueComponents(extendedId, values.data(), count) == liberafx::Result::Ok);
     assert(count == 4 && values[0] == 2.5 && values[1] == 2 && values[2] == 7 && values[3] == 7);
     auto breakOutputs = std::array<double, 4>{2, -3, 4.5, 2.5};
     for (auto component = 0u; component < 4; ++component)
     {
-        auto outputId = bytes.data() + 16 + (7 + component) * 96;
+        auto outputId = bytes.data() + 16 + (7 + component) * 256;
         assert(instance.valueComponents(outputId, values.data(), count) == liberafx::Result::Ok);
         assert(count == 2 && values[0] == breakOutputs[component] && values[1] == breakOutputs[component]);
     }
     auto scalar = double{};
     assert(instance.value(colorId, scalar) == liberafx::Result::InvalidValueType);
-    auto maskNodeId = bytes.data() + 16 + 96;
+    auto maskNodeId = bytes.data() + 16 + 256;
     assert(instance.setParameter(maskNodeId, 0, 0, 4) == liberafx::Result::InvalidValueType);
     assert(instance.setParameter(maskNodeId, 0, 0, std::numeric_limits<double>::quiet_NaN()) ==
            liberafx::Result::NonFinite);
@@ -911,37 +973,37 @@ void verifyTyped(const std::vector<std::uint8_t>& bytes)
     assert(count == 4 && values[0] == 2.5 && values[1] == 4 && values[2] == 7 && values[3] == 7);
 
     auto malformed = bytes;
-    malformed[16 + 96 + 32] = 4;
+    malformed[16 + 256 + 32] = 4;
     assert(liberafx::Program::load(malformed.data(), malformed.size(), program) == liberafx::Result::InvalidBinary);
     malformed = bytes;
     malformed[6] = 2;
     assert(liberafx::Program::load(malformed.data(), malformed.size(), program) == liberafx::Result::UnsupportedBinary);
     malformed = bytes;
-    write32(malformed, 16 + 96 + 24, 99);
+    write32(malformed, 16 + 256 + 24, 99);
     assert(liberafx::Program::load(malformed.data(), malformed.size(), program) == liberafx::Result::InvalidBinary);
     malformed = bytes;
-    malformed[16 + 4 * 96 + 20] = 0;
+    malformed[16 + 4 * 256 + 20] = 0;
     assert(liberafx::Program::load(malformed.data(), malformed.size(), program) == liberafx::Result::InvalidBinary);
     malformed = bytes;
-    malformed[16 + 2 * 96 + 17] = 2;
+    malformed[16 + 2 * 256 + 17] = 2;
     assert(liberafx::Program::load(malformed.data(), malformed.size(), program) == liberafx::Result::InvalidBinary);
     malformed = bytes;
-    malformed[16 + 5 * 96 + 16] = 40;
+    malformed[16 + 5 * 256 + 16] = 250;
     assert(liberafx::Program::load(malformed.data(), malformed.size(), program) == liberafx::Result::UnsupportedBinary);
     malformed = bytes;
     malformed[6] = 2;
     assert(liberafx::Program::load(malformed.data(), malformed.size(), program) == liberafx::Result::UnsupportedBinary);
 
     auto divideByZero = bytes;
-    divideByZero[16 + 5 * 96 + 16] = 22;
-    divideByZero[16 + 5 * 96 + 19] = 0;
-    write32(divideByZero, 16 + 5 * 96 + 28, 0xffffffffu);
-    writeDouble(divideByZero, 16 + 5 * 96 + 64, 1);
-    writeDouble(divideByZero, 16 + 5 * 96 + 72, 0);
-    writeDouble(divideByZero, 16 + 5 * 96 + 80, 1);
-    writeDouble(divideByZero, 16 + 5 * 96 + 88, 1);
+    divideByZero[16 + 5 * 256 + 16] = 22;
+    divideByZero[16 + 5 * 256 + 19] = 0;
+    write32(divideByZero, 16 + 5 * 256 + 28, 0xffffffffu);
+    writeDouble(divideByZero, 16 + 5 * 256 + 64, 1);
+    writeDouble(divideByZero, 16 + 5 * 256 + 72, 0);
+    writeDouble(divideByZero, 16 + 5 * 256 + 80, 1);
+    writeDouble(divideByZero, 16 + 5 * 256 + 88, 1);
     assert(liberafx::Program::load(divideByZero.data(), divideByZero.size(), program) == liberafx::Result::Ok);
-    auto divideWork = std::array<double, 44>{};
+    alignas(16) auto divideWork = std::array<double, 128>{};
     auto divideInstance = liberafx::Instance{};
     auto divideQueue = Queue{};
     assert(divideInstance.initialize(program, divideWork.data(), divideWork.size()) == liberafx::Result::Ok);
@@ -952,18 +1014,31 @@ void verifyTyped(const std::vector<std::uint8_t>& bytes)
 
 }
 
+auto loadPackageProgram(const char* path) -> std::vector<std::uint8_t>
+{
+    auto input = std::ifstream(path, std::ios::binary);
+    assert(input);
+    auto bytes = std::vector<std::uint8_t>(std::istreambuf_iterator<char>(input), {});
+    auto package = liberafx::SpawnablePackage{};
+    assert(liberafx::loadSpawnablePackage(bytes.data(), bytes.size(), package) == liberafx::Result::Ok);
+    return std::move(package.parentBytecode);
+}
+
 void verifyGeneratedBreak(const std::vector<std::uint8_t>& bytes)
 {
     auto program = liberafx::Program{};
     assert(liberafx::Program::load(bytes.data(), bytes.size(), program) == liberafx::Result::Ok);
-    assert(program.version() == 2 && program.nodeCount() == 3);
-    auto work = std::array<double, 12>{};
-    auto otherWork = std::array<double, 12>{};
-    auto defaults = std::array<double, 24>{};
+    assert(program.version() == 11 && program.nodeCount() == 3);
+    auto count = (program.workBytes() + sizeof(std::max_align_t) - 1) / sizeof(std::max_align_t);
+    auto work = std::vector<std::max_align_t>(count);
+    auto otherWork = std::vector<std::max_align_t>(count);
+    auto defaults = std::vector<double>(program.parameterValueCount());
     auto instance = liberafx::Instance{};
     auto other = liberafx::Instance{};
-    assert(instance.initialize(program, work.data(), work.size(), defaults.data(), defaults.size()) == liberafx::Result::Ok);
-    assert(other.initialize(program, otherWork.data(), otherWork.size()) == liberafx::Result::Ok);
+    assert(instance.initialize(program, reinterpret_cast<double*>(work.data()),
+        work.size() * sizeof(std::max_align_t) / sizeof(double), defaults.data(), defaults.size()) == liberafx::Result::Ok);
+    assert(other.initialize(program, reinterpret_cast<double*>(otherWork.data()),
+        otherWork.size() * sizeof(std::max_align_t) / sizeof(double)) == liberafx::Result::Ok);
     auto queue = Queue{};
     assert(instance.updateAsync(0, enqueue, &queue) == liberafx::Result::Ok);
     run(queue);
@@ -990,12 +1065,14 @@ void verifyGeneratedCurve(const std::vector<std::uint8_t>& bytes)
 {
     auto program = liberafx::Program{};
     assert(liberafx::Program::load(bytes.data(), bytes.size(), program) == liberafx::Result::Ok);
-    assert(program.version() == 4 && program.nodeCount() == 1);
-    alignas(16) auto work = std::array<double, 4>{};
-    auto defaults = std::array<double, 16>{};
+    assert(program.version() == 11 && program.nodeCount() == 1);
+    auto count = (program.workBytes() + sizeof(std::max_align_t) - 1) / sizeof(std::max_align_t);
+    auto work = std::vector<std::max_align_t>(count);
+    auto defaults = std::vector<double>(program.parameterValueCount());
     auto instance = liberafx::Instance{};
     auto queue = Queue{};
-    assert(instance.initialize(program, work.data(), work.size(), defaults.data(), defaults.size()) ==
+    assert(instance.initialize(program, reinterpret_cast<double*>(work.data()),
+        work.size() * sizeof(std::max_align_t) / sizeof(double), defaults.data(), defaults.size()) ==
            liberafx::Result::Ok);
     assert(instance.updateAsync(0.5, enqueue, &queue) == liberafx::Result::Ok);
     run(queue);
@@ -1012,9 +1089,7 @@ auto main(int argc, char** argv) -> int
 #endif
     if (argc == 3 && std::strcmp(argv[1], "--curve") == 0)
     {
-        auto input = std::ifstream(argv[2], std::ios::binary);
-        assert(input);
-        auto generated = std::vector<std::uint8_t>(std::istreambuf_iterator<char>(input), {});
+        auto generated = loadPackageProgram(argv[2]);
         verifyGeneratedCurve(generated);
         return 0;
     }
@@ -1030,41 +1105,36 @@ auto main(int argc, char** argv) -> int
     auto program = liberafx::Program{};
     assert(liberafx::Program::load(corrupt.data(), corrupt.size(), program) == liberafx::Result::UnsupportedBinary);
     corrupt = bytes;
-    write32(corrupt, 12 + 20, 0);
+    write32(corrupt, 16 + 24, 0);
     assert(liberafx::Program::load(corrupt.data(), corrupt.size(), program) == liberafx::Result::InvalidBinary);
     corrupt = bytes;
-    std::memcpy(corrupt.data() + 12 + 44, corrupt.data() + 12, 16);
+    std::memcpy(corrupt.data() + 16 + 256, corrupt.data() + 16, 16);
     assert(liberafx::Program::load(corrupt.data(), corrupt.size(), program) == liberafx::Result::InvalidBinary);
     corrupt = bytes;
-    corrupt[12 + 2 * 44 + 16] = 6;
-    write32(corrupt, 12 + 2 * 44 + 24, 0xffffffffu);
+    corrupt[16 + 2 * 256 + 16] = 6;
+    corrupt[16 + 2 * 256 + 19] = 0;
+    write32(corrupt, 16 + 2 * 256 + 28, 0xffffffffu);
     assert(liberafx::Program::load(corrupt.data(), corrupt.size(), program) == liberafx::Result::Ok);
-    auto work = std::array<double, 3>{};
+    alignas(16) auto work = std::array<double, 128>{};
     auto instance = liberafx::Instance{};
     auto queue = Queue{};
-    assert(instance.initialize(program, work.data(), 3) == liberafx::Result::Ok);
+    assert(instance.initialize(program, work.data(), work.size()) == liberafx::Result::Ok);
     assert(instance.updateAsync(0, enqueue, &queue) == liberafx::Result::Ok);
     run(queue);
     assert(instance.result() == liberafx::Result::DivideByZero);
     if (argc > 1)
     {
-        auto input = std::ifstream(argv[1], std::ios::binary);
-        assert(input);
-        auto generated = std::vector<std::uint8_t>(std::istreambuf_iterator<char>(input), {});
+        auto generated = loadPackageProgram(argv[1]);
         verify(generated);
     }
     if (argc > 2)
     {
-        auto input = std::ifstream(argv[2], std::ios::binary);
-        assert(input);
-        auto generated = std::vector<std::uint8_t>(std::istreambuf_iterator<char>(input), {});
+        auto generated = loadPackageProgram(argv[2]);
         verifyGeneratedBreak(generated);
     }
     if (argc > 3)
     {
-        auto input = std::ifstream(argv[3], std::ios::binary);
-        assert(input);
-        auto generated = std::vector<std::uint8_t>(std::istreambuf_iterator<char>(input), {});
+        auto generated = loadPackageProgram(argv[3]);
         verifyGeneratedCurve(generated);
     }
     return 0;
