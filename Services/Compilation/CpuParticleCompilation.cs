@@ -256,7 +256,7 @@ public static class CpuParticleCompilation
                 var portId = edge.SourcePortId ?? "position";
                 if (!portMap.TryGetValue(portId, out var readerId))
                 {
-                    readerId = Guid.NewGuid();
+                    readerId = new Guid(SHA256.HashData(Encoding.UTF8.GetBytes($"LiberaFx.Cpu.StageInput.v1:{nodeId:D}:{portId}")).AsSpan(0, 16), true);
                     portMap[portId] = readerId;
                     var (kindName, customSlot) = portId switch
                     {
@@ -315,7 +315,7 @@ public static class CpuParticleCompilation
                     edge.TargetNodeId == nodeId && edge.TargetPortId == portId);
                 if (paramEdge is null) continue;
                 var def = GraphNodeDefinition.Find(new(kindName))!;
-                var setterId = Guid.NewGuid();
+                var setterId = new Guid(SHA256.HashData(Encoding.UTF8.GetBytes($"LiberaFx.Cpu.StageOutput.v1:{nodeId:D}:{portId}")).AsSpan(0, 16), true);
                 var parameters = customSlot >= 0
                     ? new[] { new NodeParameterSnapshot("slot", "int", JsonSerializer.SerializeToElement(customSlot)) }
                     : null;

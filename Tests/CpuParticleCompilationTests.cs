@@ -172,7 +172,7 @@ public static class CpuParticleCompilationTests
         var outputSignal = Node("CpuParticleOutputSignal");
         var inputSignal = Node("CpuParticleInputSignal");
         var entry = update.ChildGraph!.Nodes.Single(node => CpuParticleSchema.Name(node.Kind) == "CpuParticleStageEvent");
-        var move = update.ChildGraph.Nodes.Single(node => CpuParticleSchema.Name(node.Kind) == "CpuParticleMove");
+        var move = Node("CpuParticleMove");
         update = update with { ChildGraph = new(
             [entry, move, input, setVelocity, outputId, id, outputSignal, inputSignal],
             [new(entry.Id, setVelocity.Id, "signal", "then"),
