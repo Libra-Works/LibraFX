@@ -211,31 +211,93 @@ public partial class GpuWorkspaceView : UserControl
         }));
         WritesPanel.Children.Add(new TextBlock
         {
-            Text = LocalizationService.Shared.Get("Gpu.OutputPins"),
+            Text = LocalizationService.Shared.Get("Gpu.CustomAttributes"),
             Margin = new Thickness(0, 6, 0, 2),
             FontWeight = FontWeight.SemiBold
         });
-        foreach (var customAttr in new[] { "Alive", "Custom0", "Custom1", "Custom2" })
+        var customSlots = new[] { "Custom0", "Custom1", "Custom2" };
+        foreach (var slot in customSlots)
         {
-            var attrId = customAttr;
-            var toggle = new CheckBox
+            var slotId = slot;
+            var isActive = _visibleOutputAttributes.Contains(slotId) ||
+                           k.Writes.Any(w => w.Attribute == slotId) ||
+                           k.Nodes.Any(n => n.Op == GpuOp.ReadAttribute && n.Attribute == slotId);
+            if (!isActive) continue;
+            var row = new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 6 };
+            row.Children.Add(new TextBlock
             {
-                Content = LocalizationService.Shared.GetOrDefault("Gpu.Attribute." + attrId, attrId),
-                IsChecked = _visibleOutputAttributes.Contains(attrId) || k.Writes.Any(w => w.Attribute == attrId)
+                Text = $"{AttributePinLabel(slotId)} ({slotId} : Float)",
+                VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center
+            });
+            var removeCustom = Button("×", () =>
+            {
+                _visibleOutputAttributes.Remove(slotId);
+                _customAttributeLabels.Remove(slotId);
+                var write = k.Writes.FirstOrDefault(w => w.Attribute == slotId);
+                if (write is not null)
+                {
+                    vm.Edit(new GpuEdit { Action = "write-remove", KernelId = k.Id, NodeId = write.Id });
+                }
+                else if (Workspace?.Kernel is { } current)
+                {
+                    RebuildStageOutput(Workspace, current);
+                    _anchorsDirty = true;
+                    ScheduleFrame();
+                    BuildWrites();
+                }
+            });
+            removeCustom.IsEnabled = !vm.Graph.IsReadOnly;
+            row.Children.Add(removeCustom);
+            WritesPanel.Children.Add(row);
+        }
+        var nextFreeSlot = customSlots.FirstOrDefault(slotId =>
+            !_visibleOutputAttributes.Contains(slotId) &&
+            k.Writes.All(w => w.Attribute != slotId) &&
+            k.Nodes.All(n => n.Op != GpuOp.ReadAttribute || n.Attribute != slotId));
+        if (nextFreeSlot is not null)
+        {
+            var customNameBox = new TextBox
+            {
+                PlaceholderText = LocalizationService.Shared.Get("Gpu.CustomAttributeName"),
+                IsEnabled = !vm.Graph.IsReadOnly
             };
-            toggle.IsCheckedChanged += (_, _) =>
+            WritesPanel.Children.Add(customNameBox);
+            var addCustom = Button(LocalizationService.Shared.Get("Gpu.AddCustomAttribute"), () =>
             {
-                if (toggle.IsChecked == true) _visibleOutputAttributes.Add(attrId);
-                else _visibleOutputAttributes.Remove(attrId);
+                var name = customNameBox.Text?.Trim();
+                if (!string.IsNullOrEmpty(name))
+                {
+                    _customAttributeLabels[nextFreeSlot] = name;
+                }
+                _visibleOutputAttributes.Add(nextFreeSlot);
                 if (Workspace?.Kernel is { } current)
                 {
                     RebuildStageOutput(Workspace, current);
                     _anchorsDirty = true;
                     ScheduleFrame();
+                    BuildWrites();
                 }
-            };
-            WritesPanel.Children.Add(toggle);
+            });
+            addCustom.IsEnabled = !vm.Graph.IsReadOnly;
+            WritesPanel.Children.Add(addCustom);
         }
+        var aliveToggle = new CheckBox
+        {
+            Content = LocalizationService.Shared.GetOrDefault("Gpu.Attribute.Alive", "Alive"),
+            IsChecked = _visibleOutputAttributes.Contains("Alive") || k.Writes.Any(w => w.Attribute == "Alive")
+        };
+        aliveToggle.IsCheckedChanged += (_, _) =>
+        {
+            if (aliveToggle.IsChecked == true) _visibleOutputAttributes.Add("Alive");
+            else _visibleOutputAttributes.Remove("Alive");
+            if (Workspace?.Kernel is { } current)
+            {
+                RebuildStageOutput(Workspace, current);
+                _anchorsDirty = true;
+                ScheduleFrame();
+            }
+        };
+        WritesPanel.Children.Add(aliveToggle);
     }
     private void RefreshDiagnostics()
     {

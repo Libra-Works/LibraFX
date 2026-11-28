@@ -47,8 +47,14 @@ public partial class GpuWorkspaceView
     private (StageCardVisual Card, Dictionary<string, Point> Store, IPointer Pointer, Point Start, Point Original)? _stageCardDrag;
     private (string Key, bool IsUniform, GpuType Type, Button Pin, IPointer Pointer, GpuConnectionCurve Preview, Point Start, Point Latest)? _stageInputDrag;
     private readonly List<OutputWireVisual> _outputWires = [];
+    private readonly Dictionary<string, string> _customAttributeLabels = [];
     private readonly HashSet<string> _visibleOutputAttributes =
         ["Position", "Velocity", "Color", "Size", "Rotation", "Age", "Lifetime"];
+
+    private string AttributePinLabel(string attrId) =>
+        _customAttributeLabels.TryGetValue(attrId, out var customName) && !string.IsNullOrWhiteSpace(customName)
+            ? customName
+            : LocalizationService.Shared.GetOrDefault("Gpu.Attribute." + attrId, attrId);
 
     private void ClearStageOutput()
     {
@@ -149,7 +155,7 @@ public partial class GpuWorkspaceView
                 _wireSource = null;
             });
             var label = PortLabel();
-            label.Text = $"{LocalizationService.Shared.GetOrDefault("Gpu.Attribute." + attr.Id, attr.Id)} ({attr.Type})";
+            label.Text = $"{AttributePinLabel(attr.Id)} ({attr.Type})";
             label.Margin = new Thickness(6, 0, 4, 0);
             var row = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto") };
             row.Children.Add(pin);
@@ -238,7 +244,7 @@ public partial class GpuWorkspaceView
             {
                 continue;
             }
-            items.Add((attr.Id, LocalizationService.Shared.GetOrDefault("Gpu.Attribute." + attr.Id, attr.Id), attr.Type, false));
+            items.Add((attr.Id, AttributePinLabel(attr.Id), attr.Type, false));
         }
         items.Add(("deltaTime", "DeltaTime", GpuType.Float, true));
         items.Add(("time", "Time", GpuType.Float, true));

@@ -139,7 +139,8 @@ public sealed class NodeCatalogViewModel : Tool
     {
         var projectName = definitions?.ProjectName ?? string.Empty;
         return (definitions?.AvailableDefinitions ?? GraphNodeDefinition.AuthoringCore)
-            .Where(definition => !GraphPolymorphism.IsHiddenVariant(definition.Kind))
+            .Where(definition => !GraphPolymorphism.IsHiddenVariant(definition.Kind) &&
+                                 !IsConsolidatedCpuAttributeNode(definition.Kind))
             .Select(definition =>
             {
                 var canCreate = graph.CanCreateNode(definition.Kind, out var reason);
@@ -171,6 +172,13 @@ public sealed class NodeCatalogViewModel : Tool
             .Select(group => new NodeCatalogGroupViewModel(group.Key, group.ToArray()))
             .ToArray();
     }
+
+    private static bool IsConsolidatedCpuAttributeNode(GraphNodeKind kind) => kind.Value is
+        "CpuParticlePosition" or "CpuParticleVelocity" or "CpuParticleColor" or "CpuParticleSize" or
+        "CpuParticleLife" or "CpuParticleAge" or "CpuParticleId" or "CpuParticleSeed" or
+        "CpuParticleStepDelta" or "CpuParticleCustomRead" or
+        "CpuParticleSetPosition" or "CpuParticleSetVelocity" or "CpuParticleSetColor" or
+        "CpuParticleSetSize" or "CpuParticleSetLife" or "CpuParticleSetAge" or "CpuParticleCustomWrite";
 
     private void RefreshGroups()
     {
