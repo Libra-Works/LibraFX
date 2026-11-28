@@ -153,8 +153,9 @@ auto System::initialize(const CustomNodeDescriptor* registry, std::size_t regist
     {
         inputSignalCount += std::count_if(stage.io.begin(), stage.io.end(), [](const auto& io) { return io.kind == 2; });
     }
-    callbacks.reserve(24 + inputSignalCount);
-    descriptors.reserve(24 + inputSignalCount + registryCount);
+    constexpr std::size_t kBuiltinCallbackReserve = 32;
+    callbacks.reserve(kBuiltinCallbackReserve + inputSignalCount);
+    descriptors.reserve(kBuiltinCallbackReserve + inputSignalCount + registryCount);
     auto add = [&](std::uint8_t operation, std::uint8_t width, bool signal,
         std::initializer_list<std::uint8_t> inputs, bool color)
     {
