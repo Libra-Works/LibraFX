@@ -209,6 +209,33 @@ public partial class GpuWorkspaceView : UserControl
             vm.Edit(new() { Action = "write", KernelId = k.Id,
                 Write = new(existing?.Id ?? "w_" + Guid.NewGuid().ToString("N"), attribute, _selection) });
         }));
+        WritesPanel.Children.Add(new TextBlock
+        {
+            Text = LocalizationService.Shared.Get("Gpu.OutputPins"),
+            Margin = new Thickness(0, 6, 0, 2),
+            FontWeight = FontWeight.SemiBold
+        });
+        foreach (var customAttr in new[] { "Alive", "Custom0", "Custom1", "Custom2" })
+        {
+            var attrId = customAttr;
+            var toggle = new CheckBox
+            {
+                Content = LocalizationService.Shared.GetOrDefault("Gpu.Attribute." + attrId, attrId),
+                IsChecked = _visibleOutputAttributes.Contains(attrId) || k.Writes.Any(w => w.Attribute == attrId)
+            };
+            toggle.IsCheckedChanged += (_, _) =>
+            {
+                if (toggle.IsChecked == true) _visibleOutputAttributes.Add(attrId);
+                else _visibleOutputAttributes.Remove(attrId);
+                if (Workspace?.Kernel is { } current)
+                {
+                    RebuildStageOutput(Workspace, current);
+                    _anchorsDirty = true;
+                    ScheduleFrame();
+                }
+            };
+            WritesPanel.Children.Add(toggle);
+        }
     }
     private void RefreshDiagnostics()
     {

@@ -178,6 +178,7 @@ auto System::initialize(const CustomNodeDescriptor* registry, std::size_t regist
         auto width = static_cast<std::uint8_t>(operation < 0x12 ? 3 : operation == 0x12 ? 4 : operation == 0x13 ? 2 : 1);
         add(static_cast<std::uint8_t>(operation), width, false, {}, operation == 0x12);
     }
+    add(0x19, 1, false, {1}, false);
     add(0x20, 0, true, {3}, false);
     add(0x21, 0, true, {3}, false);
     add(0x22, 0, true, {4}, true);
@@ -185,6 +186,7 @@ auto System::initialize(const CustomNodeDescriptor* registry, std::size_t regist
     add(0x24, 0, true, {1}, false);
     add(0x25, 0, true, {3}, false);
     add(0x26, 0, true, {1}, false);
+    add(0x27, 0, true, {1, 1}, false);
     add(0x42, 3, false, {3, 3}, false);
     add(0x43, 3, false, {3, 1}, false);
     add(0x44, 3, false, {3, 1}, false);

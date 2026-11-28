@@ -27,6 +27,7 @@ internal static class TimelineTests
         graph.SetCurve(node, original, "Test curve");
         VerifyCurveCompilation(graph);
         VerifySplitKeyMoveAndWeightedCubic();
+        VerifyCpuAndGpuStageNodesAndCustomAttributes();
         if (Environment.GetEnvironmentVariable("LIBERAFX_UNREAL_FCURVE_FIXTURE") is { Length: > 0 } fixtureDirectory)
             ExportUnrealCurveRenderFixture(fixtureDirectory);
         VerifyLegacyFrameCurveMigration();
@@ -250,5 +251,87 @@ internal static class TimelineTests
         FCurve.Validate(expandedCurve);
         if (Math.Abs(FCurve.Evaluate(expandedCurve, 0.25) - atQuarter) > 0.01)
             throw new InvalidOperationException("Expanded weighted curve evaluation drifted from exact weighted cubic.");
+    }
+
+    private static void VerifyCpuAndGpuStageNodesAndCustomAttributes()
+    {
+        var graph = new GraphWorkspaceViewModel(new UndoRedoManager());
+        var cpu = graph.CreateNode(new GraphNodeKind("CpuParticle"), 0, 0);
+        var cpuGraph = graph.OpenInlineGraph(cpu);
+        var draw = cpuGraph.Nodes.Single(n => n.Definition.Kind.Value == "CpuParticleSpriteDraw");
+        cpuGraph.SetParameter(draw, "textureSource", JsonSerializer.SerializeToElement(1));
+        var spawn = cpuGraph.Nodes.Single(n => n.Definition.Kind.Value == "CpuParticleSpawn");
+        var spawnGraph = cpuGraph.OpenInlineGraph(spawn);
+        var spawnEvent = spawnGraph.Nodes.Single(n => n.Definition.Kind.Value == "CpuParticleStageEvent");
+        foreach (var existing in spawnGraph.Connections.Where(c => c.Source == spawnEvent).ToArray())
+            spawnGraph.DisconnectConnection(existing);
+        var lifeConst = spawnGraph.CreateNode(GraphNodeKind.Float, 0, 120);
+        spawnGraph.SetParameter(lifeConst, "value", JsonSerializer.SerializeToElement(3.0));
+        var customConst = spawnGraph.CreateNode(GraphNodeKind.Float, 0, 180);
+        spawnGraph.SetParameter(customConst, "value", JsonSerializer.SerializeToElement(0.5));
+        var spawnOut = spawnGraph.CreateNode(new GraphNodeKind("CpuParticleAttributesOutput"), 220, 40);
+        string? e2 = null, e3 = null;
+        if (!spawnGraph.TryConnectNodes(spawnEvent, spawnOut, out var e1, "signal", "then") ||
+            !spawnGraph.TryConnectNodes(lifeConst, spawnOut, out e2, "life") ||
+            !spawnGraph.TryConnectNodes(customConst, spawnOut, out e3, "custom0"))
+            throw new InvalidOperationException($"Failed to wire CpuParticleAttributesOutput in Spawn: {e1} / {e2} / {e3}");
+
+        var update = cpuGraph.Nodes.Single(n => n.Definition.Kind.Value == "CpuParticleUpdate");
+        var updateGraph = cpuGraph.OpenInlineGraph(update);
+        var updateEvent = updateGraph.Nodes.Single(n => n.Definition.Kind.Value == "CpuParticleStageEvent");
+        foreach (var existing in updateGraph.Connections.Where(c => c.Source == updateEvent).ToArray())
+            updateGraph.DisconnectConnection(existing);
+        var updateIn = updateGraph.CreateNode(new GraphNodeKind("CpuParticleAttributesInput"), 0, 40);
+        var addAge = updateGraph.CreateNode(GraphNodeKind.Add, 220, 40);
+        var mulDt = updateGraph.CreateNode(GraphNodeKind.Multiply, 140, 120);
+        var updateOut = updateGraph.CreateNode(new GraphNodeKind("CpuParticleAttributesOutput"), 380, 40);
+        if (!updateGraph.TryConnectNodes(updateIn, mulDt, out _, "a", "stepDelta") ||
+            !updateGraph.TryConnectNodes(updateIn, mulDt, out _, "b", "custom0") ||
+            !updateGraph.TryConnectNodes(updateIn, addAge, out _, "a", "age") ||
+            !updateGraph.TryConnectNodes(mulDt, addAge, out _, "b") ||
+            !updateGraph.TryConnectNodes(updateEvent, updateOut, out _, "signal", "then") ||
+            !updateGraph.TryConnectNodes(addAge, updateOut, out _, "age"))
+            throw new InvalidOperationException("Failed to wire CpuParticleAttributesInput/Output in Update.");
+
+        var snapshot = graph.CreateSnapshot();
+        var compiledPackage = EffectBinary.Compile(snapshot);
+        if (compiledPackage.Length == 0)
+            throw new InvalidOperationException("CPU particle with Stage Input/Output and Custom0 failed to compile.");
+
+        var gpuProgram = new LibraGpu.Core.GpuProgram
+        {
+            Id = "custom-age-test",
+            Flow = [new() { Id = "updateStep", Kind = LibraGpu.Core.FlowKind.Update, Kernel = "update" }],
+            Kernels =
+            [
+                new LibraGpu.Core.KernelGraph
+                {
+                    Id = "update",
+                    Stage = LibraGpu.Core.KernelStage.Update,
+                    Nodes =
+                    [
+                        new() { Id = "age", Op = LibraGpu.Core.GpuOp.ReadAttribute, Type = LibraGpu.Core.GpuType.Float, Attribute = "Age" },
+                        new() { Id = "dt", Op = LibraGpu.Core.GpuOp.ReadUniform, Type = LibraGpu.Core.GpuType.Float, Uniform = "deltaTime" },
+                        new() { Id = "scale", Op = LibraGpu.Core.GpuOp.ReadAttribute, Type = LibraGpu.Core.GpuType.Float, Attribute = "Custom0" },
+                        new() { Id = "c1", Op = LibraGpu.Core.GpuOp.ReadAttribute, Type = LibraGpu.Core.GpuType.Float, Attribute = "Custom1" },
+                        new() { Id = "scaled", Op = LibraGpu.Core.GpuOp.Mul, Type = LibraGpu.Core.GpuType.Float, Inputs = ["dt", "scale"] },
+                        new() { Id = "nextAge", Op = LibraGpu.Core.GpuOp.Add, Type = LibraGpu.Core.GpuType.Float, Inputs = ["age", "scaled"] }
+                    ],
+                    Writes =
+                    [
+                        new("w_age", "Age", "nextAge"),
+                        new("w_c1", "Custom1", "c1")
+                    ]
+                }
+            ]
+        };
+        var compiledGpu = LibraGpu.Core.GpuCompiler.Compile(gpuProgram);
+        if (compiledGpu.RegisterKernels[0].AdvanceDefaultAge)
+            throw new InvalidOperationException("GPU AdvanceDefaultAge must be false when Age is written.");
+        var shaderSource = compiledGpu.EmitUsf().Text;
+        if (!shaderSource.Contains("p.sizeRotation.w", StringComparison.Ordinal) ||
+            !shaderSource.Contains("asfloat(p.seedAlive.z)", StringComparison.Ordinal) ||
+            !shaderSource.Contains("p.seedAlive.z = asuint(", StringComparison.Ordinal))
+            throw new InvalidOperationException("GPU ShaderEmitter did not emit Custom0/Custom1 attribute mappings.");
     }
 }

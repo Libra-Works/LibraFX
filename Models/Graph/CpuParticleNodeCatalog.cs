@@ -11,10 +11,11 @@ public static class CpuParticleNodeCatalog
             ("010", "CpuParticlePosition"), ("011", "CpuParticleVelocity"), ("012", "CpuParticleColor"),
             ("013", "CpuParticleSize"), ("014", "CpuParticleLife"), ("015", "CpuParticleAge"),
             ("016", "CpuParticleId"), ("017", "CpuParticleSeed"),
-            ("018", "CpuParticleStepDelta"),
+            ("018", "CpuParticleStepDelta"), ("019", "CpuParticleCustomRead"),
             ("020", "CpuParticleSetPosition"), ("021", "CpuParticleSetVelocity"),
             ("022", "CpuParticleSetColor"), ("023", "CpuParticleSetSize"), ("024", "CpuParticleSetLife"),
-            ("025", "CpuParticleMove"), ("026", "CpuParticleSetAge"), ("030", "CpuParticleInputFloat"), ("031", "CpuParticleOutputFloat"),
+            ("025", "CpuParticleMove"), ("026", "CpuParticleSetAge"), ("027", "CpuParticleCustomWrite"),
+            ("030", "CpuParticleInputFloat"), ("031", "CpuParticleOutputFloat"),
             ("032", "CpuParticleInputVector3"), ("033", "CpuParticleOutputVector3"),
             ("034", "CpuParticleInputVector4"), ("035", "CpuParticleOutputVector4"),
             ("036", "CpuParticleInputSignal"), ("037", "CpuParticleOutputSignal"),
@@ -22,7 +23,8 @@ public static class CpuParticleNodeCatalog
             ("040", "EmitterRate"), ("041", "EmitterBurst"), ("042", "CpuParticleEmitterBox"),
             ("043", "CpuParticleEmitterSphere"), ("044", "CpuParticleEmitterCircle"),
             ("045", "CpuParticleMeshPosition"), ("046", "CpuParticleMeshNormal"),
-            ("047", "CpuParticleMeshUV"), ("048", "CpuParticleMeshColor")
+            ("047", "CpuParticleMeshUV"), ("048", "CpuParticleMeshColor"),
+            ("050", "CpuParticleAttributesInput"), ("051", "CpuParticleAttributesOutput")
         };
         foreach (var (suffix, name) in entries)
         {

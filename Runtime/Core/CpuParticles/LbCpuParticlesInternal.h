@@ -95,6 +95,7 @@ struct ParticleStorage final {
     std::array<std::vector<double>, 3> position, velocity;
     std::array<std::vector<double>, 4> color;
     std::array<std::vector<double>, 2> size;
+    std::array<std::vector<double>, 4> custom;
     std::vector<double> age, life, realStart;
     std::vector<std::uint64_t> id;
     std::vector<std::uint8_t> active;
@@ -104,6 +105,7 @@ struct ParticleStorage final {
         for (auto& channel : velocity) { channel.resize(capacity); }
         for (auto& channel : color) { channel.resize(capacity, 1); }
         for (auto& channel : size) { channel.resize(capacity, 1); }
+        for (auto& channel : custom) { channel.resize(capacity); }
         age.resize(capacity); life.resize(capacity, 2); realStart.resize(capacity);
         id.resize(capacity); active.resize(capacity);
     }
@@ -113,6 +115,7 @@ struct ParticleStorage final {
         for (auto& channel : velocity) { channel[slot] = 0; }
         for (auto& channel : color) { channel[slot] = 1; }
         for (auto& channel : size) { channel[slot] = 1; }
+        for (auto& channel : custom) { channel[slot] = 0; }
         id[slot] = identity; age[slot] = 0; life[slot] = 2;
         realStart[slot] = realTime; active[slot] = 0;
     }

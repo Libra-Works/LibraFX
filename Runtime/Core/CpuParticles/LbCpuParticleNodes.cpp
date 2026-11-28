@@ -70,6 +70,23 @@ auto System::invoke(CustomNodeInvocation& call) noexcept -> Result
         }
         return Result::Ok;
     }
+    if (operation == 0x19)
+    {
+        if (!std::isfinite(call.inputs[0])) return Result::InvalidArgument;
+        const auto slotIndex = static_cast<long long>(std::llround(call.inputs[0]));
+        if (slotIndex < 0 || slotIndex >= 4) return Result::InvalidArgument;
+        call.outputs[0] = particleData.custom[static_cast<std::size_t>(slotIndex)][particle];
+        return Result::Ok;
+    }
+    if (operation == 0x27)
+    {
+        if (!std::isfinite(call.inputs[0]) || !std::isfinite(call.inputs[1])) return Result::InvalidArgument;
+        const auto slotIndex = static_cast<long long>(std::llround(call.inputs[0]));
+        if (slotIndex < 0 || slotIndex >= 4) return Result::InvalidArgument;
+        particleData.custom[static_cast<std::size_t>(slotIndex)][particle] = call.inputs[1];
+        call.selectedBranch = 0;
+        return Result::Ok;
+    }
     if (operation >= 0x20 && operation <= 0x26)
     {
         if (operation == 0x20)

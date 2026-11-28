@@ -36,6 +36,7 @@ public partial class GpuWorkspaceView : UserControl
         if (_connectionDrag is { } connection)
         { connection.Preview.Width = NodeCanvas.Width; connection.Preview.Height = NodeCanvas.Height; }
         UpdateWireGeometry(_wireVisuals);
+        UpdateStageOutputAnchors();
         ZoomLabel.Content = $"{_viewport.Zoom:P0}";
     }
     private void OnZoomIn(object? sender, RoutedEventArgs e) => _viewport.SetZoom(_viewport.Zoom * 1.25);

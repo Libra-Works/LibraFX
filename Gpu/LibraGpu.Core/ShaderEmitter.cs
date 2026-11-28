@@ -132,7 +132,15 @@ internal static partial class ShaderEmitter
             }
             // SSA reads the incoming particle snapshot; attribute stores happen only after evaluation.
             foreach (var w in k.Writes)
-                Mapped($"    {Attribute(w.Attribute)} = {(w.Attribute == "Alive" ? $"({registers[w.Value]} ? 1u : 0u)" : registers[w.Value])};", k, w.Id, "value");
+            {
+                var rhs = w.Attribute switch
+                {
+                    "Alive" => $"({registers[w.Value]} ? 1u : 0u)",
+                    "Custom1" or "Custom2" => $"asuint({registers[w.Value]})",
+                    _ => registers[w.Value]
+                };
+                Mapped($"    {WriteAttributeTarget(w.Attribute)} = {rhs};", k, w.Id, "value");
+            }
             Write("}");
             Write("[numthreads(64, 1, 1)]");
             Write($"void {meta.EntryPoint}(uint3 dispatchThreadId : SV_DispatchThreadID)");
@@ -185,7 +193,17 @@ internal static partial class ShaderEmitter
         "Rotation" => "p.sizeRotation.z",
         "Seed" => "p.seedAlive.x",
         "Alive" => "p.seedAlive.y",
+        "Custom0" => "p.sizeRotation.w",
+        "Custom1" => "asfloat(p.seedAlive.z)",
+        "Custom2" => "asfloat(p.seedAlive.w)",
         _ => throw new InvalidOperationException()
+    };
+
+    private static string WriteAttributeTarget(string id) => id switch
+    {
+        "Custom1" => "p.seedAlive.z",
+        "Custom2" => "p.seedAlive.w",
+        _ => Attribute(id)
     };
     private static string Expression(GpuNode n, string[] a, GpuType[] types, IReadOnlyDictionary<string, int> resourceIndices)
     {

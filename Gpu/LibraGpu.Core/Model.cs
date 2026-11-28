@@ -208,7 +208,8 @@ public static class ParticleAbi
     {
         new AttributeDeclaration("Position", GpuType.Float3), new("Velocity", GpuType.Float3),
         new("Color", GpuType.Float4), new("Size", GpuType.Float2), new("Rotation", GpuType.Float),
-        new("Age", GpuType.Float), new("Lifetime", GpuType.Float), new("Alive", GpuType.Bool), new("Seed", GpuType.UInt)
+        new("Age", GpuType.Float), new("Lifetime", GpuType.Float), new("Alive", GpuType.Bool), new("Seed", GpuType.UInt),
+        new("Custom0", GpuType.Float), new("Custom1", GpuType.Float), new("Custom2", GpuType.Float)
     });
     public static IReadOnlyDictionary<string, GpuType> Uniforms { get; } =
         new ReadOnlyDictionary<string, GpuType>(new Dictionary<string, GpuType>

@@ -17,7 +17,7 @@ public enum GpuInstructionOpcode : uint
     GradientNoise3D = 37, Fbm = 38, Turbulence = 39, CurlNoise = 40, SampleFlowMap = 41,
     GreaterThan = 42, LessThan = 43
 }
-public enum GpuAttributeSlot : uint { Position = 0, Velocity = 1, Color = 2, Size = 3, Rotation = 4, Age = 5, Lifetime = 6, Alive = 7, Seed = 8 }
+public enum GpuAttributeSlot : uint { Position = 0, Velocity = 1, Color = 2, Size = 3, Rotation = 4, Age = 5, Lifetime = 6, Alive = 7, Seed = 8, Custom0 = 9, Custom1 = 10, Custom2 = 11 }
 public enum GpuUniformSlot : uint { DeltaTime = 0, Time = 1, EmitterPosition = 2, EmitterRow0 = 3, EmitterRow1 = 4, EmitterRow2 = 5, EmitterRow3 = 6 }
 
 /// <summary>

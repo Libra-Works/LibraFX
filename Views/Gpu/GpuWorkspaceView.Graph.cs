@@ -132,6 +132,7 @@ public partial class GpuWorkspaceView : UserControl
                     }
             _anchorsDirty = true;
         }
+        RebuildStageOutput(vm, k);
         var destinations = _wireVisuals.ToLookup(wire => wire.Source.Model.Id);
         var modelsById = k.Nodes.ToDictionary(node => node.Id);
         var writes = k.Writes.ToLookup(write => write.Value);
@@ -258,6 +259,7 @@ public partial class GpuWorkspaceView : UserControl
         }
         _viewport.EnsureWorldBounds(NodeBounds(_nodeVisuals.Values));
         UpdateWireGeometry(_wireVisuals);
+        UpdateStageOutputAnchors();
     }
     private void BeginDrag(NodeVisual visual, PointerPressedEventArgs e)
     {
@@ -325,9 +327,13 @@ public partial class GpuWorkspaceView : UserControl
         if (_connectionDrag is { } connection)
         {
             var target = FindConnectionTarget(connection, connection.Latest);
-            _connectionFeedback.Show(target?.Node.Inputs[target.Value.Input]);
+            var stageTarget = target is null ? FindStageOutputTarget(connection, connection.Latest) : null;
+            _connectionFeedback.Show(target?.Node.Inputs[target.Value.Input] ?? stageTarget?.Pin);
             var end = target is { } snap
-                ? snap.Node.CanvasPosition + (Vector)snap.Node.InputAnchors[snap.Input] : connection.Latest;
+                ? snap.Node.CanvasPosition + (Vector)snap.Node.InputAnchors[snap.Input]
+                : stageTarget is { } stageSnap && _stageOutput is not null
+                    ? _stageOutput.CanvasPosition + (Vector)stageSnap.Anchor
+                    : connection.Latest;
             connection.Preview.SetEndpoints(connection.Source.CanvasPosition + (Vector)connection.Source.OutputAnchor, end);
         }
     }
@@ -344,6 +350,7 @@ public partial class GpuWorkspaceView : UserControl
                     new Point(visual.Inputs[i].Bounds.Width / 2, visual.Inputs[i].Bounds.Height / 2), visual.Border) ?? new(0, 70 + i * 27);
         }
         UpdateWireGeometry(_wireVisuals);
+        UpdateStageOutputAnchors();
     }
     private static void UpdateWireGeometry(List<WireVisual> wires)
     {
@@ -363,6 +370,7 @@ public partial class GpuWorkspaceView : UserControl
             visual.SyncTransform();
             UpdateWireGeometry(visual.Wires);
         }
+        UpdateOutputWireGeometry();
         _viewport.EnsureWorldBounds(NodeBounds(drag.Members.Select(m => m.Visual)));
     }
     private void FinishDrag(bool commit)
@@ -414,12 +422,24 @@ public partial class GpuWorkspaceView : UserControl
         if (_connectionDrag is not { } connection || connection.Source != source || connection.Pointer != e.Pointer) return;
         var point = e.GetPosition(NodeCanvas);
         var target = FindConnectionTarget(connection, point);
+        var stageTarget = target is null ? FindStageOutputTarget(connection, point) : null;
         var clicked = Math.Abs(point.X - connection.Start.X) < 4 && Math.Abs(point.Y - connection.Start.Y) < 4;
         CancelConnectionDrag();
         if (target is { } snap && Workspace?.KernelId is { } kernel)
         {
             Run(() => Workspace.Edit(new() { Action = "connect", KernelId = kernel,
                 NodeId = snap.Node.Model.Id, SourceId = source.Model.Id, Input = snap.Input }));
+            _wireSource = null;
+        }
+        else if (stageTarget is { } stageSnap && Workspace?.KernelId is { } writeKernel && Workspace.Kernel is { } currentKernel)
+        {
+            var existing = currentKernel.Writes.FirstOrDefault(w => w.Attribute == stageSnap.Attribute);
+            Run(() => Workspace.Edit(new GpuEdit
+            {
+                Action = "write",
+                KernelId = writeKernel,
+                Write = new(existing?.Id ?? "w_" + Guid.NewGuid().ToString("N"), stageSnap.Attribute, source.Model.Id)
+            }));
             _wireSource = null;
         }
         else

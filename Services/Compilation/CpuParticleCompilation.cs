@@ -170,7 +170,8 @@ public static class CpuParticleCompilation
                         signal ? 0 : SpawnableGroupSchema.InputWidth(boundary.PortType), boundary.Id, rootId,
                         input && edge is not null && !signal ? Component(graph, edge) : 0));
                 }
-                var lowered = CpuEmitterMatrixLowering.TransformShapes(LowerBoundaries(stageGraph), stage.Id,
+                var lowered = CpuEmitterMatrixLowering.TransformShapes(
+                    LowerBoundaries(LowerAttributeStageNodes(stageGraph)), stage.Id,
                     emitterRows[system.Id], out var matrixBindings);
                 io.AddRange(matrixBindings.Select(binding => new Io(0, 4, binding.Inner, binding.Outer, 0)));
                 var program = VfxProgram.CompileForPackage(lowered, out var render, resourceContext: resources, options: options);
@@ -218,6 +219,141 @@ public static class CpuParticleCompilation
         }
         writer.Flush();
         return (graph with { Nodes = nodes, Connections = edges }, stream.ToArray(), types);
+    }
+
+    private static GraphSnapshot LowerAttributeStageNodes(GraphSnapshot graph)
+    {
+        var inputStageNodes = graph.Nodes
+            .Where(node => CpuParticleSchema.Name(node.Kind) == "CpuParticleAttributesInput")
+            .ToDictionary(node => node.Id);
+        var outputStageNodes = graph.Nodes
+            .Where(node => CpuParticleSchema.Name(node.Kind) == "CpuParticleAttributesOutput")
+            .ToDictionary(node => node.Id);
+        if (inputStageNodes.Count == 0 && outputStageNodes.Count == 0)
+        {
+            return graph;
+        }
+
+        var nodes = graph.Nodes
+            .Where(node => !inputStageNodes.ContainsKey(node.Id) && !outputStageNodes.ContainsKey(node.Id))
+            .ToList();
+        var connections = graph.Connections.ToList();
+
+        foreach (var (nodeId, inputNode) in inputStageNodes)
+        {
+            var outgoing = connections.Where(edge => edge.SourceNodeId == nodeId).ToArray();
+            var portMap = new Dictionary<string, Guid>(StringComparer.Ordinal);
+            foreach (var edge in outgoing)
+            {
+                var portId = edge.SourcePortId ?? "position";
+                if (!portMap.TryGetValue(portId, out var readerId))
+                {
+                    readerId = Guid.NewGuid();
+                    portMap[portId] = readerId;
+                    var (kindName, customSlot) = portId switch
+                    {
+                        "position" => ("CpuParticlePosition", -1),
+                        "velocity" => ("CpuParticleVelocity", -1),
+                        "color" => ("CpuParticleColor", -1),
+                        "size" => ("CpuParticleSize", -1),
+                        "life" => ("CpuParticleLife", -1),
+                        "age" => ("CpuParticleAge", -1),
+                        "stepDelta" => ("CpuParticleStepDelta", -1),
+                        "id" => ("CpuParticleId", -1),
+                        "seed" => ("CpuParticleSeed", -1),
+                        "custom0" => ("CpuParticleCustomRead", 0),
+                        "custom1" => ("CpuParticleCustomRead", 1),
+                        "custom2" => ("CpuParticleCustomRead", 2),
+                        "custom3" => ("CpuParticleCustomRead", 3),
+                        _ => throw new InvalidDataException($"Unknown CPU particle input attribute '{portId}'.")
+                    };
+                    var def = GraphNodeDefinition.Find(new(kindName))!;
+                    var parameters = customSlot >= 0
+                        ? new[] { new NodeParameterSnapshot("slot", "int", JsonSerializer.SerializeToElement(customSlot)) }
+                        : null;
+                    nodes.Add(new GraphNodeSnapshot(readerId, def.Kind, def.Name, inputNode.X, inputNode.Y,
+                        def.PortType, def.PortCategory, Parameters: parameters));
+                }
+                connections[connections.IndexOf(edge)] = edge with { SourceNodeId = readerId, SourcePortId = "value" };
+            }
+        }
+
+        var outputPins = new (string PortId, string KindName, int CustomSlot)[]
+        {
+            ("position", "CpuParticleSetPosition", -1),
+            ("velocity", "CpuParticleSetVelocity", -1),
+            ("color", "CpuParticleSetColor", -1),
+            ("size", "CpuParticleSetSize", -1),
+            ("life", "CpuParticleSetLife", -1),
+            ("age", "CpuParticleSetAge", -1),
+            ("custom0", "CpuParticleCustomWrite", 0),
+            ("custom1", "CpuParticleCustomWrite", 1),
+            ("custom2", "CpuParticleCustomWrite", 2),
+            ("custom3", "CpuParticleCustomWrite", 3)
+        };
+
+        foreach (var (nodeId, outputNode) in outputStageNodes)
+        {
+            var incomingSignals = connections
+                .Where(edge => edge.TargetNodeId == nodeId && edge.TargetPortId == "signal")
+                .ToArray();
+            var outgoingSignals = connections
+                .Where(edge => edge.SourceNodeId == nodeId && edge.SourcePortId == "then")
+                .ToArray();
+            connections.RemoveAll(edge =>
+                edge.TargetNodeId == nodeId && edge.TargetPortId == "signal" ||
+                edge.SourceNodeId == nodeId && edge.SourcePortId == "then");
+
+            var chainIds = new List<Guid>();
+            foreach (var (portId, kindName, customSlot) in outputPins)
+            {
+                var paramEdge = connections.SingleOrDefault(edge =>
+                    edge.TargetNodeId == nodeId && edge.TargetPortId == portId);
+                if (paramEdge is null) continue;
+                var def = GraphNodeDefinition.Find(new(kindName))!;
+                var setterId = Guid.NewGuid();
+                var parameters = customSlot >= 0
+                    ? new[] { new NodeParameterSnapshot("slot", "int", JsonSerializer.SerializeToElement(customSlot)) }
+                    : null;
+                nodes.Add(new GraphNodeSnapshot(setterId, def.Kind, def.Name, outputNode.X, outputNode.Y,
+                    def.PortType, def.PortCategory, Parameters: parameters));
+                connections[connections.IndexOf(paramEdge)] = paramEdge with
+                {
+                    TargetNodeId = setterId,
+                    TargetPortId = "value"
+                };
+                chainIds.Add(setterId);
+            }
+
+            if (chainIds.Count == 0)
+            {
+                foreach (var inSig in incomingSignals)
+                {
+                    foreach (var outSig in outgoingSignals)
+                    {
+                        connections.Add(new GraphConnectionSnapshot(
+                            inSig.SourceNodeId, outSig.TargetNodeId, outSig.TargetPortId, inSig.SourcePortId));
+                    }
+                }
+            }
+            else
+            {
+                foreach (var inSig in incomingSignals)
+                {
+                    connections.Add(inSig with { TargetNodeId = chainIds[0], TargetPortId = "signal" });
+                }
+                for (var i = 0; i < chainIds.Count - 1; i++)
+                {
+                    connections.Add(new GraphConnectionSnapshot(chainIds[i], chainIds[i + 1], "signal", "then"));
+                }
+                foreach (var outSig in outgoingSignals)
+                {
+                    connections.Add(outSig with { SourceNodeId = chainIds[^1], SourcePortId = "then" });
+                }
+            }
+        }
+
+        return graph with { Nodes = nodes.ToArray(), Connections = connections.ToArray() };
     }
 
     private static GraphSnapshot LowerBoundaries(GraphSnapshot graph)
