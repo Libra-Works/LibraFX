@@ -32,7 +32,9 @@
       <Border BorderThickness="0,0,1,0" BorderBrush="{DynamicResource EffectBorderBrush}" Padding="8">
         <ScrollViewer><StackPanel Spacing="6">
           <TextBlock Classes="editor-heading" Text="{DynamicResource Text.Gpu.Palette}" />
-          <ComboBox x:Name="TypeChoice" />
+          <TextBlock x:Name="TypeChoiceLabel" Classes="editor-label" Text="{DynamicResource Text.Gpu.NewNodeType}" />
+          <ComboBox x:Name="TypeChoice" HorizontalAlignment="Stretch"
+                    ToolTip.Tip="{DynamicResource Text.Gpu.NewNodeTypeHint}" />
           <StackPanel x:Name="Palette" Spacing="3" />
           <Separator />
           <TextBlock x:Name="CapacityLabel" Classes="editor-label" />
@@ -111,8 +113,8 @@
           <TextBlock Classes="editor-heading" Text="{DynamicResource Text.Gpu.Properties}" />
           <TextBlock x:Name="SelectionLabel" Classes="editor-label" TextWrapping="Wrap" />
           <StackPanel x:Name="NodeInspector" Spacing="5" />
-          <Separator />
-          <TextBlock Classes="editor-heading" Text="{DynamicResource Text.Gpu.Writes}" />
+          <Separator x:Name="WritesSeparator" />
+          <TextBlock x:Name="WritesHeading" Classes="editor-heading" Text="{DynamicResource Text.Gpu.Writes}" />
           <StackPanel x:Name="WritesPanel" Spacing="4" />
           <StackPanel x:Name="BindingsPanel" Spacing="4" />
           <Separator />

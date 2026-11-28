@@ -47,7 +47,7 @@ internal static class ParticleBenchmarkFixtures
                 }
                 if (CpuParticleSchema.IsContainer(node.Kind))
                 { Set("capacity", "int", count); Set("burst", "int", count); Set("rate", "float", 0d); }
-                if (CpuParticleSchema.Name(node.Kind) == "CpuParticleSetLife") Set("value", "float", 10000d);
+                if (CpuParticleSchema.Name(node.Kind) == "Float" && node.Name == "Particle lifetime") Set("value", "float", 10000d);
                 return node with { Parameters = parameters.ToArray(), ChildGraph = node.ChildGraph is not { } child ? null :
                     child with { Nodes = child.Nodes.Select(Transform).ToArray() } };
             }
@@ -92,7 +92,7 @@ internal static class ParticleBenchmarkFixtures
                         parameters.Add(new(id, type, JsonSerializer.SerializeToElement(value)));
                     }
                     if (CpuParticleSchema.IsContainer(node.Kind)) { Set("burst", "int", 61); Set("rate", "float", 97d); }
-                    if (CpuParticleSchema.Name(node.Kind) == "CpuParticleSetLife") Set("value", "float", .75);
+                    if (CpuParticleSchema.Name(node.Kind) == "Float" && node.Name == "Particle lifetime") Set("value", "float", .75);
                     return node with { Parameters = parameters.ToArray(), ChildGraph = node.ChildGraph is not { } child ? null :
                         child with { Nodes = child.Nodes.Select(ShortLived).ToArray() } };
                 }
@@ -145,13 +145,13 @@ internal static class ParticleBenchmarkFixtures
             if (!spawn && mode == "mixed")
             {
                 var command = Add("CpuParticleSetLife", ("value", "float", -1d));
-                var previous = nodes.Single(node => CpuParticleSchema.Name(node.Kind) == "CpuParticleSetColor");
+                var previous = nodes.Single(node => CpuParticleSchema.Name(node.Kind) == "CpuParticleAttributesOutput");
                 edges.Add(new(previous.Id, command.Id, "signal", "then"));
             }
             if (mode == "zero-life")
             {
                 if (spawn)
-                    nodes = nodes.Select(node => CpuParticleSchema.Name(node.Kind) != "CpuParticleSetLife" ? node : node with
+                    nodes = nodes.Select(node => !(CpuParticleSchema.Name(node.Kind) == "Float" && node.Name == "Particle lifetime") ? node : node with
                     { Parameters = [new("value", "float", JsonSerializer.SerializeToElement(0d))] }).ToList();
                 else Add("Divide", ("a", "float", 1d), ("b", "float", 0d));
             }
@@ -179,37 +179,36 @@ internal static class ParticleBenchmarkFixtures
         }
         void Wire(GraphNodeSnapshot source, GraphNodeSnapshot target, string input) => edges.Add(new(source.Id, target.Id, input,
             GraphNodeDefinition.All.Single(item => item.Kind == source.Kind).OutputPorts?.FirstOrDefault()?.Id));
+        var attrsIn = nodes.First(node => CpuParticleSchema.Name(node.Kind) == "CpuParticleAttributesInput");
         var position = Add("CpuParticlePosition");
         var velocity = Add("CpuParticleVelocity");
         var size = Add("CpuParticleSize");
         var color = Add("CpuParticleColor");
         // Reuse the very same output in two expressions: separate attribute
         // nodes would not exercise the optimizer's shared-register boundary.
-        var life = nodes.First(node => CpuParticleSchema.Name(node.Kind) == "CpuParticleLife");
         var offset = Add("FloatX3", ("value", "vector3", new double[] { .25, -.1, .4 }));
         var moved = Add("AddVector3"); Wire(position, moved, "a"); Wire(offset, moved, "b");
         var accelerated = Add("MultiplyVector3", ("b", "vector3", new double[] { .99, 1.01, .98 })); Wire(velocity, accelerated, "a");
         var resized = Add("MultiplyVector2", ("b", "vector2", new double[] { .999, 1.001 })); Wire(size, resized, "a");
-        var shortened = Add("Subtract", ("b", "float", .001)); Wire(life, shortened, "a");
+        var shortened = Add("Subtract", ("b", "float", .001)); edges.Add(new(attrsIn.Id, shortened.Id, "a", "life"));
         if (divideByZero)
         {
             var denominator = Add("Subtract", ("b", "float", .25));
-            Wire(nodes.First(node => CpuParticleSchema.Name(node.Kind) == "CpuParticleAge"), denominator, "a");
+            edges.Add(new(attrsIn.Id, denominator.Id, "a", "age"));
             var division = Add("Divide", ("a", "float", 1d)); Wire(denominator, division, "b");
         }
         if (mixedError)
         {
             var id = Add("CpuParticleId");
-            var age = nodes.First(node => CpuParticleSchema.Name(node.Kind) == "CpuParticleAge");
             var offsetId = Add("Add", ("b", "float", 999d)); Wire(id, offsetId, "a");
-            var ageFactor = Add("Multiply", ("b", "float", 4004d)); Wire(age, ageFactor, "a");
+            var ageFactor = Add("Multiply", ("b", "float", 4004d)); edges.Add(new(attrsIn.Id, ageFactor.Id, "a", "age"));
             var denominator = Add("Subtract"); Wire(offsetId, denominator, "a"); Wire(ageFactor, denominator, "b");
             var division = Add("Divide", ("a", "float", 1d)); Wire(denominator, division, "b");
             var initialLife = Add("Add", ("b", "float", 1d)); Wire(id, initialLife, "a");
-            var lifeLoss = Add("Multiply", ("b", "float", 10d)); Wire(age, lifeLoss, "a");
+            var lifeLoss = Add("Multiply", ("b", "float", 10d)); edges.Add(new(attrsIn.Id, lifeLoss.Id, "a", "age"));
             shortened = Add("Subtract"); Wire(initialLife, shortened, "a"); Wire(lifeLoss, shortened, "b");
         }
-        var previous = nodes.Single(node => CpuParticleSchema.Name(node.Kind) == "CpuParticleSetColor");
+        var previous = nodes.Single(node => CpuParticleSchema.Name(node.Kind) == "CpuParticleAttributesOutput");
         foreach (var (kind, value) in new[] { ("CpuParticleSetPosition", moved), ("CpuParticleSetVelocity", accelerated),
                      ("CpuParticleSetSize", resized), ("CpuParticleSetLife", shortened), ("CpuParticleSetColor", color) })
         {

@@ -75,7 +75,7 @@ internal static class CpuParticleDocumentationCapture
                 Save("stages");
                 var spawn = Find("CpuParticleSpawn");
                 Enter(spawn);
-                workspace.SelectNode(Find("CpuParticleSetVelocity"));
+                workspace.SelectNode(Find("CpuParticleAttributesOutput"));
                 Save("spawn");
                 workspace.NavigateToGraph(1);
                 Enter(Find("CpuParticleUpdate"));

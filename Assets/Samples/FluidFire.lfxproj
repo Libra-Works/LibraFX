@@ -3,7 +3,7 @@
   "AutoDestroyWhenIdle": true,
   "Nodes": [
     {
-      "Id": "9e8dfcb5-096d-49b0-ad29-1ee7c6feedb2",
+      "Id": "d035c329-3779-42f4-8897-a67f431a1ad3",
       "Name": "FluidFire",
       "Kind": "GpuParticle",
       "X": 0,
@@ -55,6 +55,18 @@
                 {
                   "id": "Seed",
                   "type": "UInt"
+                },
+                {
+                  "id": "Custom0",
+                  "type": "Float"
+                },
+                {
+                  "id": "Custom1",
+                  "type": "Float"
+                },
+                {
+                  "id": "Custom2",
+                  "type": "Float"
                 }
               ],
               "resources": [
@@ -708,7 +720,7 @@
       "SignalKeys": null
     },
     {
-      "Id": "178b5175-5ef6-459c-963e-0cf04fe57b02",
+      "Id": "f5b72469-050c-4f77-81b0-6edf76a9d929",
       "Name": "Sample guide",
       "Kind": "Comment",
       "X": 320,
@@ -740,13 +752,13 @@
   ],
   "Connections": [],
   "History": {
-    "RootId": "01f62001-8ee1-43bb-939a-6f454a1b1a61",
-    "CurrentNodeId": "01f62001-8ee1-43bb-939a-6f454a1b1a61",
-    "TimelineRevisionId": "d2486c9f-cc61-4356-963d-8f53f86dc487",
+    "RootId": "3abe51a4-785c-446d-9d89-dae587b57415",
+    "CurrentNodeId": "3abe51a4-785c-446d-9d89-dae587b57415",
+    "TimelineRevisionId": "4d5c5315-5deb-430e-8e78-2d62b280ac46",
     "NextBranchNumber": 1,
     "Entries": [
       {
-        "Id": "01f62001-8ee1-43bb-939a-6f454a1b1a61",
+        "Id": "3abe51a4-785c-446d-9d89-dae587b57415",
         "ParentId": null,
         "PreferredChildId": null,
         "Description": "FluidFire",
@@ -755,7 +767,7 @@
         "State": {
           "Nodes": [
             {
-              "Id": "9e8dfcb5-096d-49b0-ad29-1ee7c6feedb2",
+              "Id": "d035c329-3779-42f4-8897-a67f431a1ad3",
               "Kind": "GpuParticle",
               "Name": "FluidFire",
               "X": 0,
@@ -809,6 +821,18 @@
                         {
                           "id": "Seed",
                           "type": "UInt"
+                        },
+                        {
+                          "id": "Custom0",
+                          "type": "Float"
+                        },
+                        {
+                          "id": "Custom1",
+                          "type": "Float"
+                        },
+                        {
+                          "id": "Custom2",
+                          "type": "Float"
                         }
                       ],
                       "resources": [
@@ -1463,7 +1487,7 @@
               "KindDomain": "GpuParticle"
             },
             {
-              "Id": "178b5175-5ef6-459c-963e-0cf04fe57b02",
+              "Id": "f5b72469-050c-4f77-81b0-6edf76a9d929",
               "Kind": "Comment",
               "Name": "Sample guide",
               "X": 320,

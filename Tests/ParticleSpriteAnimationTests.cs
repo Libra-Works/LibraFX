@@ -105,20 +105,26 @@ internal static class ParticleSpriteAnimationTests
                     var snapshot = graph.CreateSnapshot();
                     var cpuRoot = snapshot.Nodes.Single();
                     var spawn = cpuRoot.ChildGraph!.Nodes.Single(n => CpuParticleSchema.Name(n.Kind) == "CpuParticleSpawn");
-                    var velocity = spawn.ChildGraph!.Nodes.Single(n => CpuParticleSchema.Name(n.Kind) == "CpuParticleSetVelocity");
-                    GraphNodeSnapshot Setter(string kind, string type, object value)
+                    var spawnOut = spawn.ChildGraph!.Nodes.Single(n => CpuParticleSchema.Name(n.Kind) == "CpuParticleAttributesOutput");
+                    GraphNodeSnapshot Const(string kind, string type, object value)
                     {
                         var d = graph.AvailableNodeDefinitions.Single(d => d.TypeName == kind);
                         return new(Guid.NewGuid(), d.Kind, kind, 0, 0, d.PortType, d.PortCategory,
                             Parameters: [new("value", type, JsonSerializer.SerializeToElement(value))]);
                     }
-                    var life = Setter("CpuParticleSetLife", "float", 5d);
-                    var size = Setter("CpuParticleSetSize", "vector2", new[] { .8, .4 });
+                    var vel = Const("FloatX3", "vector3", new[] { 0d, 0, 0 });
+                    var life = Const("Float", "float", 5d);
+                    var size = Const("FloatX2", "vector2", new[] { .8, .4 });
                     var stage = spawn.ChildGraph with
                     {
-                        Nodes = [..spawn.ChildGraph.Nodes.Select(n=>n.Id!=velocity.Id ? n : n with {
-                        Parameters=[new("value","vector3",JsonSerializer.SerializeToElement(new[] {0d,0,0}))]}),life,size],
-                        Connections = [.. spawn.ChildGraph.Connections, new(velocity.Id, life.Id, "signal", "then"), new(life.Id, size.Id, "signal", "then")]
+                        Nodes = [.. spawn.ChildGraph.Nodes, vel, life, size],
+                        Connections =
+                        [
+                            .. spawn.ChildGraph.Connections.Where(c => !(c.TargetNodeId == spawnOut.Id && c.TargetPortId is "velocity" or "life" or "size")),
+                            new(vel.Id, spawnOut.Id, "velocity"),
+                            new(life.Id, spawnOut.Id, "life"),
+                            new(size.Id, spawnOut.Id, "size")
+                        ]
                     };
                     var changed = cpuRoot with
                     {

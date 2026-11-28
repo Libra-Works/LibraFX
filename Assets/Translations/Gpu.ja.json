@@ -11,6 +11,8 @@
   "Gpu.Compile": "コンパイル",
   "Gpu.Status": "GPU パーティクル · ソース出力のみ · GPU 実行は未対応",
   "Gpu.Palette": "GPU ノード",
+  "Gpu.NewNodeType": "追加ノードの型",
+  "Gpu.NewNodeTypeHint": "下のパレットからノードを追加するときに使う出力型です。",
   "Gpu.Capacity": "最大粒子数",
   "Gpu.ApplyCapacity": "最大粒子数を適用",
   "Gpu.Export": "IR を保存 / シェーダーを出力…",

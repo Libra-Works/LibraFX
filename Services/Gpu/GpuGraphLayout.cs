@@ -7,19 +7,24 @@ public static class GpuGraphLayout
     public static double NodeHeight(GpuNode node) =>
         80 + 28 * GpuOperationRegistry.Operations[node.Op].MaxInputs;
 
+    private static bool IsStageInputNode(GpuNode node) =>
+        (node.Op == GpuOp.ReadAttribute && node.Attribute is not null) ||
+        (node.Op == GpuOp.ReadUniform && node.Uniform is "deltaTime" or "time" or "emitterPosition");
+
     public static Dictionary<string, GpuPosition> CreatePositions(KernelGraph kernel)
     {
-        var nodes = kernel.Nodes.ToDictionary(n => n.Id);
-        var order = kernel.Nodes.Select((n, i) => (n.Id, Index: i)).ToDictionary(n => n.Id, n => n.Index);
-        var inputs = kernel.Nodes.ToDictionary(n => n.Id,
+        var visible = kernel.Nodes.Where(n => !IsStageInputNode(n)).ToArray();
+        var nodes = visible.ToDictionary(n => n.Id);
+        var order = visible.Select((n, i) => (n.Id, Index: i)).ToDictionary(n => n.Id, n => n.Index);
+        var inputs = visible.ToDictionary(n => n.Id,
             n => n.Inputs.Where(nodes.ContainsKey).Distinct().ToArray());
-        var consumers = kernel.Nodes.ToDictionary(n => n.Id, _ => new List<string>());
-        foreach (var node in kernel.Nodes)
+        var consumers = visible.ToDictionary(n => n.Id, _ => new List<string>());
+        foreach (var node in visible)
             foreach (var source in inputs[node.Id])
                 consumers[source].Add(node.Id);
         var remaining = inputs.ToDictionary(pair => pair.Key, pair => pair.Value.Length);
-        var levels = kernel.Nodes.ToDictionary(n => n.Id, _ => 0);
-        var ready = new Queue<string>(kernel.Nodes.Where(n => remaining[n.Id] == 0).Select(n => n.Id));
+        var levels = visible.ToDictionary(n => n.Id, _ => 0);
+        var ready = new Queue<string>(visible.Where(n => remaining[n.Id] == 0).Select(n => n.Id));
         while (ready.TryDequeue(out var source))
             foreach (var target in consumers[source])
             {
@@ -28,12 +33,12 @@ public static class GpuGraphLayout
             }
 
         // Invalid cyclic drafts remain editable; layout must not recurse or change the IR.
-        foreach (var node in kernel.Nodes.Where(n => remaining[n.Id] > 0))
+        foreach (var node in visible.Where(n => remaining[n.Id] > 0))
             levels[node.Id] = 0;
         var positions = new Dictionary<string, GpuPosition>();
         var visited = new HashSet<string>();
         var bandTop = 30d;
-        foreach (var root in kernel.Nodes)
+        foreach (var root in visible)
         {
             if (!visited.Add(root.Id)) continue;
             var component = new List<string>();

@@ -11,6 +11,8 @@
   "Gpu.Compile": "Compile",
   "Gpu.Status": "GPU Particle · SourceExport only · GPU runtime pending",
   "Gpu.Palette": "GPU palette",
+  "Gpu.NewNodeType": "New node type",
+  "Gpu.NewNodeTypeHint": "Output type used when adding nodes from the palette below.",
   "Gpu.Capacity": "Particle capacity",
   "Gpu.ApplyCapacity": "Set capacity",
   "Gpu.Export": "Save IR / Export shader…",

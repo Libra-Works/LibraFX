@@ -344,7 +344,7 @@ public static class CpuParticleCompilationTests
         var child = system.ChildGraph!;
         var spawn = child.Nodes.Single(node => CpuParticleSchema.Name(node.Kind) == "CpuParticleSpawn");
         var velocity = spawn.ChildGraph!.Nodes.Single(node =>
-            CpuParticleSchema.Name(node.Kind) == "CpuParticleSetVelocity");
+            CpuParticleSchema.Name(node.Kind) == "CpuParticleAttributesOutput");
         var color = Node("CpuParticleSetColor",
             Parameter("value", "color", new[] { 1d, 0.1, 0.05, 0.5 }));
         spawn = spawn with { ChildGraph = spawn.ChildGraph with

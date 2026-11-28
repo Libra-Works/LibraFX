@@ -21,11 +21,12 @@ public partial class GpuWorkspaceView : UserControl
     private void BuildGraph()
     {
         var vm = Workspace!; var k = vm.Kernel!;
+        var visibleNodes = k.Nodes.Where(n => !IsStageInputNode(n)).ToArray();
         if (_visualKernelId != k.Id) _selectedNodes.Clear();
-        _selectedNodes.IntersectWith(k.Nodes.Select(n => n.Id));
+        _selectedNodes.IntersectWith(visibleNodes.Select(n => n.Id));
         if (_selection is not null && !_selectedNodes.Contains(_selection)) _selection = _selectedNodes.LastOrDefault();
-        var sameTopology = _visualKernelId == k.Id && _nodeVisuals.Count == k.Nodes.Count &&
-            k.Nodes.All(n => _nodeVisuals.TryGetValue(n.Id, out var visual) &&
+        var sameTopology = _visualKernelId == k.Id && _nodeVisuals.Count == visibleNodes.Length &&
+            visibleNodes.All(n => _nodeVisuals.TryGetValue(n.Id, out var visual) &&
                 visual.Model.Op == n.Op && visual.Model.Inputs.SequenceEqual(n.Inputs));
         if (!sameTopology)
         {
@@ -38,7 +39,7 @@ public partial class GpuWorkspaceView : UserControl
             _nodeVisuals.Clear();
             _wireVisuals.Clear();
             _visualKernelId = k.Id;
-            foreach (var n in k.Nodes)
+            foreach (var n in visibleNodes)
             {
                 var panel = new StackPanel { Spacing = 3 };
                 var title = new TextBlock
@@ -117,7 +118,7 @@ public partial class GpuWorkspaceView : UserControl
                 border.SizeChanged += (_, _) => { _anchorsDirty = true; ScheduleFrame(); };
                 NodeCanvas.Children.Add(border);
             }
-            foreach (var n in k.Nodes)
+            foreach (var n in visibleNodes)
                 for (var input = 0; input < n.Inputs.Count; input++)
                     if (_nodeVisuals.TryGetValue(n.Inputs[input], out var source))
                     {
@@ -132,11 +133,10 @@ public partial class GpuWorkspaceView : UserControl
                     }
             _anchorsDirty = true;
         }
-        RebuildStageOutput(vm, k);
         var destinations = _wireVisuals.ToLookup(wire => wire.Source.Model.Id);
         var modelsById = k.Nodes.ToDictionary(node => node.Id);
         var writes = k.Writes.ToLookup(write => write.Value);
-        foreach (var n in k.Nodes)
+        foreach (var n in visibleNodes)
         {
             var visual = _nodeVisuals[n.Id];
             visual.Model = n;
@@ -174,6 +174,8 @@ public partial class GpuWorkspaceView : UserControl
         }
         UpdateSelectionStyles();
         if (_drag is null) ApplySavedPositions();
+        RebuildStageOutput(vm, k);
+        UpdateStageOutputAnchors();
         Dispatcher.UIThread.Post(_viewport.Initialize);
         ScheduleFrame();
     }

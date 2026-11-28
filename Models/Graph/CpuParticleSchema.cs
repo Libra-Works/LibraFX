@@ -53,8 +53,13 @@ public static class CpuParticleSchema
                 Node("CpuParticleSpriteDraw", 720, 80)], []);
         }
         var entry = Node("CpuParticleStageEvent", 80, 100);
-        var operation = Node(Name(kind) == "CpuParticleSpawn" ? "CpuParticleSetVelocity" : "CpuParticleMove", 400, 100);
-        return new([entry, operation], [new(entry.Id, operation.Id, "signal", "then")]);
+        var output = Node("CpuParticleAttributesOutput", 400, 100);
+        if (Name(kind) == "CpuParticleUpdate")
+        {
+            var input = Node("CpuParticleAttributesInput", 80, 240);
+            return new([entry, input, output], [new(entry.Id, output.Id, "signal", "then")]);
+        }
+        return new([entry, output], [new(entry.Id, output.Id, "signal", "then")]);
     }
 
     public static void ValidateContext(GraphSnapshot graph, GraphNodeKind? parent = null, bool insideSpawnable = false,

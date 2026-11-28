@@ -237,7 +237,9 @@ internal static class SpawnableHierarchyTests
                         burst = CpuParticleCompilation.Parameter(system, "burst").GetInt32(),
                         particleLife = system.ChildGraph!.Nodes
                             .Single(stage => CpuParticleSchema.Name(stage.Kind) == "CpuParticleSpawn")
-                            .ChildGraph!.Nodes.Where(node => CpuParticleSchema.Name(node.Kind) == "CpuParticleSetLife")
+                            .ChildGraph!.Nodes.Where(node =>
+                                CpuParticleSchema.Name(node.Kind) == "CpuParticleSetLife" ||
+                                (node.Kind.Value == "Float" && node.Name == "Particle lifetime"))
                             .Select(node => new
                             {
                                 nodeId = node.Id,
@@ -352,7 +354,9 @@ internal static class SpawnableHierarchyTests
                         burst = CpuParticleCompilation.Parameter(system, "burst").GetInt32(),
                         particleLife = system.ChildGraph!.Nodes
                             .Single(stage => CpuParticleSchema.Name(stage.Kind) == "CpuParticleSpawn")
-                            .ChildGraph!.Nodes.Where(node => CpuParticleSchema.Name(node.Kind) == "CpuParticleSetLife")
+                            .ChildGraph!.Nodes.Where(node =>
+                                CpuParticleSchema.Name(node.Kind) == "CpuParticleSetLife" ||
+                                (node.Kind.Value == "Float" && node.Name == "Particle lifetime"))
                             .Select(node => new
                             {
                                 nodeId = node.Id,
@@ -378,7 +382,7 @@ internal static class SpawnableHierarchyTests
         var spawnStage = cpuSystem.ChildGraph!.Nodes.Single(node =>
             CpuParticleSchema.Name(node.Kind) == "CpuParticleSpawn");
         var velocity = spawnStage.ChildGraph!.Nodes.Single(node =>
-            CpuParticleSchema.Name(node.Kind) == "CpuParticleSetVelocity");
+            CpuParticleSchema.Name(node.Kind) == "CpuParticleAttributesOutput");
         var setLife = Node("CpuParticleSetLife", parameters: [Parameter("value", "float", 4d)]);
         spawnStage = spawnStage with
         {
@@ -529,7 +533,7 @@ internal static class SpawnableHierarchyTests
         var stableChild = WithStableIds(WithDefaultDrawAsset(CpuParticleSchema.CreateChild(cpuSystem.Kind)), "cpu-only-retention-kernel");
         var spawnStage = stableChild.Nodes.Single(node => CpuParticleSchema.Name(node.Kind) == "CpuParticleSpawn");
         var velocity = spawnStage.ChildGraph!.Nodes.Single(node =>
-            CpuParticleSchema.Name(node.Kind) == "CpuParticleSetVelocity");
+            CpuParticleSchema.Name(node.Kind) == "CpuParticleAttributesOutput");
         var setLife = Node("CpuParticleSetLife", Id("40000000-0000-4000-8000-000000000009"),
             "Four second particle", parameters: [Parameter("value", "float", 4d)]);
         spawnStage = spawnStage with

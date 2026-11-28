@@ -216,7 +216,7 @@ public partial class GpuWorkspaceView : UserControl
             }
             CapacityLabel.Text = LocalizationService.Shared.Get(fluid ? "Fluid.CellCount" : "Gpu.Capacity");
             Capacity.IsEnabled = ApplyCapacityButton.IsEnabled = !fluid;
-            TypeChoice.IsVisible = !fluid && vm.Kernel is not null;
+            TypeChoiceLabel.IsVisible = TypeChoice.IsVisible = !fluid && vm.Kernel is not null;
             FutureTextureButton.IsVisible = !fluid;
             BackButton.Content = LocalizationService.Shared.Get(vm.Kernel is null ? "Gpu.Close" : "Gpu.FlowBack");
             FlowScroll.IsVisible = fluid || vm.Kernel is null;
@@ -241,6 +241,7 @@ public partial class GpuWorkspaceView : UserControl
             {
                 foreach (var op in vm.Palette)
                 {
+                    if (op.Op is GpuOp.ReadAttribute or GpuOp.ReadUniform) continue;
                     var opButton = Button("+ " + OperationDisplayName(op.Op), () => AddPaletteNode(vm, op.Op));
                     ToolTip.SetTip(opButton, OpDescription(op.Op));
                     AttachPaletteDrag(opButton, op.Op);

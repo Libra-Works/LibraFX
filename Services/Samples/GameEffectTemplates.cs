@@ -45,11 +45,11 @@ public static class GameEffectTemplates
                     Set("rate", "float", weather ? archetype == "Rain" ? 900d : 220d : fountain ? 150d : 0d);
                     Set("burst", "int", fountain ? 0 : archetype == "HitImpact" ? 96 : archetype == "Explosion" ? 384 : 256);
                     break;
-                case "CpuParticleSetLife": Set("value", "float", duration); break;
-                case "CpuParticleSetSize": Set("value", "vector2", archetype switch
+                case "Float" when node.Name == "Particle lifetime": Set("value", "float", duration); break;
+                case "FloatX2" when node.Name == "Glow diameter": Set("value", "vector2", archetype switch
                 { "Rain" => new[] { .015, .22 }, "Snow" => new[] { .045, .045 }, "DustPuff" => new[] { .35, .35 },
                   "Explosion" => new[] { .22, .22 }, _ => new[] { .12, .12 } }); break;
-                case "CpuParticleSetColor": Set("value", "color", new[] { rgb[0], rgb[1], rgb[2], 1 }); break;
+                case "Color" when node.Name == "Initial tint": Set("value", "color", new[] { rgb[0], rgb[1], rgb[2], 1 }); break;
                 case "ComposeVector4": Set("r", "float", rgb[0]); Set("g", "float", rgb[1]); Set("b", "float", rgb[2]); break;
                 case "CpuParticleMove": Set("acceleration", "vector3", fountain ? new double[] { 0, .3, 0 } : new double[] { 0, -.5, 0 }); break;
                 case "MultiplyVector3" when node.Name == "Outward speed":
@@ -77,21 +77,24 @@ public static class GameEffectTemplates
     {
         var shape = graph.Nodes.Single(node => node.Kind.Value == "CpuParticleEmitterSphere");
         var box = GraphNodeDefinition.All.Single(item => item.Kind.Value == "CpuParticleEmitterBox");
-        var position = graph.Nodes.Single(node => node.Kind.Value == "CpuParticleSetPosition");
-        var velocity = graph.Nodes.Single(node => node.Kind.Value == "CpuParticleSetVelocity");
+        var floatX3 = GraphNodeDefinition.All.Single(item => item.Kind.Value == "FloatX3");
+        var spawnOut = graph.Nodes.Single(node => node.Kind.Value == "CpuParticleAttributesOutput");
+        var velocityConst = new GraphNodeSnapshot(Guid.NewGuid(), floatX3.Kind, "Weather velocity", -80, 120,
+            floatX3.PortType, floatX3.PortCategory, Parameters:
+            [new("value", "vector3", JsonSerializer.SerializeToElement(archetype == "Rain"
+                ? new double[] { 0, -8, 0 } : new double[] { .2, -.6, 0 }))]);
         var discarded = graph.Nodes.Where(node => node.Name is "Horizontal spread" or "Upward velocity").Select(node => node.Id).ToHashSet();
         return graph with
         {
             Nodes = graph.Nodes.Where(node => !discarded.Contains(node.Id)).Select(node => node.Id == shape.Id ?
                 node with { Kind = box.Kind, Name = "Weather emission area", Parameters =
                     [new("extent", "vector3", JsonSerializer.SerializeToElement(new double[] { 5, 0, 5 })),
-                     new("center", "vector3", JsonSerializer.SerializeToElement(new double[] { 0, 4, 0 }))] } :
-                node.Id == velocity.Id ? node with { Parameters =
-                    [new("value", "vector3", JsonSerializer.SerializeToElement(archetype == "Rain"
-                        ? new double[] { 0, -8, 0 } : new double[] { .2, -.6, 0 }))] } : node).ToArray(),
+                     new("center", "vector3", JsonSerializer.SerializeToElement(new double[] { 0, 4, 0 }))] } : node)
+                .Append(velocityConst).ToArray(),
             Connections = graph.Connections.Where(edge => !discarded.Contains(edge.SourceNodeId) &&
-                !discarded.Contains(edge.TargetNodeId) && !(edge.TargetNodeId == velocity.Id && edge.TargetPortId == "value"))
-                .Append(new(shape.Id, position.Id, "value", "value")).ToArray()
+                !discarded.Contains(edge.TargetNodeId) && !(edge.TargetNodeId == spawnOut.Id && edge.TargetPortId == "velocity"))
+                .Append(new(shape.Id, spawnOut.Id, "position", "value"))
+                .Append(new(velocityConst.Id, spawnOut.Id, "velocity", "value")).ToArray()
         };
     }
 

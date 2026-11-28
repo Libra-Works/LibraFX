@@ -40,6 +40,18 @@ public partial class GpuWorkspaceView
         public readonly GpuConnectionCurve Curve = curve;
     }
 
+    private sealed class InputWireVisual(string key, NodeVisual target, int input, GpuConnectionCurve curve)
+    {
+        public readonly string Key = key;
+        public readonly NodeVisual Target = target;
+        public readonly int Input = input;
+        public readonly GpuConnectionCurve Curve = curve;
+    }
+
+    private static bool IsStageInputNode(GpuNode node) =>
+        (node.Op == GpuOp.ReadAttribute && node.Attribute is not null) ||
+        (node.Op == GpuOp.ReadUniform && node.Uniform is "deltaTime" or "time" or "emitterPosition");
+
     private StageCardVisual? _stageOutput;
     private StageCardVisual? _stageInput;
     private readonly Dictionary<string, Point> _stageOutputPositions = [];
@@ -47,6 +59,7 @@ public partial class GpuWorkspaceView
     private (StageCardVisual Card, Dictionary<string, Point> Store, IPointer Pointer, Point Start, Point Original)? _stageCardDrag;
     private (string Key, bool IsUniform, GpuType Type, Button Pin, IPointer Pointer, GpuConnectionCurve Preview, Point Start, Point Latest)? _stageInputDrag;
     private readonly List<OutputWireVisual> _outputWires = [];
+    private readonly List<InputWireVisual> _inputWires = [];
     private readonly Dictionary<string, string> _customAttributeLabels = [];
     private readonly HashSet<string> _visibleOutputAttributes =
         ["Position", "Velocity", "Color", "Size", "Rotation", "Age", "Lifetime"];
@@ -75,6 +88,11 @@ public partial class GpuWorkspaceView
             NodeCanvas.Children.Remove(wire.Curve);
         }
         _outputWires.Clear();
+        foreach (var wire in _inputWires)
+        {
+            NodeCanvas.Children.Remove(wire.Curve);
+        }
+        _inputWires.Clear();
     }
 
     private void AttachStageCardDrag(StageCardVisual card, Dictionary<string, Point> store, string kernelId)
@@ -350,6 +368,28 @@ public partial class GpuWorkspaceView
         AttachStageCardDrag(_stageInput, _stageInputPositions, k.Id);
         border.SizeChanged += (_, _) => { _anchorsDirty = true; ScheduleFrame(); };
         NodeCanvas.Children.Add(border);
+
+        var modelsById = k.Nodes.ToDictionary(n => n.Id);
+        foreach (var n in k.Nodes)
+        {
+            if (IsStageInputNode(n) || !_nodeVisuals.TryGetValue(n.Id, out var target)) continue;
+            for (var input = 0; input < n.Inputs.Count; input++)
+            {
+                if (!modelsById.TryGetValue(n.Inputs[input], out var src) || !IsStageInputNode(src)) continue;
+                var key = src.Op == GpuOp.ReadUniform ? src.Uniform! : src.Attribute!;
+                if (!pins.ContainsKey(key)) continue;
+                var curve = new GpuConnectionCurve
+                {
+                    Width = NodeCanvas.Width,
+                    Height = NodeCanvas.Height,
+                    Stroke = TypeBrush(src.Type),
+                    StrokeThickness = 2,
+                    IsHitTestVisible = false
+                };
+                _inputWires.Add(new InputWireVisual(key, target, input, curve));
+                NodeCanvas.Children.Insert(1, curve);
+            }
+        }
     }
 
     private string EnsureStageInputNode(GpuWorkspaceViewModel vm, KernelGraph k, string key, bool isUniform, GpuType type)
@@ -431,16 +471,33 @@ public partial class GpuWorkspaceView
 
     private void UpdateOutputWireGeometry()
     {
-        if (_stageOutput is not { } stage) return;
-        foreach (var wire in _outputWires)
+        if (_stageOutput is { } stage)
         {
-            if (stage.Anchors.TryGetValue(wire.Attribute, out var endAnchor))
+            foreach (var wire in _outputWires)
             {
-                wire.Curve.Width = NodeCanvas.Width;
-                wire.Curve.Height = NodeCanvas.Height;
-                wire.Curve.SetEndpoints(
-                    wire.Source.CanvasPosition + (Vector)wire.Source.OutputAnchor,
-                    stage.CanvasPosition + (Vector)endAnchor);
+                if (stage.Anchors.TryGetValue(wire.Attribute, out var endAnchor))
+                {
+                    wire.Curve.Width = NodeCanvas.Width;
+                    wire.Curve.Height = NodeCanvas.Height;
+                    wire.Curve.SetEndpoints(
+                        wire.Source.CanvasPosition + (Vector)wire.Source.OutputAnchor,
+                        stage.CanvasPosition + (Vector)endAnchor);
+                }
+            }
+        }
+        if (_stageInput is { } inputStage)
+        {
+            foreach (var wire in _inputWires)
+            {
+                if (inputStage.Anchors.TryGetValue(wire.Key, out var startAnchor) &&
+                    wire.Input < wire.Target.InputAnchors.Length)
+                {
+                    wire.Curve.Width = NodeCanvas.Width;
+                    wire.Curve.Height = NodeCanvas.Height;
+                    wire.Curve.SetEndpoints(
+                        inputStage.CanvasPosition + (Vector)startAnchor,
+                        wire.Target.CanvasPosition + (Vector)wire.Target.InputAnchors[wire.Input]);
+                }
             }
         }
     }

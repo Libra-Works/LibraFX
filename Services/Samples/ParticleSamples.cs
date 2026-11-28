@@ -207,7 +207,8 @@ public static class ParticleSamples
         }
         public Guid Add(string kind, string name, params (string Id, string Type, object Value)[] values)
         {
-            var definition = GraphNodeDefinition.All.Single(item => item.Kind.Value == kind);
+            var definition = GraphNodeDefinition.All.Single(item =>
+                item.Kind.Value == kind || (item.TypeName == kind && item.Namespace == "LiberaFx"));
             var id = Guid.NewGuid(); var index = _nodes.Count;
             _nodes.Add(new(id, definition.Kind, name, index % 4 * 300, index / 4 * 210,
                 definition.PortType, definition.PortCategory, Parameters: values.Select(value =>
@@ -231,12 +232,13 @@ public static class ParticleSamples
             var spawn = new Builder();
             var entry = spawn.Add("CpuParticleStageEvent", "Spawn");
             Guid? positionInput = externalPosition ? spawn.Add("CpuParticleInputVector3", "Emission centre") : null;
-            var position = spawn.Add("CpuParticleSetPosition", "Initial position");
-            if (positionInput is { } center) spawn.Wire(center, position, "value");
+            var spawnOut = spawn.Add("CpuParticleAttributesOutput", "Spawn output");
+            spawn.Wire(entry, spawnOut, "signal", "then");
+            if (positionInput is { } center) spawn.Wire(center, spawnOut, "position");
             if (mesh)
             {
                 var meshPosition = spawn.Add("CpuParticleMeshPosition", "Mesh surface position");
-                spawn.Wire(meshPosition, position, "value", "value");
+                spawn.Wire(meshPosition, spawnOut, "position", "value");
             }
             var shape = spawn.Add("CpuParticleEmitterSphere", "Deterministic random direction", ("radius", "float", 1d));
             Guid direction;
@@ -257,32 +259,32 @@ public static class ParticleSamples
                 direction = spawn.Add("MultiplyVector3", "Outward speed", ("b", "vector3", new double[] { 3, 3, 3 }));
                 spawn.Wire(normalized, direction, "a", "value");
             }
-            var velocity = spawn.Add("CpuParticleSetVelocity", "Initial velocity");
-            spawn.Wire(direction, velocity, "value");
-            var lifetime = spawn.Add("CpuParticleSetLife", "Particle lifetime", ("value", "float", life));
-            var size = spawn.Add("CpuParticleSetSize", "Glow diameter", ("value", "vector2", new double[] { .14, .14 }));
-            var tint = spawn.Add("CpuParticleSetColor", "Initial tint", ("value", "color", color));
-            var chain = new[] { entry, position, velocity, lifetime, size, tint };
-            for (var i = 1; i < chain.Length; i++) spawn.Wire(chain[i - 1], chain[i], "signal", "then");
+            spawn.Wire(direction, spawnOut, "velocity");
+            var lifetime = spawn.Add("Float", "Particle lifetime", ("value", "float", life));
+            spawn.Wire(lifetime, spawnOut, "life");
+            var size = spawn.Add("FloatX2", "Glow diameter", ("value", "vector2", new double[] { .14, .14 }));
+            spawn.Wire(size, spawnOut, "size");
+            var tint = spawn.Add("Color", "Initial tint", ("value", "color", color));
+            spawn.Wire(tint, spawnOut, "color");
 
             var update = new Builder();
             var tick = update.Add("CpuParticleStageEvent", "Update");
             var move = update.Add("CpuParticleMove", "Velocity + gravity", ("acceleration", "vector3",
                 new double[] { 0, launch ? -3 : fountain ? -9.81 : -1.5, 0 }));
             update.Wire(tick, move, "signal", "then");
-            var age = update.Add("CpuParticleAge", "Age");
-            var duration = update.Add("CpuParticleLife", "Lifetime");
+            var attrsIn = update.Add("CpuParticleAttributesInput", "Particle attributes");
             var normalizedAge = update.Add("Divide", "Age / lifetime");
-            update.Wire(age, normalizedAge, "a", "value");
-            update.Wire(duration, normalizedAge, "b", "value");
+            update.Wire(attrsIn, normalizedAge, "a", "age");
+            update.Wire(attrsIn, normalizedAge, "b", "life");
             var clamp = update.Add("Clamp", "Saturate lifetime"); update.Wire(normalizedAge, clamp, "a");
             var fade = update.Add("Subtract", "Fade out", ("a", "float", 1d)); update.Wire(clamp, fade, "b", "value");
             var rgba = update.Add("ComposeVector4", "Tint and opacity", ("r", "float", color[0]),
                 ("g", "float", color[1]), ("b", "float", color[2]));
             update.Wire(fade, rgba, "a");
             var asColor = update.Add("Vector4ToColor", "Particle color"); update.Wire(rgba, asColor, "a", "value");
-            var setColor = update.Add("CpuParticleSetColor", "Fade particle"); update.Wire(asColor, setColor, "value");
-            update.Wire(move, setColor, "signal", "then");
+            var attrsOut = update.Add("CpuParticleAttributesOutput", "Update output");
+            update.Wire(asColor, attrsOut, "color");
+            update.Wire(move, attrsOut, "signal", "then");
 
             var particle = new Builder();
             particle.AddChild("CpuParticleSpawn", "Spawn", spawn.Graph);

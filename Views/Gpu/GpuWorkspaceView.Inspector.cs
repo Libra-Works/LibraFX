@@ -23,6 +23,7 @@ public partial class GpuWorkspaceView : UserControl
         var n = vm.Kernel?.Nodes.FirstOrDefault(n => n.Id == _selection);
         SelectionLabel.Text = n is null ? LocalizationService.Shared.Get("Gpu.SelectVisualNode") : NodeDisplayName(n);
         ToolTip.SetTip(SelectionLabel, n?.Id);
+        WritesSeparator.IsVisible = WritesHeading.IsVisible = WritesPanel.IsVisible = BindingsPanel.IsVisible = n is null;
         if (n is null) return;
         var type = new ComboBox { ItemsSource = Enum.GetValues<GpuType>().Where(t => t != GpuType.Quaternion).ToArray(), SelectedItem = n.Type };
         if (n.Op == GpuOp.SampleFlowMap)
@@ -32,8 +33,88 @@ public partial class GpuWorkspaceView : UserControl
             NodeInspector.Children.Add(new TextBlock { Text = LocalizationService.Shared.Get("Gpu.ResultType") });
             NodeInspector.Children.Add(type);
         }
-        var value = new TextBox { Text = string.Join(", ", n.Value.Select(v => v.ToString("G", CultureInfo.InvariantCulture))) };
-        if (n.Op == GpuOp.Constant) { NodeInspector.Children.Add(new TextBlock { Text = LocalizationService.Shared.Get("Gpu.ConstantComponents") }); NodeInspector.Children.Add(value); }
+        var constantPanel = new StackPanel { Spacing = 4 };
+        var componentBoxes = new List<TextBox>();
+        CheckBox? boolBox = null;
+        static int ConstantComponentCount(GpuType gpuType) => gpuType switch
+        {
+            GpuType.Float2 => 2,
+            GpuType.Float3 => 3,
+            GpuType.Float4 => 4,
+            _ => 1
+        };
+        static string[] ConstantComponentLabels(GpuType gpuType) => gpuType switch
+        {
+            GpuType.Float2 => ["X", "Y"],
+            GpuType.Float3 => ["X", "Y", "Z"],
+            GpuType.Float4 => ["X", "Y", "Z", "W"],
+            _ => ["Value"]
+        };
+        List<double> ReadConstantValues(GpuType gpuType)
+        {
+            if (gpuType == GpuType.Bool)
+                return [boolBox?.IsChecked == true ? 1d : 0d];
+            var count = ConstantComponentCount(gpuType);
+            var list = new List<double>(count);
+            for (var i = 0; i < count; i++)
+            {
+                var raw = i < componentBoxes.Count ? componentBoxes[i].Text : null;
+                var fallback = i < n.Value.Count ? n.Value[i] : 0d;
+                list.Add(double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed) ? parsed : fallback);
+            }
+            return list;
+        }
+        void RebuildConstantInputs(GpuType gpuType, IReadOnlyList<double> values, Action onCommit)
+        {
+            constantPanel.Children.Clear();
+            componentBoxes.Clear();
+            boolBox = null;
+            if (gpuType == GpuType.Bool)
+            {
+                boolBox = new CheckBox
+                {
+                    Content = "True",
+                    IsChecked = values.Count > 0 && values[0] != 0d
+                };
+                boolBox.IsCheckedChanged += (_, _) => onCommit();
+                constantPanel.Children.Add(boolBox);
+                return;
+            }
+            var labels = ConstantComponentLabels(gpuType);
+            for (var i = 0; i < labels.Length; i++)
+            {
+                var box = new TextBox
+                {
+                    Text = (i < values.Count ? values[i] : 0d).ToString("G", CultureInfo.InvariantCulture),
+                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch
+                };
+                box.LostFocus += (_, _) => onCommit();
+                box.KeyDown += (_, e) => { if (e.Key == Key.Enter) { onCommit(); e.Handled = true; } };
+                componentBoxes.Add(box);
+                if (labels.Length == 1)
+                {
+                    constantPanel.Children.Add(box);
+                }
+                else
+                {
+                    var row = new Grid { ColumnDefinitions = new ColumnDefinitions("20,*"), ColumnSpacing = 6 };
+                    row.Children.Add(new TextBlock
+                    {
+                        Text = labels[i],
+                        VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+                        FontWeight = FontWeight.SemiBold
+                    });
+                    Grid.SetColumn(box, 1);
+                    row.Children.Add(box);
+                    constantPanel.Children.Add(row);
+                }
+            }
+        }
+        if (n.Op == GpuOp.Constant)
+        {
+            NodeInspector.Children.Add(new TextBlock { Text = LocalizationService.Shared.Get("Gpu.ConstantComponents") });
+            NodeInspector.Children.Add(constantPanel);
+        }
         var attr = new ComboBox { ItemsSource = ParticleAbi.Attributes.Select(a => a.Id).ToArray(), SelectedItem = n.Attribute };
         if (n.Op == GpuOp.ReadAttribute) NodeInspector.Children.Add(attr);
         var uniform = new ComboBox { ItemsSource = ParticleAbi.Uniforms.Keys.ToArray(), SelectedItem = n.Uniform };
@@ -49,8 +130,12 @@ public partial class GpuWorkspaceView : UserControl
             NodeInspector.Children.Add(new TextBlock { Text = LocalizationService.Shared.Get("Gpu.FlowMapResource") });
             NodeInspector.Children.Add(flowMap);
         }
-        var component = new TextBox { Text = (n.ComponentIndex ?? 0).ToString(CultureInfo.InvariantCulture) };
-        if (n.Op == GpuOp.Component) { NodeInspector.Children.Add(new TextBlock { Text = "Component 0…3" }); NodeInspector.Children.Add(component); }
+        var component = new ComboBox
+        {
+            ItemsSource = new[] { "0 (X)", "1 (Y)", "2 (Z)", "3 (W)" },
+            SelectedIndex = Math.Clamp(n.ComponentIndex ?? 0, 0, 3)
+        };
+        if (n.Op == GpuOp.Component) { NodeInspector.Children.Add(new TextBlock { Text = "Component" }); NodeInspector.Children.Add(component); }
 
         if (n.Op == GpuOp.FCurve)
         {
@@ -121,15 +206,14 @@ public partial class GpuWorkspaceView : UserControl
 
         void CommitInspector() => Run(() =>
         {
+            var nextType = n.Op == GpuOp.SampleFlowMap ? n.Type : (GpuType)type.SelectedItem!;
             var updated = n with
             {
-                Type = n.Op == GpuOp.SampleFlowMap ? n.Type : (GpuType)type.SelectedItem!,
-                Value = n.Op == GpuOp.Constant
-                    ? value.Text!.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
-                        .Select(v => double.Parse(v, CultureInfo.InvariantCulture)).ToList() : n.Value,
+                Type = nextType,
+                Value = n.Op == GpuOp.Constant ? ReadConstantValues(nextType) : n.Value,
                 Attribute = n.Op == GpuOp.ReadAttribute ? attr.SelectedItem as string : n.Attribute,
                 Uniform = n.Op == GpuOp.ReadUniform ? uniform.SelectedItem as string : n.Uniform,
-                ComponentIndex = n.Op == GpuOp.Component ? int.Parse(component.Text!, CultureInfo.InvariantCulture) : n.ComponentIndex,
+                ComponentIndex = n.Op == GpuOp.Component ? Math.Clamp(component.SelectedIndex, 0, 3) : n.ComponentIndex,
                 Resource = n.Op == GpuOp.SampleFlowMap ? flowMap.SelectedItem as string : n.Resource,
                 SourceSpan = null
             };
@@ -137,16 +221,20 @@ public partial class GpuWorkspaceView : UserControl
                 vm.Edit(new() { Action = "update", KernelId = vm.KernelId, Node = updated });
         });
 
-        type.SelectionChanged += (_, _) => CommitInspector();
+        if (n.Op == GpuOp.Constant)
+            RebuildConstantInputs(n.Type, n.Value, CommitInspector);
+
+        type.SelectionChanged += (_, _) =>
+        {
+            if (n.Op == GpuOp.Constant && type.SelectedItem is GpuType nextType)
+                RebuildConstantInputs(nextType, ReadConstantValues(nextType), CommitInspector);
+            CommitInspector();
+        };
         attr.SelectionChanged += (_, _) => CommitInspector();
         uniform.SelectionChanged += (_, _) => CommitInspector();
         flowMap.SelectionChanged += (_, _) => CommitInspector();
-        value.LostFocus += (_, _) => CommitInspector();
-        value.KeyDown += (_, e) => { if (e.Key == Key.Enter) { CommitInspector(); e.Handled = true; } };
-        component.LostFocus += (_, _) => CommitInspector();
-        component.KeyDown += (_, e) => { if (e.Key == Key.Enter) { CommitInspector(); e.Handled = true; } };
+        component.SelectionChanged += (_, _) => CommitInspector();
 
-        NodeInspector.Children.Add(Button(LocalizationService.Shared.Get("Gpu.ApplyProperties"), CommitInspector));
         for (var i = 0; i < n.Inputs.Count; i++)
         {
             var input = i;
@@ -187,28 +275,6 @@ public partial class GpuWorkspaceView : UserControl
                 WritesPanel.Children.Add(customize);
             }
         }
-        foreach (var write in k.Writes)
-        {
-            var attribute = ParticleAbi.Attributes.SingleOrDefault(a => a.Id == write.Attribute);
-            var producer = k.Nodes.FirstOrDefault(node => node.Id == write.Value);
-            var target = LocalizationService.Shared.Get("Gpu.Attribute." + write.Attribute);
-            WritesPanel.Children.Add(new TextBlock
-            {
-                Text = $"@{target} : {attribute?.Type} ← {(producer is null ? write.Value : NodeDisplayName(producer))}",
-                TextWrapping = TextWrapping.Wrap
-            });
-            WritesPanel.Children.Add(Button("Remove " + write.Id, () => vm.Edit(new() { Action = "write-remove", KernelId = k.Id, NodeId = write.Id })));
-        }
-        var attributes = new ComboBox { ItemsSource = ParticleAbi.Attributes.Select(a => a.Id).ToArray(), SelectedIndex = 0 };
-        WritesPanel.Children.Add(attributes);
-        WritesPanel.Children.Add(Button(LocalizationService.Shared.Get("Gpu.WriteSelectedNode"), () =>
-        {
-            if (_selection is null) throw new ArgumentException("Select a node first.");
-            var attribute = (string)attributes.SelectedItem!;
-            var existing = k.Writes.FirstOrDefault(w => w.Attribute == attribute);
-            vm.Edit(new() { Action = "write", KernelId = k.Id,
-                Write = new(existing?.Id ?? "w_" + Guid.NewGuid().ToString("N"), attribute, _selection) });
-        }));
         WritesPanel.Children.Add(new TextBlock
         {
             Text = LocalizationService.Shared.Get("Gpu.CustomAttributes"),
@@ -310,7 +376,6 @@ public partial class GpuWorkspaceView : UserControl
     {
         BindingsPanel.Children.Clear();
         var vm = Workspace!;
-        BindingsPanel.Children.Add(new TextBlock { Text = LocalizationService.Shared.Get("Gpu.FormatManaged"), TextWrapping = TextWrapping.Wrap });
         BindingsPanel.Children.Add(new TextBlock { Text = LocalizationService.Shared.Get("Gpu.SpawnRate") });
         var spawnRate = new NumericUpDown { Name = "GpuSpawnRate", Minimum = 0, Maximum = 1_000_000,
             Value = (decimal)(vm.State.Program.SpawnRate ?? 100), IsEnabled = !vm.Graph.IsReadOnly };
