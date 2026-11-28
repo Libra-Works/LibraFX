@@ -47,6 +47,7 @@ internal static class GraphUxTests
                 Dispatcher.UIThread.RunJobs();
                 Thread.Sleep(2);
             }
+            window.UpdateLayout();
             Dispatcher.UIThread.RunJobs();
             var innerView = outerView.GetVisualDescendants().OfType<GraphEditorView>().First(v => !ReferenceEquals(v, outerView));
             var innerCanvas = innerView.FindControl<Grid>("GraphCanvas")!;
