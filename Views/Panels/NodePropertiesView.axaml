@@ -10,23 +10,34 @@
     <Border Classes="editor-bar" BorderThickness="0,0,0,1">
         <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
             <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                <TextBlock Classes="editor-heading" Text="{DynamicResource Text.Gpu.Properties}"
+                           IsVisible="{Binding HasGpuInspector}"
+                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
                 <TextBlock Classes="editor-heading" Text="{Binding InspectorNodeType}"
                            IsVisible="{Binding HasInspectorTarget}"
                            TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
                 <TextBlock Classes="editor-heading" Text="{Binding InspectorTitle}"
-                           IsVisible="{Binding !HasInspectorTarget}"
-                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center">
+                    <TextBlock.IsVisible>
+                        <MultiBinding Converter="{x:Static BoolConverters.And}">
+                            <Binding Path="!HasInspectorTarget" />
+                            <Binding Path="!HasGpuInspector" />
+                        </MultiBinding>
+                    </TextBlock.IsVisible>
+                </TextBlock>
                 <TextBlock Classes="editor-label" Text="{DynamicResource Text.Panels.ContainingSpawnable}"
                            IsVisible="{Binding IsInspectingContainingSpawnable}"
                            ToolTip.Tip="{DynamicResource Text.Panels.ContainingSpawnableHint}"
                            VerticalAlignment="Center" />
             </StackPanel>
             <viewsControls:IconButton Grid.Column="1" Classes="editor-tool" Icon="{Binding InspectorPinIcon}" IsEnabled="{Binding CanTogglePin}"
+                              IsVisible="{Binding !HasGpuInspector}"
                               Click="OnTogglePinClick" ToolTip.Tip="{Binding InspectorPinHint}"
                               AutomationProperties.Name="{Binding InspectorPinHint}" />
         </Grid>
     </Border>
-    <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled">
+    <ContentControl Grid.Row="1" Content="{Binding ActiveGpuInspector}" IsVisible="{Binding HasGpuInspector}" />
+    <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled" IsVisible="{Binding !HasGpuInspector}">
     <StackPanel Margin="8" Spacing="6">
         <TextBlock Classes="editor-label"
                    Text="{DynamicResource Text.Panels.InspectorEmptyHint}"

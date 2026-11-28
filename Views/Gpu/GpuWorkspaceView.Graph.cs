@@ -148,7 +148,7 @@ public partial class GpuWorkspaceView : UserControl
                 return $"{NodeDisplayName(target)} / {InputDisplayName(input?.Id ?? "input")}";
             }).Concat(writes[n.Id].Select(write =>
                 LocalizationService.Shared.Get("Gpu.OutputAttributeTarget", AttributeDisplayName(write.Attribute)))).ToArray();
-            var outputText = $"{OutputDisplayName(n)} : {n.Type}";
+            var outputText = $"{OutputDisplayName(n)} : {GpuTypeLabel(n.Type)}";
             visual.OutputLabel.Text = outputText;
             visual.DestinationLabel.IsVisible = targets.Length != 0;
             visual.DestinationLabel.Text = targets.Length switch
@@ -168,7 +168,7 @@ public partial class GpuWorkspaceView : UserControl
                 var source = k.Nodes.FirstOrDefault(x => x.Id == n.Inputs.ElementAtOrDefault(i));
                 var defaults = GpuOperationRegistry.GetDefaultInputs(n.Op, n.Type);
                 var descriptor = defaults.ElementAtOrDefault(i);
-                visual.InputLabels[i].Text = $"{InputDisplayName(descriptor?.Id ?? "input")} : {source?.Type ?? descriptor?.DefaultType ?? n.Type}";
+                visual.InputLabels[i].Text = $"{InputDisplayName(descriptor?.Id ?? "input")} : {GpuTypeLabel(source?.Type ?? descriptor?.DefaultType ?? n.Type)}";
                 visual.Inputs[i].Foreground = TypeBrush(source?.Type ?? descriptor?.DefaultType ?? n.Type);
             }
         }
@@ -210,8 +210,15 @@ public partial class GpuWorkspaceView : UserControl
             GpuOp.SampleFlowMap => GpuOperationRegistry.Operations[node.Op].DisplayName + " · " + node.Resource,
             _ => OperationDisplayName(node.Op)
         };
-        return $"{operation} : {node.Type}";
+        return $"{operation} : {GpuTypeLabel(node.Type)}";
     }
+    internal static string GpuTypeLabel(GpuType type) => type switch
+    {
+        GpuType.Float2 => "Vector2",
+        GpuType.Float3 => "Vector3",
+        GpuType.Float4 => "Vector4",
+        _ => type.ToString()
+    };
     private static string OperationDisplayName(GpuOp operation) => operation is GpuOp.GreaterThan or GpuOp.LessThan
         ? LocalizationService.Shared.Get("Fluid.Operation." + operation) : GpuOperationRegistry.Operations[operation].DisplayName;
     private static string OutputDisplayName(GpuNode node) => node.Op switch

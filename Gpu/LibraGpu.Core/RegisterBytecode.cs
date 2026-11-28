@@ -111,9 +111,13 @@ public sealed class CompiledRegisterKernel
                 }
                 continue;
             }
+            static uint AttributeSlot(string name) =>
+                Enum.TryParse<GpuAttributeSlot>(name, out var slot)
+                    ? (uint)slot
+                    : 100u + unchecked((uint)StringComparer.Ordinal.GetHashCode(name)) % 65000u;
             uint aux = n.Op switch
             {
-                GpuOp.ReadAttribute => (uint)Enum.Parse<GpuAttributeSlot>(n.Attribute!),
+                GpuOp.ReadAttribute => AttributeSlot(n.Attribute!),
                 GpuOp.ReadUniform => n.Uniform switch { "deltaTime" => (uint)GpuUniformSlot.DeltaTime, "time" => (uint)GpuUniformSlot.Time, "emitterPosition" => (uint)GpuUniformSlot.EmitterPosition,
                     "emitterRow0" => 3, "emitterRow1" => 4, "emitterRow2" => 5, "emitterRow3" => 6, _ => throw new InvalidOperationException() },
                 GpuOp.Component => (uint)n.ComponentIndex!.Value,
@@ -146,8 +150,11 @@ public sealed class CompiledRegisterKernel
         foreach (var w in k.Writes)
         {
             mappings.Add(new(instructions.Count, w.Id, "value", w.SourceSpan));
+            var slot = Enum.TryParse<GpuAttributeSlot>(w.Attribute, out var builtinSlot)
+                ? (uint)builtinSlot
+                : 100u + unchecked((uint)StringComparer.Ordinal.GetHashCode(w.Attribute)) % 65000u;
             instructions.Add(new(GpuInstructionOpcode.WriteAttribute, MissingRegister, registers[w.Value], MissingRegister, MissingRegister, MissingRegister,
-                lookup[w.Value].Type, (uint)Enum.Parse<GpuAttributeSlot>(w.Attribute), Vector4.Zero));
+                lookup[w.Value].Type, slot, Vector4.Zero));
         }
         RegisterCount = nextReg;
         Instructions = Array.AsReadOnly(instructions.ToArray()); Mappings = Array.AsReadOnly(mappings.ToArray());
@@ -163,7 +170,7 @@ public sealed class CompiledRegisterKernel
     /// </summary>
     public byte[] SerializeLittleEndian()
     {
-        if (Instructions.Count > 65536 + ParticleAbi.Attributes.Count || RegisterCount > 65536)
+        if (Instructions.Count > 65536 + 1024 || RegisterCount > 65536)
             throw new InvalidOperationException("Register packet limit exceeded.");
         var bytes = new byte[checked(HeaderBytes + Instructions.Count * InstructionStride)];
         var s = bytes.AsSpan();

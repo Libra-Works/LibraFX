@@ -126,7 +126,7 @@ public static class GpuCompiler
         if (p.Attributes is null || p.Resources is null || p.Kernels is null || p.Flow is null)
         { Add("NullCollection", "Program collections cannot be null."); return d.AsReadOnly(); }
         if (p.Kernels.Count > limits.MaxKernels || p.Resources.Count > limits.MaxResources || p.Flow.Count > limits.MaxFlowSteps ||
-            p.Attributes.Count > ParticleAbi.Attributes.Count)
+            p.Attributes.Count > limits.MaxAttributes)
         { Add("Limit", "Program collection limit exceeded."); return d.AsReadOnly(); }
         var all = new HashSet<string>(StringComparer.Ordinal) { p.Id };
         void GlobalId(string? id)
@@ -140,7 +140,10 @@ public static class GpuCompiler
             if (a is null || !ValidId(a.Id)) { Add("Attribute", "Invalid attribute declaration."); continue; }
             if (!attributes.TryAdd(a.Id, a.Type)) Add("DuplicateId", $"Duplicate attribute '{a.Id}'.");
             var abi = ParticleAbi.Attributes.FirstOrDefault(x => x.Id == a.Id);
-            if (abi is null || abi.Type != a.Type) Add("AttributeAbi", $"Attribute '{a.Id}' does not match the fixed particle ABI.");
+            if (abi is not null && abi.Type != a.Type)
+                Add("AttributeAbi", $"Attribute '{a.Id}' does not match the fixed particle ABI.");
+            else if (abi is null && (!Enum.IsDefined(a.Type) || a.Type == GpuType.Quaternion))
+                Add("AttributeAbi", $"Custom attribute '{a.Id}' has an unsupported type.");
         }
         foreach (var required in ParticleAbi.Attributes)
             if (!attributes.ContainsKey(required.Id)) Add("AttributeAbi", $"Missing ABI attribute '{required.Id}'.");
@@ -243,7 +246,7 @@ public static class GpuCompiler
             k.Nodes?.FirstOrDefault(x => x is not null && x.Id == n)?.SourceSpan ??
             k.Writes?.FirstOrDefault(x => x is not null && x.Id == n)?.SourceSpan));
         if (k.Nodes is null || k.Writes is null) { Add("NullCollection", "Kernel collections cannot be null."); return; }
-        if (k.Nodes.Count > limits.MaxNodesPerKernel || k.Writes.Count > ParticleAbi.Attributes.Count)
+        if (k.Nodes.Count > limits.MaxNodesPerKernel || k.Writes.Count > attrs.Count)
         { Add("Limit", "Kernel exceeds node/write limits."); return; }
         var nodes = new Dictionary<string, GpuNode>(StringComparer.Ordinal);
         var local = new HashSet<string>(StringComparer.Ordinal);

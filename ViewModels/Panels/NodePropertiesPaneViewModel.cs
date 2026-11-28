@@ -26,6 +26,8 @@ public sealed class NodePropertiesPaneViewModel : Tool, IDisposable
     private readonly List<string> _unavailableExposedItems = [];
 
     public GraphWorkspaceViewModel Graph => _graph;
+    public object? ActiveGpuInspector => _activeGraph.ActiveGpuInspector;
+    public bool HasGpuInspector => _activeGraph.ActiveGpuInspector is not null;
     public GraphNodeViewModel? InspectorNode => _node;
     public bool HasInspectorTarget => _node is not null;
     public bool ShowRootEffectSettings => _graph.IsRootGraph && !HasInspectorTarget;
@@ -180,6 +182,12 @@ public sealed class NodePropertiesPaneViewModel : Tool, IDisposable
 
     private void OnActiveGraphChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(ActiveGraphProvider.ActiveGpuInspector))
+        {
+            OnPropertyChanged(nameof(ActiveGpuInspector));
+            OnPropertyChanged(nameof(HasGpuInspector));
+            return;
+        }
         if (e.PropertyName != nameof(ActiveGraphProvider.Graph)) return;
         _graph.PropertyChanged -= OnGraphChanged;
         _graph.Nodes.CollectionChanged -= OnNodesChanged;

@@ -48,6 +48,7 @@ public sealed record GpuEdit
     public string? SourceId { get; init; }
     public int Input { get; init; }
     public GpuPosition? Position { get; init; }
+    public AttributeDeclaration? Attribute { get; init; }
     public AttributeWrite? Write { get; init; }
     public FlowStep? Flow { get; init; }
     public KernelGraph? Kernel { get; init; }
@@ -456,6 +457,46 @@ public static class GpuParticleEditorService
                 if (path.Length > 4096) throw new ArgumentException("Asset path too long.");
                 state.ResourceAssetPaths[resource.Id] = path;
                 state.GeneratedResources?.Remove(resource.Id);
+            }
+            return state;
+        }
+        if (edit.Action == "attribute-add")
+        {
+            var attr = edit.Attribute ?? throw new ArgumentException("Attribute declaration required.");
+            var id = attr.Id?.Trim() ?? "";
+            if (string.IsNullOrEmpty(id) || id.Length > 64 || id.Any(char.IsControl) || char.IsDigit(id[0]) ||
+                id.Any(c => !char.IsLetterOrDigit(c) && c != '_'))
+                throw new ArgumentException("Attribute name must be a valid identifier (letters, digits, underscore, not starting with a digit).");
+            if (attr.Type == GpuType.Quaternion || !Enum.IsDefined(attr.Type))
+                throw new ArgumentException("Unsupported custom attribute type.");
+            if (p.Attributes.Any(a => string.Equals(a.Id, id, StringComparison.Ordinal)))
+                throw new ArgumentException($"Attribute '{id}' already exists.");
+            if (p.Attributes.Count >= new GpuLimits().MaxAttributes)
+                throw new ArgumentException("Custom attribute limit reached.");
+            p.Attributes.Add(new AttributeDeclaration(id, attr.Type));
+            return state;
+        }
+        if (edit.Action == "attribute-remove")
+        {
+            var id = edit.NodeId ?? throw new ArgumentException("Attribute ID required.");
+            if (ParticleAbi.IsBuiltinAttribute(id))
+                throw new ArgumentException("Built-in ABI attributes cannot be removed.");
+            if (p.Attributes.RemoveAll(a => a.Id == id) == 0)
+                throw new ArgumentException("Attribute not found.");
+            foreach (var kernel in p.Kernels)
+            {
+                kernel.Writes.RemoveAll(w => w.Attribute == id);
+                var removedIds = kernel.Nodes.Where(n => n.Op == GpuOp.ReadAttribute && n.Attribute == id).Select(n => n.Id).ToHashSet();
+                if (removedIds.Count > 0)
+                {
+                    kernel.Nodes.RemoveAll(n => removedIds.Contains(n.Id));
+                    for (var ni = 0; ni < kernel.Nodes.Count; ni++)
+                    {
+                        var node = kernel.Nodes[ni];
+                        if (node.Inputs.Any(removedIds.Contains))
+                            kernel.Nodes[ni] = node with { Inputs = node.Inputs.Select(i => removedIds.Contains(i) ? "" : i).ToList() };
+                    }
+                }
             }
             return state;
         }

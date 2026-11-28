@@ -25,7 +25,12 @@ public partial class GpuWorkspaceView : UserControl
         ToolTip.SetTip(SelectionLabel, n?.Id);
         WritesSeparator.IsVisible = WritesHeading.IsVisible = WritesPanel.IsVisible = BindingsPanel.IsVisible = n is null;
         if (n is null) return;
-        var type = new ComboBox { ItemsSource = Enum.GetValues<GpuType>().Where(t => t != GpuType.Quaternion).ToArray(), SelectedItem = n.Type };
+        var type = new ComboBox
+        {
+            ItemsSource = Enum.GetValues<GpuType>().Where(t => t != GpuType.Quaternion).ToArray(),
+            ItemTemplate = new Avalonia.Controls.Templates.FuncDataTemplate<GpuType>((t, _) => new TextBlock { Text = GpuTypeLabel(t) }),
+            SelectedItem = n.Type
+        };
         if (n.Op == GpuOp.SampleFlowMap)
             NodeInspector.Children.Add(new TextBlock { Text = LocalizationService.Shared.Get("Gpu.FlowMapTypeFromInput") });
         else
@@ -292,7 +297,7 @@ public partial class GpuWorkspaceView : UserControl
             var row = new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 6 };
             row.Children.Add(new TextBlock
             {
-                Text = $"{AttributePinLabel(slotId)} ({slotId} : Float)",
+                Text = $"{AttributePinLabel(slotId)} ({slotId} : {GpuTypeLabel(GpuType.Float)})",
                 VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center
             });
             var removeCustom = Button("×", () =>
@@ -316,37 +321,48 @@ public partial class GpuWorkspaceView : UserControl
             row.Children.Add(removeCustom);
             WritesPanel.Children.Add(row);
         }
-        var nextFreeSlot = customSlots.FirstOrDefault(slotId =>
-            !_visibleOutputAttributes.Contains(slotId) &&
-            k.Writes.All(w => w.Attribute != slotId) &&
-            k.Nodes.All(n => n.Op != GpuOp.ReadAttribute || n.Attribute != slotId));
-        if (nextFreeSlot is not null)
+        foreach (var customAttr in vm.State.Program.Attributes.Where(a => !ParticleAbi.IsBuiltinAttribute(a.Id)))
         {
-            var customNameBox = new TextBox
+            var attrId = customAttr.Id;
+            var row = new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 6 };
+            row.Children.Add(new TextBlock
             {
-                PlaceholderText = LocalizationService.Shared.Get("Gpu.CustomAttributeName"),
-                IsEnabled = !vm.Graph.IsReadOnly
-            };
-            WritesPanel.Children.Add(customNameBox);
-            var addCustom = Button(LocalizationService.Shared.Get("Gpu.AddCustomAttribute"), () =>
-            {
-                var name = customNameBox.Text?.Trim();
-                if (!string.IsNullOrEmpty(name))
-                {
-                    _customAttributeLabels[nextFreeSlot] = name;
-                }
-                _visibleOutputAttributes.Add(nextFreeSlot);
-                if (Workspace?.Kernel is { } current)
-                {
-                    RebuildStageOutput(Workspace, current);
-                    _anchorsDirty = true;
-                    ScheduleFrame();
-                    BuildWrites();
-                }
+                Text = $"{attrId} ({GpuTypeLabel(customAttr.Type)})",
+                VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center
             });
-            addCustom.IsEnabled = !vm.Graph.IsReadOnly;
-            WritesPanel.Children.Add(addCustom);
+            var removeCustom = Button("×", () => Run(() =>
+                vm.Edit(new GpuEdit { Action = "attribute-remove", NodeId = attrId })));
+            removeCustom.IsEnabled = !vm.Graph.IsReadOnly;
+            row.Children.Add(removeCustom);
+            WritesPanel.Children.Add(row);
         }
+        var customNameBox = new TextBox
+        {
+            PlaceholderText = LocalizationService.Shared.Get("Gpu.CustomAttributeName"),
+            IsEnabled = !vm.Graph.IsReadOnly
+        };
+        var customTypeBox = new ComboBox
+        {
+            ItemsSource = Enum.GetValues<GpuType>().Where(t => t != GpuType.Quaternion).ToArray(),
+            ItemTemplate = new Avalonia.Controls.Templates.FuncDataTemplate<GpuType>((t, _) => new TextBlock { Text = GpuTypeLabel(t) }),
+            SelectedItem = GpuType.Float,
+            IsEnabled = !vm.Graph.IsReadOnly
+        };
+        WritesPanel.Children.Add(customNameBox);
+        WritesPanel.Children.Add(customTypeBox);
+        var addCustom = Button(LocalizationService.Shared.Get("Gpu.AddCustomAttribute"), () => Run(() =>
+        {
+            var rawName = customNameBox.Text?.Trim();
+            var attrName = !string.IsNullOrEmpty(rawName)
+                ? rawName
+                : Enumerable.Range(0, 10000)
+                    .Select(i => $"Custom{i}")
+                    .First(candidate => !vm.State.Program.Attributes.Any(a => a.Id == candidate));
+            var attrType = customTypeBox.SelectedItem is GpuType selected ? selected : GpuType.Float;
+            vm.Edit(new GpuEdit { Action = "attribute-add", Attribute = new AttributeDeclaration(attrName, attrType) });
+        }));
+        addCustom.IsEnabled = !vm.Graph.IsReadOnly;
+        WritesPanel.Children.Add(addCustom);
         var aliveToggle = new CheckBox
         {
             Content = LocalizationService.Shared.GetOrDefault("Gpu.Attribute.Alive", "Alive"),

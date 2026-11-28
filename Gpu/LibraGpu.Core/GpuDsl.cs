@@ -244,7 +244,7 @@ public static class GpuDsl
             this.resources = resources.Where(resource => resource is not null && resource.Id is not null)
                 .GroupBy(resource => resource.Id, StringComparer.Ordinal)
                 .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
-            if (options.NodeIdsBySpan?.Count > limits.MaxNodesPerKernel || options.WriteIdsBySpan?.Count > ParticleAbi.Attributes.Count)
+            if (options.NodeIdsBySpan?.Count > limits.MaxNodesPerKernel || options.WriteIdsBySpan?.Count > limits.MaxAttributes)
                 throw Error("ID mapping limits exceeded.", new(0, 0), id);
             reservedIds = options.NodeIdsBySpan?.Values.ToHashSet(StringComparer.Ordinal) ?? [];
         }

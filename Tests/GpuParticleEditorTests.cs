@@ -411,6 +411,31 @@ internal static class GpuParticleEditorTests
         }
         catch (McpException) { }
         Check(GraphSnapshot.ContentEquals(before, graph.CreateSnapshot()), "Actual MCP failure leaves graph unchanged");
+
+        var extGraph = new GraphWorkspaceViewModel(new UndoRedoManager());
+        var extNode = GpuParticleEditorService.Create(extGraph);
+        using var extVm = new GpuWorkspaceViewModel(extGraph, extNode.Id);
+        extVm.Edit(
+            new() { Action = "attribute-add", Attribute = new("Heat", GpuType.Float) },
+            new() { Action = "attribute-add", Attribute = new("TargetPos", GpuType.Float3) },
+            new() { Action = "attribute-add", Attribute = new("UvOffset", GpuType.Float2) },
+            new() { Action = "attribute-add", Attribute = new("Phase", GpuType.Int) },
+            new() { Action = "attribute-add", Attribute = new("IsSpecial", GpuType.Bool) });
+        var updateKernel = extVm.State.Program.Kernels.First(k => k.Stage == KernelStage.Update);
+        extVm.Edit(
+            new() { Action = "add", KernelId = updateKernel.Id, Node = new() { Id = "c_heat", Op = GpuOp.Constant, Type = GpuType.Float, Value = [42.5] } },
+            new() { Action = "add", KernelId = updateKernel.Id, Node = new() { Id = "c_tpos", Op = GpuOp.Constant, Type = GpuType.Float3, Value = [1, 2, 3] } },
+            new() { Action = "write", KernelId = updateKernel.Id, Write = new("w_heat", "Heat", "c_heat") },
+            new() { Action = "write", KernelId = updateKernel.Id, Write = new("w_tpos", "TargetPos", "c_tpos") });
+        Check(extVm.TryCompile(out var extCompiled), "Extended custom attributes compile");
+        var hlsl = extCompiled!.EmitHlslInclude(new ShaderBindings()).Text;
+        Check(hlsl.Contains("LibraGpuCustomBuffer", StringComparison.Ordinal) &&
+              hlsl.Contains("LibraGpuCustomStride = 8u", StringComparison.Ordinal),
+            "Extended custom attributes emit extended buffer and stride");
+        extVm.Edit(new() { Action = "attribute-remove", NodeId = "TargetPos" });
+        Check(!extVm.State.Program.Attributes.Any(a => a.Id == "TargetPos") &&
+              extVm.State.Program.Kernels.First(k => k.Stage == KernelStage.Update).Writes.All(w => w.Attribute != "TargetPos"),
+            "Removing custom attribute cleans up writes");
     }
     private static T Complete<T>(Task<T> task)
     {

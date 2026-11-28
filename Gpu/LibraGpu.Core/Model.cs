@@ -168,6 +168,7 @@ public sealed record GpuLimits
     public int MaxNodesPerKernel { get; init; } = 4096;
     public int MaxResources { get; init; } = 64;
     public int MaxFlowSteps { get; init; } = 128;
+    public int MaxAttributes { get; init; } = 1024;
     public ulong MaxParticleBytes { get; init; } = 256UL * 1024 * 1024;
     public ulong MaxResourceTexels { get; init; } = 64UL * 1024 * 1024;
 }
@@ -216,4 +217,27 @@ public static class ParticleAbi
         { ["deltaTime"] = GpuType.Float, ["time"] = GpuType.Float, ["emitterPosition"] = GpuType.Float3,
             ["emitterRow0"] = GpuType.Float4, ["emitterRow1"] = GpuType.Float4,
             ["emitterRow2"] = GpuType.Float4, ["emitterRow3"] = GpuType.Float4 });
+
+    public static bool IsBuiltinAttribute(string id) => Attributes.Any(a => a.Id == id);
+
+    public static int FloatComponentCount(GpuType type) => type switch
+    {
+        GpuType.Float2 => 2,
+        GpuType.Float3 => 3,
+        GpuType.Float4 => 4,
+        _ => 1
+    };
+
+    public static (int FloatStride, IReadOnlyDictionary<string, (int FloatOffset, GpuType Type)> Offsets) ComputeExtendedLayout(
+        IEnumerable<AttributeDeclaration> attributes)
+    {
+        var offsets = new Dictionary<string, (int FloatOffset, GpuType Type)>(StringComparer.Ordinal);
+        var cursor = 0;
+        foreach (var attr in attributes.Where(a => !IsBuiltinAttribute(a.Id)).OrderBy(a => a.Id, StringComparer.Ordinal))
+        {
+            offsets[attr.Id] = (cursor, attr.Type);
+            cursor += FloatComponentCount(attr.Type);
+        }
+        return (cursor, offsets);
+    }
 }

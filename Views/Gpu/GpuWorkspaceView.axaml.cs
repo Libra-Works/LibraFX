@@ -116,18 +116,41 @@ public partial class GpuWorkspaceView : UserControl
             if (e.Property == Visual.RenderTransformProperty) _grid?.InvalidateVisual();
         };
         TypeChoice.ItemsSource = Enum.GetValues<GpuType>().Where(t => t != GpuType.Quaternion).ToArray();
+        TypeChoice.ItemTemplate = new Avalonia.Controls.Templates.FuncDataTemplate<GpuType>((t, _) => new TextBlock { Text = GpuTypeLabel(t) });
         TypeChoice.SelectedItem = GpuType.Float;
         ExportFormat.ItemsSource = new[] { "json", "usf", "hlsl", "compute", "resources" };
         ExportFormat.SelectedItem = "usf";
+        GpuInspectorContainer.Child = null;
+        PropertyChanged += (_, e) =>
+        {
+            if (e.Property == IsVisibleProperty) SyncExternalInspector(IsVisible);
+        };
+    }
+    private ActiveGraphProvider? _inspectorProvider;
+    private void SyncExternalInspector(bool attach)
+    {
+        if (attach && TopLevel.GetTopLevel(this)?.DataContext is LiberaFx.ViewModels.Main.MainViewModel main)
+            _inspectorProvider = main.ActiveGraphProvider;
+        if (_inspectorProvider is null) return;
+        if (attach && IsVisible && Workspace is not null)
+        {
+            _inspectorProvider.ActiveGpuInspector = GpuInspectorHost;
+        }
+        else if (ReferenceEquals(_inspectorProvider.ActiveGpuInspector, GpuInspectorHost))
+        {
+            _inspectorProvider.ActiveGpuInspector = null;
+        }
     }
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnAttachedToVisualTree(e);
         ThemeSettingsService.EditorColorsChanged += OnAppearanceChanged;
         LocalizationService.Shared.LanguageChanged += OnAppearanceChanged;
+        SyncExternalInspector(true);
     }
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
+        SyncExternalInspector(false);
         FinishDrag(commit: false);
         CancelConnectionDrag();
         CancelMarquee();
@@ -152,6 +175,7 @@ public partial class GpuWorkspaceView : UserControl
         _selectedNodes.Clear();
         IsVisible = true;
         Refresh();
+        SyncExternalInspector(true);
         Focus();
     }
     public void CloseWorkspace()
@@ -164,6 +188,7 @@ public partial class GpuWorkspaceView : UserControl
     }
     private void DisposeWorkspace()
     {
+        SyncExternalInspector(false);
         if (Workspace is not { } vm) return;
         FinishDrag(commit: false);
         CancelConnectionDrag();

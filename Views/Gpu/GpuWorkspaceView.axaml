@@ -28,7 +28,7 @@
         </Border>
       </Grid>
     </Border>
-    <Grid Grid.Row="1" ColumnDefinitions="190,*,250">
+    <Grid Grid.Row="1" ColumnDefinitions="190,*">
       <Border BorderThickness="0,0,1,0" BorderBrush="{DynamicResource EffectBorderBrush}" Padding="8">
         <ScrollViewer><StackPanel Spacing="6">
           <TextBlock Classes="editor-heading" Text="{DynamicResource Text.Gpu.Palette}" />
@@ -108,9 +108,8 @@
           </TabItem>
         </TabControl>
       </Grid>
-      <Border Grid.Column="2" Padding="8" BorderThickness="1,0,0,0" BorderBrush="{DynamicResource EffectBorderBrush}">
-        <ScrollViewer><StackPanel Spacing="6">
-          <TextBlock Classes="editor-heading" Text="{DynamicResource Text.Gpu.Properties}" />
+      <Border x:Name="GpuInspectorContainer" IsVisible="False">
+        <ScrollViewer x:Name="GpuInspectorHost" HorizontalScrollBarVisibility="Disabled"><StackPanel Margin="8" Spacing="6">
           <TextBlock x:Name="SelectionLabel" Classes="editor-label" TextWrapping="Wrap" />
           <StackPanel x:Name="NodeInspector" Spacing="5" />
           <Separator x:Name="WritesSeparator" />

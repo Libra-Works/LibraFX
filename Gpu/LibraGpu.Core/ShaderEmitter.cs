@@ -35,6 +35,12 @@ internal static partial class ShaderEmitter
         Write("// Generated engine-neutral particle compute source; dispatch in declared flow order.");
         Write("struct LibraGpuParticle { float4 positionAge; float4 velocityLifetime; float4 color; float4 sizeRotation; uint4 seedAlive; };");
         Write($"RWStructuredBuffer<LibraGpuParticle> {b.ParticleBuffer} : register(u{b.ParticleRegister});");
+        var (customFloatStride, extendedAttributes) = ParticleAbi.ComputeExtendedLayout(p.Attributes);
+        if (customFloatStride > 0)
+        {
+            Write($"RWStructuredBuffer<float> LibraGpuCustomBuffer : register(u{b.ParticleRegister + 1});");
+            Write($"static const uint LibraGpuCustomStride = {customFloatStride}u;");
+        }
         Write($"cbuffer {b.UniformBuffer} : register(b{b.UniformRegister})");
         Write("{");
         Write("    uint LibraGpuCapacity; uint LibraGpuCount; uint LibraGpuSpawnStart; uint LibraGpuSpawnCount;");
@@ -119,7 +125,9 @@ internal static partial class ShaderEmitter
                 Write($"static const float {arrName}[65] = {{ {literals} }};");
                 Write($"float {fnName}(float t) {{ float s = clamp((t - {minStr}f) * {invSpan}f, 0.0f, 64.0f); uint idx = min((uint)s, 63u); return lerp({arrName}[idx], {arrName}[idx + 1u], s - (float)idx); }}");
             }
-            Write($"void LibraGpuEvaluate_{kernelIndex:D4}(inout LibraGpuParticle p)");
+            Write(customFloatStride > 0
+                ? $"void LibraGpuEvaluate_{kernelIndex:D4}(uint particleIndex, inout LibraGpuParticle p)"
+                : $"void LibraGpuEvaluate_{kernelIndex:D4}(inout LibraGpuParticle p)");
             Write("{");
             foreach (var n in order)
             {
@@ -127,12 +135,36 @@ internal static partial class ShaderEmitter
                 var types = n.Inputs.Select(id => nodeLookup[id].Type).ToArray();
                 var expression = n.Op == GpuOp.FCurve
                     ? $"{curveNames[n.Id]}({args[0]})"
-                    : Expression(n, args, types, resourceIndices);
+                    : Expression(n, args, types, resourceIndices, extendedAttributes);
                 Mapped($"    {HlslType(n.Type)} {registers[n.Id]} = {expression};", k, n.Id, "out");
             }
             // SSA reads the incoming particle snapshot; attribute stores happen only after evaluation.
             foreach (var w in k.Writes)
             {
+                if (extendedAttributes.TryGetValue(w.Attribute, out var ext))
+                {
+                    var reg = registers[w.Value];
+                    var count = ParticleAbi.FloatComponentCount(ext.Type);
+                    if (count == 1)
+                    {
+                        var storeVal = ext.Type switch
+                        {
+                            GpuType.Bool => $"asfloat({reg} ? 1u : 0u)",
+                            GpuType.Int or GpuType.UInt => $"asfloat(uint({reg}))",
+                            _ => reg
+                        };
+                        Mapped($"    LibraGpuCustomBuffer[particleIndex * LibraGpuCustomStride + {ext.FloatOffset}u] = {storeVal};", k, w.Id, "value");
+                    }
+                    else
+                    {
+                        for (var c = 0; c < count; c++)
+                        {
+                            var comp = "xyzw"[c];
+                            Mapped($"    LibraGpuCustomBuffer[particleIndex * LibraGpuCustomStride + {ext.FloatOffset + c}u] = {reg}.{comp};", k, w.Id, "value");
+                        }
+                    }
+                    continue;
+                }
                 var rhs = w.Attribute switch
                 {
                     "Alive" => $"({registers[w.Value]} ? 1u : 0u)",
@@ -158,6 +190,8 @@ internal static partial class ShaderEmitter
                 Write("    p.color = float4(1.0f, 1.0f, 1.0f, 1.0f);");
                 Write("    p.sizeRotation = float4(1.0f, 1.0f, 0.0f, 0.0f);");
                 Write("    p.seedAlive = uint4(LibraGpuHash(i ^ LibraGpuEmitterSeed ^ LibraGpuHash(LibraGpuFrameIndex)), 1u, 0u, 0u);");
+                if (customFloatStride > 0)
+                    Write("    for (uint ca = 0u; ca < LibraGpuCustomStride; ++ca) { LibraGpuCustomBuffer[i * LibraGpuCustomStride + ca] = 0.0f; }");
             }
             else
             {
@@ -169,7 +203,9 @@ internal static partial class ShaderEmitter
                 if (!k.Writes.Any(w => w.Attribute == "Age"))
                     Write("    p.positionAge.w += LibraGpuIsFinite(LibraGpuDeltaTime) ? max(LibraGpuDeltaTime, 0.0f) : 0.0f;");
             }
-            Write($"    LibraGpuEvaluate_{kernelIndex:D4}(p);");
+            Write(customFloatStride > 0
+                ? $"    LibraGpuEvaluate_{kernelIndex:D4}(i, p);"
+                : $"    LibraGpuEvaluate_{kernelIndex:D4}(p);");
             Write("    p.positionAge.w = max(p.positionAge.w, 0.0f);");
             Write("    if (!LibraGpuFinite(p) || !(p.velocityLifetime.w > 0.0f) || p.positionAge.w >= p.velocityLifetime.w) p.seedAlive.y = 0u;");
             Write("    p.seedAlive.y = p.seedAlive.y != 0u ? 1u : 0u;");
@@ -205,7 +241,20 @@ internal static partial class ShaderEmitter
         "Custom2" => "p.seedAlive.w",
         _ => Attribute(id)
     };
-    private static string Expression(GpuNode n, string[] a, GpuType[] types, IReadOnlyDictionary<string, int> resourceIndices)
+    private static string ReadExtendedAttribute(int offset, GpuType type) => type switch
+    {
+        GpuType.Float => $"LibraGpuCustomBuffer[particleIndex * LibraGpuCustomStride + {offset}u]",
+        GpuType.Float2 => $"float2(LibraGpuCustomBuffer[particleIndex * LibraGpuCustomStride + {offset}u], LibraGpuCustomBuffer[particleIndex * LibraGpuCustomStride + {offset + 1}u])",
+        GpuType.Float3 => $"float3(LibraGpuCustomBuffer[particleIndex * LibraGpuCustomStride + {offset}u], LibraGpuCustomBuffer[particleIndex * LibraGpuCustomStride + {offset + 1}u], LibraGpuCustomBuffer[particleIndex * LibraGpuCustomStride + {offset + 2}u])",
+        GpuType.Float4 => $"float4(LibraGpuCustomBuffer[particleIndex * LibraGpuCustomStride + {offset}u], LibraGpuCustomBuffer[particleIndex * LibraGpuCustomStride + {offset + 1}u], LibraGpuCustomBuffer[particleIndex * LibraGpuCustomStride + {offset + 2}u], LibraGpuCustomBuffer[particleIndex * LibraGpuCustomStride + {offset + 3}u])",
+        GpuType.Int => $"asint(asuint(LibraGpuCustomBuffer[particleIndex * LibraGpuCustomStride + {offset}u]))",
+        GpuType.UInt => $"asuint(LibraGpuCustomBuffer[particleIndex * LibraGpuCustomStride + {offset}u])",
+        GpuType.Bool => $"(asuint(LibraGpuCustomBuffer[particleIndex * LibraGpuCustomStride + {offset}u]) != 0u)",
+        _ => throw new InvalidOperationException()
+    };
+
+    private static string Expression(GpuNode n, string[] a, GpuType[] types, IReadOnlyDictionary<string, int> resourceIndices,
+        IReadOnlyDictionary<string, (int FloatOffset, GpuType Type)> extendedAttributes)
     {
         string Cast(int i) => types[i] == n.Type ? a[i] :
             $"{HlslType(n.Type)}({string.Join(", ", Enumerable.Repeat(a[i], GpuOperationRegistry.Components(n.Type)))})";
@@ -225,7 +274,9 @@ internal static partial class ShaderEmitter
         return n.Op switch
         {
             GpuOp.Constant => Literal(n),
-            GpuOp.ReadAttribute => n.Attribute == "Alive" ? "(p.seedAlive.y != 0u)" : Attribute(n.Attribute!),
+            GpuOp.ReadAttribute => n.Attribute == "Alive" ? "(p.seedAlive.y != 0u)" :
+                extendedAttributes.TryGetValue(n.Attribute!, out var ext) ? ReadExtendedAttribute(ext.FloatOffset, ext.Type) :
+                Attribute(n.Attribute!),
             GpuOp.ReadUniform => n.Uniform switch { "deltaTime" => "LibraGpuDeltaTime", "time" => "LibraGpuTime", "emitterPosition" => "LibraGpuEmitterPosition",
                 "emitterRow0" => "LibraGpuEmitterRows[0]", "emitterRow1" => "LibraGpuEmitterRows[1]",
                 "emitterRow2" => "LibraGpuEmitterRows[2]", "emitterRow3" => "LibraGpuEmitterRows[3]", _ => throw new InvalidOperationException() },

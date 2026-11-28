@@ -33,9 +33,10 @@ public partial class GpuWorkspaceView
         }
     }
 
-    private sealed class OutputWireVisual(NodeVisual source, string attribute, GpuConnectionCurve curve)
+    private sealed class OutputWireVisual(NodeVisual? source, string? stageInputKey, string attribute, GpuConnectionCurve curve)
     {
-        public readonly NodeVisual Source = source;
+        public readonly NodeVisual? Source = source;
+        public readonly string? StageInputKey = stageInputKey;
         public readonly string Attribute = attribute;
         public readonly GpuConnectionCurve Curve = curve;
     }
@@ -142,8 +143,8 @@ public partial class GpuWorkspaceView
     {
         ClearStageOutput();
         RebuildStageInput(vm, k);
-        var activeAttrs = ParticleAbi.Attributes
-            .Where(a => a.Id != "Seed" && (_visibleOutputAttributes.Contains(a.Id) || k.Writes.Any(w => w.Attribute == a.Id)))
+        var activeAttrs = vm.State.Program.Attributes
+            .Where(a => a.Id != "Seed" && (!ParticleAbi.IsBuiltinAttribute(a.Id) || _visibleOutputAttributes.Contains(a.Id) || k.Writes.Any(w => w.Attribute == a.Id)))
             .ToArray();
         var panel = new StackPanel { Spacing = 4 };
         var stageTitle = k.Stage == KernelStage.Spawn ? "Spawn Output" : "Update Output";
@@ -173,7 +174,7 @@ public partial class GpuWorkspaceView
                 _wireSource = null;
             });
             var label = PortLabel();
-            label.Text = $"{AttributePinLabel(attr.Id)} ({attr.Type})";
+            label.Text = $"{AttributePinLabel(attr.Id)} ({GpuTypeLabel(attr.Type)})";
             label.Margin = new Thickness(6, 0, 4, 0);
             var row = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto") };
             row.Children.Add(pin);
@@ -226,19 +227,36 @@ public partial class GpuWorkspaceView
         border.SizeChanged += (_, _) => { _anchorsDirty = true; ScheduleFrame(); };
         NodeCanvas.Children.Add(border);
 
+        var nodesById = k.Nodes.ToDictionary(n => n.Id);
         foreach (var write in k.Writes)
         {
-            if (!_nodeVisuals.TryGetValue(write.Value, out var source)) continue;
-            var curve = new GpuConnectionCurve
+            if (_nodeVisuals.TryGetValue(write.Value, out var source))
             {
-                Width = NodeCanvas.Width,
-                Height = NodeCanvas.Height,
-                Stroke = TypeBrush(source.Model.Type),
-                StrokeThickness = 2.5,
-                IsHitTestVisible = false
-            };
-            _outputWires.Add(new OutputWireVisual(source, write.Attribute, curve));
-            NodeCanvas.Children.Insert(1, curve);
+                var curve = new GpuConnectionCurve
+                {
+                    Width = NodeCanvas.Width,
+                    Height = NodeCanvas.Height,
+                    Stroke = TypeBrush(source.Model.Type),
+                    StrokeThickness = 2.5,
+                    IsHitTestVisible = false
+                };
+                _outputWires.Add(new OutputWireVisual(source, null, write.Attribute, curve));
+                NodeCanvas.Children.Insert(1, curve);
+            }
+            else if (nodesById.TryGetValue(write.Value, out var srcNode) && IsStageInputNode(srcNode))
+            {
+                var key = srcNode.Op == GpuOp.ReadUniform ? srcNode.Uniform! : srcNode.Attribute!;
+                var curve = new GpuConnectionCurve
+                {
+                    Width = NodeCanvas.Width,
+                    Height = NodeCanvas.Height,
+                    Stroke = TypeBrush(srcNode.Type),
+                    StrokeThickness = 2.5,
+                    IsHitTestVisible = false
+                };
+                _outputWires.Add(new OutputWireVisual(null, key, write.Attribute, curve));
+                NodeCanvas.Children.Insert(1, curve);
+            }
         }
     }
 
@@ -253,7 +271,7 @@ public partial class GpuWorkspaceView
         });
         var pins = new Dictionary<string, (Button Pin, GpuType Type)>();
         var items = new List<(string Key, string Label, GpuType Type, bool IsUniform)>();
-        foreach (var attr in ParticleAbi.Attributes)
+        foreach (var attr in vm.State.Program.Attributes)
         {
             if (attr.Id is "Alive" or "Custom0" or "Custom1" or "Custom2" &&
                 !_visibleOutputAttributes.Contains(attr.Id) &&
@@ -338,7 +356,7 @@ public partial class GpuWorkspaceView
             };
 
             var label = PortLabel();
-            label.Text = $"{labelText} ({type})";
+            label.Text = $"{labelText} ({GpuTypeLabel(type)})";
             label.Margin = new Thickness(4, 0, 6, 0);
             var row = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
             row.Children.Add(label);
@@ -475,13 +493,18 @@ public partial class GpuWorkspaceView
         {
             foreach (var wire in _outputWires)
             {
-                if (stage.Anchors.TryGetValue(wire.Attribute, out var endAnchor))
+                if (!stage.Anchors.TryGetValue(wire.Attribute, out var endAnchor)) continue;
+                Point? startPoint = wire.Source is not null
+                    ? wire.Source.CanvasPosition + (Vector)wire.Source.OutputAnchor
+                    : wire.StageInputKey is not null && _stageInput is { } inputCard &&
+                      inputCard.Anchors.TryGetValue(wire.StageInputKey, out var startAnchor)
+                        ? inputCard.CanvasPosition + (Vector)startAnchor
+                        : null;
+                if (startPoint is { } start)
                 {
                     wire.Curve.Width = NodeCanvas.Width;
                     wire.Curve.Height = NodeCanvas.Height;
-                    wire.Curve.SetEndpoints(
-                        wire.Source.CanvasPosition + (Vector)wire.Source.OutputAnchor,
-                        stage.CanvasPosition + (Vector)endAnchor);
+                    wire.Curve.SetEndpoints(start, stage.CanvasPosition + (Vector)endAnchor);
                 }
             }
         }
