@@ -295,6 +295,7 @@ internal static partial class ShaderEmitter
             GpuOp.Select => $"({a[0]} ? {a[1]} : {a[2]})",
             GpuOp.Random => $"LibraGpuRandom({a[0]})",
             GpuOp.Component => $"{a[0]}.{"xyzw"[n.ComponentIndex!.Value]}",
+            GpuOp.Reroute => a[0],
             GpuOp.Abs => PerLane("LibraGpuAbs"),
             GpuOp.Floor => PerLane("LibraGpuFloor"),
             GpuOp.Ceil => PerLane("LibraGpuCeil"),

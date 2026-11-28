@@ -6,7 +6,12 @@ namespace LiberaFx.Views.Timeline;
 
 public partial class CurveEditorView : UserControl
 {
-    public CurveEditorView() => InitializeComponent();
+    public CurveEditorView()
+    {
+        InitializeComponent();
+        CurveCanvas.ViewTransformChanged += () => ColorBar.SyncView(CurveCanvas.ViewOriginX, CurveCanvas.ViewScaleX);
+        CurveCanvas.LayoutUpdated += (_, _) => ColorBar.SyncView(CurveCanvas.ViewOriginX, CurveCanvas.ViewScaleX);
+    }
 
     private void OnFrameAllClick(object? sender, RoutedEventArgs e) => CurveCanvas.FrameAll();
     private void OnFrameSelectedClick(object? sender, RoutedEventArgs e) => CurveCanvas.FrameSelected();

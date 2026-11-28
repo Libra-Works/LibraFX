@@ -5,7 +5,7 @@ namespace LibraGpu.Core;
 public enum TypePolicy
 {
     Literal, Attribute, Uniform, ArithmeticBroadcast, FloatUnary, VectorUnary, Length, Compose, Select, Random, Component,
-    NumericUnary, FloatBroadcast, Dot, Cross, Distance, Remap, GradientNoise, FractalNoise, FlowMapSample, ScalarComparison
+    NumericUnary, FloatBroadcast, Dot, Cross, Distance, Remap, GradientNoise, FractalNoise, FlowMapSample, ScalarComparison, Identity
 }
 public sealed record GpuInputDescriptor(string Id, GpuType DefaultType, IReadOnlyList<double> DefaultValue,
     bool OptionalInDsl = false, double? Minimum = null, double? Maximum = null);
@@ -78,7 +78,8 @@ public static class GpuOperationRegistry
             new(GpuOp.Turbulence,4,4,TypePolicy.FractalNoise),new(GpuOp.CurlNoise,4,4,TypePolicy.FractalNoise),
             new(GpuOp.SampleFlowMap,1,1,TypePolicy.FlowMapSample)
             ,new(GpuOp.GreaterThan,2,2,TypePolicy.ScalarComparison),new(GpuOp.LessThan,2,2,TypePolicy.ScalarComparison),
-            new(GpuOp.FCurve,1,1,TypePolicy.FloatBroadcast)
+            new(GpuOp.FCurve,1,1,TypePolicy.FloatBroadcast),
+            new(GpuOp.Reroute,1,1,TypePolicy.Identity)
         }.Select(Describe).ToDictionary(x => x.Op));
 
     public static bool TryInferType(GpuOp op, IReadOnlyList<GpuType> inputs, out GpuType result)
@@ -118,6 +119,7 @@ public static class GpuOperationRegistry
             TypePolicy.Select => inputs[0] == GpuType.Bool && inputs[1] == result && inputs[2] == result,
             TypePolicy.Random => inputs[0] == GpuType.UInt && result == GpuType.Float,
             TypePolicy.Component => inputs[0] is GpuType.Float2 or GpuType.Float3 or GpuType.Float4 && result == GpuType.Float,
+            TypePolicy.Identity => inputs[0] == result,
             TypePolicy.Dot => result == GpuType.Float && inputs[0] == inputs[1] && Float(inputs[0]) && Components(inputs[0]) > 1,
             TypePolicy.Cross => result == GpuType.Float3 && inputs.All(t => t == GpuType.Float3),
             TypePolicy.Distance => result == GpuType.Float && inputs[0] == inputs[1] && Float(inputs[0]),

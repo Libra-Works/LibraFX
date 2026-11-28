@@ -15,7 +15,7 @@ public enum GpuOp
     Pow = 26, Sqrt = 27, Exp = 28, Log = 29, Lerp = 30, Smoothstep = 31, Remap = 32,
     Dot = 33, Cross = 34, Distance = 35, Saturate = 36,
     GradientNoise3D = 37, Fbm = 38, Turbulence = 39, CurlNoise = 40, SampleFlowMap = 41,
-    GreaterThan = 42, LessThan = 43, FCurve = 44
+    GreaterThan = 42, LessThan = 43, FCurve = 44, Reroute = 45
 }
 public enum KernelStage { Spawn, Update }
 public enum FlowKind { Spawn, Update, RenderBillboard, RenderStartTexture, ComputePass }

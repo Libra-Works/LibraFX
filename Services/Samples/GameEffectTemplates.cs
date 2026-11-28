@@ -94,7 +94,7 @@ public static class GameEffectTemplates
             Connections = graph.Connections.Where(edge => !discarded.Contains(edge.SourceNodeId) &&
                 !discarded.Contains(edge.TargetNodeId) && !(edge.TargetNodeId == spawnOut.Id && edge.TargetPortId == "velocity"))
                 .Append(new(shape.Id, spawnOut.Id, "position", "value"))
-                .Append(new(velocityConst.Id, spawnOut.Id, "velocity", "value")).ToArray()
+                .Append(new(velocityConst.Id, spawnOut.Id, "velocity")).ToArray()
         };
     }
 

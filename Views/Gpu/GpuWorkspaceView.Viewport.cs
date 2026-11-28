@@ -132,10 +132,113 @@ public partial class GpuWorkspaceView : UserControl
         AddPaletteNode(vm, op, new(point.X, point.Y));
         e.Handled = true;
     }
+    private static bool IsNearBezier(Point p, Point start, Point end, double threshold = 14)
+    {
+        var dx = Math.Max(40, Math.Abs(end.X - start.X) * 0.5);
+        var c1 = new Point(start.X + dx, start.Y);
+        var c2 = new Point(end.X - dx, end.Y);
+        for (var i = 0; i <= 16; i++)
+        {
+            var t = i / 16.0;
+            var u = 1.0 - t;
+            var bx = u * u * u * start.X + 3 * u * u * t * c1.X + 3 * u * t * t * c2.X + t * t * t * end.X;
+            var by = u * u * u * start.Y + 3 * u * u * t * c1.Y + 3 * u * t * t * c2.Y + t * t * t * end.Y;
+            if (((Vector)(p - new Point(bx, by))).Length <= threshold) return true;
+        }
+        return false;
+    }
+
+    private Action? FindInsertRerouteAction(GpuWorkspaceViewModel vm, KernelGraph k, Point graphPosition)
+    {
+        var canvasPoint = graphPosition + _viewport.Origin;
+        foreach (var wire in _wireVisuals)
+        {
+            var start = wire.Source.CanvasPosition + (Vector)wire.Source.OutputAnchor;
+            var end = wire.Target.CanvasPosition + (Vector)wire.Target.InputAnchors[wire.Input];
+            if (!IsNearBezier(canvasPoint, start, end)) continue;
+            var srcId = wire.Source.Model.Id;
+            var srcType = wire.Source.Model.Type;
+            var dstId = wire.Target.Model.Id;
+            var dstInput = wire.Input;
+            return () =>
+            {
+                var rerouteId = "n_" + Guid.NewGuid().ToString("N");
+                vm.Edit(
+                    new GpuEdit { Action = "add", KernelId = k.Id, Position = new(graphPosition.X - 28, graphPosition.Y - 14),
+                        Node = new GpuNode { Id = rerouteId, Op = GpuOp.Reroute, Type = srcType, Inputs = [srcId] } },
+                    new GpuEdit { Action = "connect", KernelId = k.Id, NodeId = dstId, SourceId = rerouteId, Input = dstInput });
+                SelectVisualNode(rerouteId);
+            };
+        }
+        if (_stageInput is { } inputCard)
+        {
+            foreach (var wire in _inputWires)
+            {
+                if (!inputCard.Anchors.TryGetValue(wire.Key, out var startAnchor) ||
+                    wire.Input >= wire.Target.InputAnchors.Length) continue;
+                var start = inputCard.CanvasPosition + (Vector)startAnchor;
+                var end = wire.Target.CanvasPosition + (Vector)wire.Target.InputAnchors[wire.Input];
+                if (!IsNearBezier(canvasPoint, start, end)) continue;
+                var srcNodeId = wire.Target.Model.Inputs.ElementAtOrDefault(wire.Input);
+                if (string.IsNullOrEmpty(srcNodeId)) continue;
+                var srcNode = k.Nodes.FirstOrDefault(n => n.Id == srcNodeId);
+                if (srcNode is null) continue;
+                var dstId = wire.Target.Model.Id;
+                var dstInput = wire.Input;
+                return () =>
+                {
+                    var rerouteId = "n_" + Guid.NewGuid().ToString("N");
+                    vm.Edit(
+                        new GpuEdit { Action = "add", KernelId = k.Id, Position = new(graphPosition.X - 28, graphPosition.Y - 14),
+                            Node = new GpuNode { Id = rerouteId, Op = GpuOp.Reroute, Type = srcNode.Type, Inputs = [srcNode.Id] } },
+                        new GpuEdit { Action = "connect", KernelId = k.Id, NodeId = dstId, SourceId = rerouteId, Input = dstInput });
+                    SelectVisualNode(rerouteId);
+                };
+            }
+        }
+        if (_stageOutput is { } stage)
+        {
+            foreach (var wire in _outputWires)
+            {
+                if (!stage.Anchors.TryGetValue(wire.Attribute, out var endAnchor)) continue;
+                Point? startPoint = wire.Source is not null
+                    ? wire.Source.CanvasPosition + (Vector)wire.Source.OutputAnchor
+                    : wire.StageInputKey is not null && _stageInput is { } inCard &&
+                      inCard.Anchors.TryGetValue(wire.StageInputKey, out var startAnchor)
+                        ? inCard.CanvasPosition + (Vector)startAnchor
+                        : null;
+                if (startPoint is not { } start) continue;
+                var end = stage.CanvasPosition + (Vector)endAnchor;
+                if (!IsNearBezier(canvasPoint, start, end)) continue;
+                var write = k.Writes.FirstOrDefault(w => w.Attribute == wire.Attribute);
+                var srcNode = write is not null ? k.Nodes.FirstOrDefault(n => n.Id == write.Value) : null;
+                if (write is null || srcNode is null) continue;
+                return () =>
+                {
+                    var rerouteId = "n_" + Guid.NewGuid().ToString("N");
+                    vm.Edit(
+                        new GpuEdit { Action = "add", KernelId = k.Id, Position = new(graphPosition.X - 28, graphPosition.Y - 14),
+                            Node = new GpuNode { Id = rerouteId, Op = GpuOp.Reroute, Type = srcNode.Type, Inputs = [srcNode.Id] } },
+                        new GpuEdit { Action = "write", KernelId = k.Id, Write = new(write.Id, write.Attribute, rerouteId) });
+                    SelectVisualNode(rerouteId);
+                };
+            }
+        }
+        return null;
+    }
+
     private void OpenGraphContext(Point position)
     {
-        if (Workspace is not { Kernel: not null } vm) return;
+        if (Workspace is not { Kernel: { } k } vm) return;
         Focus(); _pastePosition = position;
+        var menuItems = new List<Control>();
+        if (FindInsertRerouteAction(vm, k, position) is { } insertReroute)
+        {
+            var rerouteItem = new MenuItem { Header = LocalizationService.Shared.GetOrDefault("Editor.AddReroute", "Add reroute") };
+            rerouteItem.Click += (_, _) => Run(insertReroute);
+            menuItems.Add(rerouteItem);
+            menuItems.Add(new Separator());
+        }
         var add = new MenuItem { Header = LocalizationService.Shared.Get("Gpu.AddNode") };
         add.ItemsSource = vm.Palette
             .Where(op => op.Op is not (GpuOp.ReadAttribute or GpuOp.ReadUniform))
@@ -157,7 +260,14 @@ public partial class GpuWorkspaceView : UserControl
         cut.Click += async (_, _) => await CopySelectionAsync(true);
         var paste = new MenuItem { Header = LocalizationService.Shared.Get("Gpu.Paste") };
         paste.Click += async (_, _) => await PasteAsync();
-        NodeCanvas.ContextMenu = new ContextMenu { ItemsSource = new Control[] { quickAdd, add, new Separator(), copy, cut, paste, remove } };
+        menuItems.Add(quickAdd);
+        menuItems.Add(add);
+        menuItems.Add(new Separator());
+        menuItems.Add(copy);
+        menuItems.Add(cut);
+        menuItems.Add(paste);
+        menuItems.Add(remove);
+        NodeCanvas.ContextMenu = new ContextMenu { ItemsSource = menuItems };
         NodeCanvas.ContextMenu.Open(NodeCanvas);
     }
 

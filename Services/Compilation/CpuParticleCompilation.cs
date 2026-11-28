@@ -117,7 +117,7 @@ public static class CpuParticleCompilation
             foreach (var stageName in new[] { "CpuParticleSpawn", "CpuParticleUpdate" })
             {
                 var stage = system.ChildGraph!.Nodes.Single(node => CpuParticleSchema.Name(node.Kind) == stageName);
-                var stageGraph = stage.ChildGraph!;
+                var stageGraph = RerouteLowering.Lower(stage.ChildGraph!);
                 var entry = stageGraph.Nodes.Where(node => CpuParticleSchema.Name(node.Kind) == "CpuParticleStageEvent").ToArray();
                 if (entry.Length > 1)
                 {

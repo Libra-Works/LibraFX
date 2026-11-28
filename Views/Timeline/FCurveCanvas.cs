@@ -28,6 +28,10 @@ public sealed class FCurveCanvas : Control
     private bool _selectionAdditive;
     private DragMode _dragMode;
 
+    public double ViewScaleX => _scaleX;
+    public double ViewOriginX => _origin.X;
+    public event Action? ViewTransformChanged;
+
     public FCurveCanvas()
     {
         Focusable = true;
@@ -508,6 +512,7 @@ public sealed class FCurveCanvas : Control
         _scaleX = Math.Clamp(_scaleX * factor, 0.001, 2000);
         _scaleY = Math.Clamp(_scaleY * factor, 0.001, 10000);
         _origin = new Point(point.X - frame * _scaleX, point.Y + value * _scaleY);
+        ViewTransformChanged?.Invoke();
         InvalidateVisual();
     }
 

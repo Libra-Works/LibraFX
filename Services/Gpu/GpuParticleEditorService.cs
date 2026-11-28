@@ -599,6 +599,12 @@ public static class GpuParticleEditorService
                     k.Nodes[nodeIndex] = n with { Type = source.Type };
                 }
             }
+            else if (edit.Action == "connect" && n.Op == GpuOp.Reroute && edit.Input == 0)
+            {
+                var source = k.Nodes.Single(candidate => candidate.Id == edit.SourceId);
+                var nodeIndex = k.Nodes.FindIndex(candidate => candidate.Id == n.Id);
+                k.Nodes[nodeIndex] = n with { Type = source.Type };
+            }
         }
         else if (edit.Action == "write")
         {

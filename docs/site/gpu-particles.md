@@ -101,21 +101,11 @@ share the same name, so use the connections and types above to identify them.
 To make the particles follow the flow more slowly, change the Update graph.
 Drag from an output pin to an input pin to connect nodes.
 
-1. Select `Float3` in the **GPU palette** and add `Mul`. Input `Constant` nodes
-   are created automatically. Select the `Constant : Float3` connected to the
-   new Mul's B, set **Constant components** to `0.5, 0.5, 0.5`, and press
-   **Apply properties**.
-2. Connect the output of `Flow Map · fluidVelocity` to input A of the new
-   `Mul : Float3`. This replaces the existing connection to A.
-3. Connect the new Mul's output to input A of the existing `Mul : Float3`
-   that multiplies by time. Its B is connected to
-   `Read Uniform · Delta Time (deltaTime)`.
-4. Select the new Mul. In **Attribute writes**, select `Velocity` and press
-   **Write selected node**. The same multiplier now applies to both the
-   velocity output and the calculation that advances Position. Unused
-   automatically generated constants do not affect the result.
-5. Use **Compile** to check diagnostics, restart preview and compare. The
-   yellow particles should follow the fluid more slowly than before.
+1. Press `Space` or right-click inside the kernel canvas to add a `Mul` node (`Vector3`). Select the `Constant : Vector3` connected to the new Mul's B and edit its `X / Y / Z` components in the **Inspector** panel (`0.5, 0.5, 0.5`).
+2. Connect the output of `Flow Map · fluidVelocity` to input A of the new `Mul : Vector3`. This replaces the existing connection to A.
+3. Connect the new Mul's output to input A of the existing `Mul : Vector3` that multiplies by time (its B is wired from **Stage Input** → `DeltaTime`).
+4. Wire the new Mul's output directly to **Stage Output** → `Velocity`. The same multiplier now applies to both the velocity output and the calculation that advances Position.
+5. Use **Compile** to check diagnostics, restart preview and compare. The yellow particles should follow the fluid more slowly than before.
 
 Outside the producer domain, sampling clamps to its edge. Both transforms
 must be invertible; moving the producer and consumer apart changes the sampled
@@ -202,16 +192,14 @@ checked in Windows / Unity 7000.0.0a16 / D3D11 Play Mode. Unity 7 alpha needs
 
 This earlier UI image illustrates the graph layout, not the current sample.
 
-1. Open a Spawn kernel and select the value driving the **Lifetime** write.
-   For a first experiment, change its Float constant, then compile. This
+1. Open a Spawn kernel and select the `Constant` driving **Stage Output** → **Lifetime**.
+   For a first experiment, change its value in the **Inspector** panel, then compile. This
    changes particle lifetime, not the lifetime of the enclosing CPU effect.
-2. To add a calculation, select a type in **GPU palette**, add the operation,
-   and connect the output to a compatible input. Select a node to inspect its
-   settings. If a node has no downstream use and drives no write, it will not
-   update particle state.
-3. In **Attribute writes**, assign the computed value to the attribute you
-   intend to update. For example, an Update kernel can read Position and
-   Velocity, calculate `Position + Velocity × deltaTime`, and write Position.
+2. To add a calculation, press `Space` (or right-click) on the canvas, search for the operation,
+   and connect its output to a compatible input. Select a node to inspect and edit its
+   settings (including `X / Y / Z / W` vector components, result type, and custom attributes) in the main **Inspector** panel.
+3. Drag from **Stage Input** pins (`Position`, `Velocity`, `Age`, `DeltaTime`, custom attributes, etc.) into math nodes, and wire results into **Stage Output** pins (`Position`, `Velocity`, `Color`, `Size`, `Rotation`, `Age`, `Lifetime`, or custom attributes).
+   When no node is selected, the **Inspector** shows stage settings: **Customize Age Update**, unlimited typed **Custom Attributes** (backed by an extended buffer when beyond the built-in slots), **Particles per second**, **Initial burst**, and **Warmup time (s)**.
    Check **Diagnostics** for mismatched types, missing inputs, or invalid flow.
 
 Drag from an output pin to an input pin to connect nodes. Connecting a new

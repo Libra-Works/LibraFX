@@ -90,7 +90,10 @@
                     </ScrollViewer>
                 </Grid>
             </Border>
-            <viewsTimeline:FCurveCanvas Grid.Column="1" x:Name="CurveCanvas" MinHeight="130" />
+            <Grid Grid.Column="1" RowDefinitions="*,Auto">
+                <viewsTimeline:FCurveCanvas x:Name="CurveCanvas" MinHeight="130" />
+                <viewsTimeline:CurveColorBar Grid.Row="1" x:Name="ColorBar" Height="22" IsVisible="{Binding IsColorCurve}" />
+            </Grid>
         </Grid>
         <Border Grid.Row="1" Classes="editor-bar" BorderThickness="0,0,0,1">
             <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">

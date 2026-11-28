@@ -76,6 +76,11 @@ public sealed class CompiledRegisterKernel
         var mappings = new List<InstructionMapping>();
         foreach (var n in ordered)
         {
+            if (n.Op == GpuOp.Reroute)
+            {
+                registers[n.Id] = registers[n.Inputs[0]];
+                continue;
+            }
             uint Ref(int i) => i < n.Inputs.Count ? registers[n.Inputs[i]] : MissingRegister;
             if (n.Op == GpuOp.FCurve)
             {

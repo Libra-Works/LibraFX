@@ -57,6 +57,61 @@ public sealed class CurveEditorViewModel : Tool, IDisposable
                 : null;
         }
     }
+
+    public Color EvaluateColorAtTime(double seconds)
+    {
+        if (_node is null || !_groupChannels.TryGetValue(_node.Id, out var channel) ||
+            channel.Item.Editor != "colorCurve")
+            return Colors.White;
+        var rgba = channel.Item.Targets.Select(target =>
+        {
+            var node = _groupNodes.FirstOrDefault(candidate => candidate.Id == target.NodeId);
+            var curve = ReferenceEquals(node, _node) ? Curve : node?.Curve;
+            var value = curve is null ? 0 : Models.Graph.FCurve.Evaluate(curve, seconds);
+            return (byte)Math.Round(Math.Clamp(value, 0, 1) * 255);
+        }).ToArray();
+        return rgba.Length == 4 ? Color.FromArgb(rgba[3], rgba[0], rgba[1], rgba[2]) : Colors.White;
+    }
+
+    public IReadOnlyList<double> ColorKeyTimes()
+    {
+        if (_node is null || !_groupChannels.TryGetValue(_node.Id, out var channel) ||
+            channel.Item.Editor != "colorCurve")
+            return [];
+        return channel.Item.Targets
+            .SelectMany(target =>
+            {
+                var node = _groupNodes.FirstOrDefault(candidate => candidate.Id == target.NodeId);
+                var curve = ReferenceEquals(node, _node) ? Curve : node?.Curve;
+                return curve?.Keys.Select(k => k.TimeSeconds) ?? [];
+            })
+            .Distinct()
+            .OrderBy(t => t)
+            .ToArray();
+    }
+
+    public void SetColorKeyAtTime(double seconds, Color color)
+    {
+        if (_node is null || _group is null || !_groupChannels.TryGetValue(_node.Id, out var channel) ||
+            channel.Item.Editor != "colorCurve" || channel.Item.Targets.Count != 4)
+            return;
+        double[] values = [color.R / 255.0, color.G / 255.0, color.B / 255.0, color.A / 255.0];
+        var previous = _group.GroupOverrides?.FirstOrDefault(value => value.ItemId == channel.Item.Id);
+        var components = channel.Item.Targets.Select((target, index) =>
+        {
+            var current = previous?.Components[index].Curve ??
+                _group.ChildGraph!.Nodes.Single(candidate => candidate.Id == target.NodeId).Curve!;
+            var existing = current.Keys.FirstOrDefault(k => Math.Abs(k.TimeSeconds - seconds) <= 1e-5);
+            var updatedKeys = existing is not null
+                ? current.Keys.Select(k => k.Id == existing.Id ? k with { Value = values[index] } : k).ToArray()
+                : current.Keys.Append(new FCurveKey(Guid.NewGuid(), seconds, values[index], 0, 0, CurveInterpolation.Linear))
+                    .OrderBy(k => k.TimeSeconds)
+                    .ToArray();
+            return new GroupInstanceComponent(Curve: current with { Keys = updatedKeys });
+        }).ToArray();
+        _graph.SetGroupInstanceValue(_group, new(channel.Item.Id, components));
+        NotifyCurve();
+    }
     public ObservableCollection<CurveChannelViewModel> Channels { get; } = [];
     public IReadOnlyList<CurveChannelViewModel> FilteredChannels => Channels
         .Where(channel => channel.Name.Contains(ChannelSearch.Trim(), StringComparison.OrdinalIgnoreCase)).ToArray();

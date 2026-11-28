@@ -41,26 +41,43 @@ public partial class GpuWorkspaceView : UserControl
             _visualKernelId = k.Id;
             foreach (var n in visibleNodes)
             {
-                var panel = new StackPanel { Spacing = 3 };
+                var panel = new StackPanel { Spacing = 0 };
                 var title = new TextBlock
                 {
-                    Margin = new Thickness(4, 0), MinHeight = 26, Tag = n.Id,
-                    TextWrapping = TextWrapping.Wrap
+                    Tag = n.Id,
+                    TextWrapping = TextWrapping.Wrap,
+                    FontWeight = FontWeight.SemiBold,
+                    Foreground = this.FindResource("EffectForegroundBrush") as IBrush ?? Brushes.White
                 };
                 ToolTip.SetTip(title, OpDescription(n.Op));
-                panel.Children.Add(title);
+                var header = new Border
+                {
+                    Padding = new Thickness(8, 6),
+                    CornerRadius = new CornerRadius(3, 3, 0, 0),
+                    Background = this.FindResource("EffectBorderBrush") as IBrush ?? Brushes.Gray,
+                    Child = title,
+                    IsVisible = n.Op != GpuOp.Reroute
+                };
+                panel.Children.Add(header);
+
                 var output = PortButton("gpu-output");
                 var outputLabel = PortLabel();
                 outputLabel.HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right;
-                var outputRow = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
-                outputRow.Background = Brushes.Transparent;
+                outputLabel.IsVisible = n.Op != GpuOp.Reroute;
+                var outputRow = new Grid
+                {
+                    ColumnDefinitions = new ColumnDefinitions("*,Auto"),
+                    Background = Brushes.Transparent,
+                    VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top
+                };
                 outputRow.Children.Add(outputLabel);
                 Grid.SetColumn(output, 1);
                 outputRow.Children.Add(output);
-                panel.Children.Add(outputRow);
+
                 var destinationLabel = PortLabel();
-                destinationLabel.Margin = new Thickness(4, 0, 4, 0);
-                panel.Children.Add(destinationLabel);
+                destinationLabel.IsVisible = false;
+
+                var inputsPanel = new StackPanel { Spacing = 4 };
                 var inputs = new Button[GpuOperationRegistry.Operations[n.Op].MaxInputs];
                 var inputLabels = new TextBlock[inputs.Length];
                 for (var i = 0; i < inputs.Length; i++)
@@ -75,17 +92,41 @@ public partial class GpuWorkspaceView : UserControl
                     });
                     inputLabels[i] = PortLabel();
                     inputLabels[i].Margin = new Thickness(4, 0, 0, 0);
+                    inputLabels[i].IsVisible = n.Op != GpuOp.Reroute;
                     var row = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*") };
                     row.Children.Add(inputs[i]);
                     Grid.SetColumn(inputLabels[i], 1);
                     row.Children.Add(inputLabels[i]);
-                    panel.Children.Add(row);
+                    inputsPanel.Children.Add(row);
                 }
+
+                var portsGrid = new Grid
+                {
+                    ColumnDefinitions = n.Op == GpuOp.Reroute ? new ColumnDefinitions("Auto,4,Auto") : new ColumnDefinitions("*,8,*"),
+                    Margin = n.Op == GpuOp.Reroute ? new Thickness(2) : new Thickness(6, 6)
+                };
+                portsGrid.Children.Add(inputsPanel);
+                Grid.SetColumn(outputRow, 2);
+                portsGrid.Children.Add(outputRow);
+                panel.Children.Add(portsGrid);
+
+                var footer = new TextBlock
+                {
+                    Text = GpuTypeLabel(n.Type),
+                    FontSize = 11,
+                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+                    Margin = new Thickness(6, 0, 6, 5),
+                    Foreground = this.FindResource("EffectMutedForegroundBrush") as IBrush ?? Brushes.Gray,
+                    IsVisible = n.Op != GpuOp.Reroute
+                };
+                panel.Children.Add(footer);
+
                 var border = new Border
                 {
-                    Width = 230, Child = panel, Padding = new Thickness(6), CornerRadius = new CornerRadius(5),
+                    Width = n.Op == GpuOp.Reroute ? 56 : 230, Child = panel, Padding = new Thickness(0),
+                    CornerRadius = new CornerRadius(n.Op == GpuOp.Reroute ? 14 : 4),
                     Background = this.FindResource("EffectSurfaceBrush") as IBrush ?? Brushes.DimGray,
-                    BorderThickness = new Thickness(1), Tag = n.Id, Cursor = new Cursor(StandardCursorType.SizeAll)
+                    BorderThickness = new Thickness(2), Tag = n.Id, Cursor = new Cursor(StandardCursorType.SizeAll)
                 };
                 var visual = new NodeVisual(n, border, title, output, inputs, outputLabel, destinationLabel, inputLabels)
                 { CanvasOrigin = _viewport.Origin };
@@ -148,9 +189,9 @@ public partial class GpuWorkspaceView : UserControl
                 return $"{NodeDisplayName(target)} / {InputDisplayName(input?.Id ?? "input")}";
             }).Concat(writes[n.Id].Select(write =>
                 LocalizationService.Shared.Get("Gpu.OutputAttributeTarget", AttributeDisplayName(write.Attribute)))).ToArray();
-            var outputText = $"{OutputDisplayName(n)} : {GpuTypeLabel(n.Type)}";
+            var outputText = OutputDisplayName(n);
             visual.OutputLabel.Text = outputText;
-            visual.DestinationLabel.IsVisible = targets.Length != 0;
+            visual.DestinationLabel.IsVisible = false;
             visual.DestinationLabel.Text = targets.Length switch
             {
                 0 => "",
@@ -168,7 +209,7 @@ public partial class GpuWorkspaceView : UserControl
                 var source = k.Nodes.FirstOrDefault(x => x.Id == n.Inputs.ElementAtOrDefault(i));
                 var defaults = GpuOperationRegistry.GetDefaultInputs(n.Op, n.Type);
                 var descriptor = defaults.ElementAtOrDefault(i);
-                visual.InputLabels[i].Text = $"{InputDisplayName(descriptor?.Id ?? "input")} : {GpuTypeLabel(source?.Type ?? descriptor?.DefaultType ?? n.Type)}";
+                visual.InputLabels[i].Text = InputDisplayName(descriptor?.Id ?? "input");
                 visual.Inputs[i].Foreground = TypeBrush(source?.Type ?? descriptor?.DefaultType ?? n.Type);
             }
         }
