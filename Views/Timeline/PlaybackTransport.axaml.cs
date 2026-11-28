@@ -1,7 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Timeline;
 
 public partial class PlaybackTransport : UserControl
 {

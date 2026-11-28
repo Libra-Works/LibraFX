@@ -1,7 +1,7 @@
 using System.Text.Json;
 using LiberaFx.Models.Graph;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Samples;
 
 /// <summary>
 /// Column-vector affine matrices, represented by four FloatX4 row nodes.

@@ -1,4 +1,6 @@
-namespace LiberaFx.Services;
+using LiberaFx.Services.Project;
+
+namespace LiberaFx.Services.Assets;
 
 public sealed record ReferenceFolderScan(IReadOnlyList<ReferenceSource> Sources,
     IReadOnlyList<ReferenceResource> Files, IReadOnlyList<string> Errors, bool Truncated);

@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 using System.Collections.Concurrent;
 using LiberaFx.Models.Graph;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Assets;
 
 public enum GroupAssetOrigin
 {

@@ -3,9 +3,9 @@ using Avalonia;
 using Avalonia.Data.Converters;
 using Avalonia.Media;
 using LiberaFx.Models.Graph;
-using LiberaFx.Services;
+using LiberaFx.Services.Settings;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Graph;
 
 public sealed class GraphPortBrushConverter : IMultiValueConverter
 {

@@ -8,9 +8,17 @@ using Avalonia.Threading;
 using LibraGpu.Core;
 using LiberaFx.Models.Commands;
 using LiberaFx.Models.Graph;
-using LiberaFx.Services;
-using LiberaFx.ViewModels;
-using LiberaFx.Views;
+using LiberaFx.Services.Assets;
+using LiberaFx.Services.Compilation;
+using LiberaFx.Services.Gpu;
+using LiberaFx.Services.Project;
+using LiberaFx.Services.Samples;
+using LiberaFx.Services.Settings;
+using LiberaFx.ViewModels.Assets;
+using LiberaFx.ViewModels.Graph;
+using LiberaFx.ViewModels.Main;
+using LiberaFx.Views.Assets;
+using LiberaFx.Views.Graph;
 
 namespace LiberaFx.Tests;
 

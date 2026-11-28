@@ -2,7 +2,7 @@ using System.IO.Pipes;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
-using LiberaFx.Services;
+using LiberaFx.Services.Preview;
 
 internal static class ViewerDiscoveryTests
 {

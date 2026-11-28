@@ -1,7 +1,7 @@
 using Avalonia;
 using Avalonia.Threading;
 using LiberaFx;
-using LiberaFx.Services;
+using LiberaFx.Services.Crash;
 
 internal static class Program
 {

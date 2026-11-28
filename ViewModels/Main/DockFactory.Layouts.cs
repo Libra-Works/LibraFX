@@ -3,9 +3,10 @@ using Dock.Model.Core;
 using Dock.Model.Mvvm.Controls;
 using Dock.Avalonia.Controls;
 using LiberaFx.Models;
-using LiberaFx.Services;
+using LiberaFx.Services.Settings;
+using LiberaFx.ViewModels.Panels;
 
-namespace LiberaFx.ViewModels;
+namespace LiberaFx.ViewModels.Main;
 
 public sealed partial class DockFactory
 {

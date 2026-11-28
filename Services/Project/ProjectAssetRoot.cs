@@ -1,4 +1,7 @@
-namespace LiberaFx.Services;
+using LiberaFx.Services.Assets;
+using LiberaFx.Services.Settings;
+
+namespace LiberaFx.Services.Project;
 
 public enum AssetBrowserRootKind
 {

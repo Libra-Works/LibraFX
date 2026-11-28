@@ -1,8 +1,9 @@
 using System.Buffers.Binary;
 using LiberaFx.Models.Graph;
 using LiberaFx.Services.Compilation;
+using LiberaFx.Services.Assets;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Preview;
 
 public sealed record LiveGameGraphSource(GraphSnapshot Graph, string Name, string? GroupDirectory = null);
 

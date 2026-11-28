@@ -3,10 +3,11 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
-using LiberaFx.Services;
-using LiberaFx.ViewModels;
+using LiberaFx.Services.Compilation;
+using LiberaFx.Services.Sprite;
+using LiberaFx.ViewModels.Panels;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Sprite;
 
 public sealed class SpriteAtlasPreview : Control
 {

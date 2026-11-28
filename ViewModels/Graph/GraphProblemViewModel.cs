@@ -1,6 +1,6 @@
 using CommunityToolkit.Mvvm.Input;
 
-namespace LiberaFx.ViewModels;
+namespace LiberaFx.ViewModels.Graph;
 
 public sealed class GraphProblemViewModel
 {

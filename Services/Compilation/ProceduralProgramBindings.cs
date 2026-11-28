@@ -1,5 +1,6 @@
 using System.Text.Json;
 using LiberaFx.Models.Graph;
+using LiberaFx.Services.Gpu;
 
 namespace LiberaFx.Services.Compilation;
 

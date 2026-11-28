@@ -1,7 +1,7 @@
 using Avalonia;
 using LiberaFx.Models;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Settings;
 
 public static class WindowLayoutGeometry
 {

@@ -1,7 +1,8 @@
 using Dock.Model.Mvvm.Controls;
-using LiberaFx.Services;
+using LiberaFx.Services.Assets;
+using LiberaFx.ViewModels.Main;
 
-namespace LiberaFx.ViewModels;
+namespace LiberaFx.ViewModels.Panels;
 
 public sealed class SpriteEditorPaneViewModel(MainViewModel main) : Tool, IDisposable
 {

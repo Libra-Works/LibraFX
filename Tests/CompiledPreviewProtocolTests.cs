@@ -10,9 +10,11 @@ using Avalonia.Threading;
 using LiberaFx.Models.Commands;
 using LiberaFx.Models.Graph;
 using LiberaFx.Models.Resources;
-using LiberaFx.Services;
+using LiberaFx.Services.Assets;
+using LiberaFx.Services.Preview;
+using LiberaFx.ViewModels.Graph;
+using LiberaFx.ViewModels.Main;
 using LiberaFx.Services.Compilation;
-using LiberaFx.ViewModels;
 
 internal static class CompiledPreviewProtocolTests
 {

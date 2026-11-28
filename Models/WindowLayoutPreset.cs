@@ -1,3 +1,5 @@
+using LiberaFx.Views.Windows;
+
 namespace LiberaFx.Models;
 
 // Only dock topology and window geometry belong here, never graph/document data.

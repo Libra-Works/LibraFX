@@ -4,8 +4,9 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using LiberaFx.Models.Appearance;
+using LiberaFx.Services.Settings;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Preview;
 
 public sealed record PreviewPlaybackState(bool Playing, double Frame, double FramesPerSecond,
     double RangeStart, double RangeEnd, bool Loop)

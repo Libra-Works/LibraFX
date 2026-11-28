@@ -1,7 +1,8 @@
 using Avalonia.Threading;
 using LiberaFx.Models.Project;
+using LiberaFx.ViewModels.Graph;
 
-namespace LiberaFx.ViewModels;
+namespace LiberaFx.ViewModels.Main;
 
 public partial class MainViewModel
 {

@@ -1,7 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:views="using:LiberaFx.Views"
-        x:Class="LiberaFx.Views.ColorEditorWindow"
+             xmlns:viewsControls="using:LiberaFx.Views.Controls"
+        x:Class="LiberaFx.Views.Windows.ColorEditorWindow"
         Title="{DynamicResource Text.Panels.ColorEditorTitle}" Width="760" Height="600" MinWidth="670" MinHeight="480"
         WindowStartupLocation="CenterOwner"
         Background="{DynamicResource EffectWindowBackgroundBrush}">
@@ -17,7 +17,7 @@
                 <Border Grid.Column="1" Width="62" Height="36" CornerRadius="3"
                         BorderBrush="{DynamicResource EffectBorderBrush}" BorderThickness="1"
                         ClipToBounds="True">
-                    <views:ColorSwatch x:Name="CurrentSwatch" />
+                    <viewsControls:ColorSwatch x:Name="CurrentSwatch" />
                 </Border>
             </Grid>
         </Border>
@@ -36,7 +36,7 @@
                         <TextBlock Classes="editor-heading" Text="{DynamicResource Text.Panels.RgbaHeading}" />
                         <Border Grid.Column="1" Background="Transparent" Padding="2"
                                 ToolTip.Tip="{DynamicResource Text.Panels.ColorRangeHelp}">
-                            <views:EditorIconView Icon="Info" />
+                            <viewsControls:EditorIconView Icon="Info" />
                         </Border>
                     </Grid>
                     <Grid ColumnDefinitions="*,*" ColumnSpacing="8" RowDefinitions="Auto,Auto" RowSpacing="8">
@@ -50,7 +50,7 @@
                     <Grid ColumnDefinitions="*,Auto">
                         <TextBlock Text="{DynamicResource Text.Panels.ColorFavorites}" FontWeight="SemiBold"
                                    VerticalAlignment="Center" Foreground="{DynamicResource EffectMutedForegroundBrush}" />
-                        <views:IconButton Grid.Column="1" Icon="Add"
+                        <viewsControls:IconButton Grid.Column="1" Icon="Add"
                                           ToolTip.Tip="{DynamicResource Text.Panels.AddCurrentFavorite}"
                                           AutomationProperties.Name="{DynamicResource Text.Panels.AddCurrentFavorite}"
                                           Click="OnAddFavorite" Padding="8,4" />
@@ -70,14 +70,14 @@
                 <Button Click="OnCancel" MinWidth="80"
                         AutomationProperties.Name="{DynamicResource Text.Panels.Cancel}">
                     <StackPanel Orientation="Horizontal" Spacing="6">
-                        <views:EditorIconView Icon="Close" />
+                        <viewsControls:EditorIconView Icon="Close" />
                         <TextBlock Text="{DynamicResource Text.Panels.Cancel}" />
                     </StackPanel>
                 </Button>
                 <Button Click="OnAccept" IsDefault="True" MinWidth="80"
                         AutomationProperties.Name="{DynamicResource Text.Panels.Ok}">
                     <StackPanel Orientation="Horizontal" Spacing="6">
-                        <views:EditorIconView Icon="Check" />
+                        <viewsControls:EditorIconView Icon="Check" />
                         <TextBlock Text="{DynamicResource Text.Panels.Ok}" />
                     </StackPanel>
                 </Button>

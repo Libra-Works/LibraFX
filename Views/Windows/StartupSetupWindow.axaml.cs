@@ -1,9 +1,10 @@
 using Avalonia.Controls;
 using Avalonia.Interactivity;
-using LiberaFx.Services;
-using LiberaFx.ViewModels;
+using LiberaFx.Services.Crash;
+using LiberaFx.Services.Settings;
+using LiberaFx.ViewModels.Main;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Windows;
 
 public partial class StartupSetupWindow : Window
 {

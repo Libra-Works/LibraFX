@@ -2,8 +2,9 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using LiberaFx.Models.Graph;
 using LiberaFx.Models.Project;
+using LiberaFx.Services.Assets;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Samples;
 
 /// <summary>Two sibling templates, not a flattened animation or nested generator.</summary>
 public static class FireworksSample

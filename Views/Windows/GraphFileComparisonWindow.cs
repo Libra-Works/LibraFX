@@ -4,9 +4,11 @@ using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
-using LiberaFx.Services;
+using LiberaFx.Services.Project;
+using LiberaFx.Services.Settings;
+using LiberaFx.Views.Graph;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Windows;
 
 internal sealed class GraphFileComparisonWindow : Window
 {

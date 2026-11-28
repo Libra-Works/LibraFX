@@ -3,8 +3,9 @@ using System.Text.Json.Serialization;
 using LibraGpu.Core;
 using LiberaFx.Models.Graph;
 using LiberaFx.Models.Project;
+using LiberaFx.Services.Gpu;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Samples;
 
 /// <summary>Editable Y-up, metre-based source graphs with no imported assets.</summary>
 public static class ParticleSamples

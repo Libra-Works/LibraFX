@@ -2,11 +2,12 @@ using System.ComponentModel;
 using System.Text.Json;
 using LiberaFx.Models.Graph;
 using LiberaFx.Services.Compilation;
-using LiberaFx.ViewModels;
+using LiberaFx.Services.Gpu;
+using LiberaFx.ViewModels.Graph;
 using ModelContextProtocol;
 using ModelContextProtocol.Server;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Mcp;
 
 public sealed partial class LiberaFxMcpTools
 {

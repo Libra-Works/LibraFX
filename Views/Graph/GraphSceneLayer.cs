@@ -4,10 +4,12 @@ using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
-using LiberaFx.ViewModels;
-using LiberaFx.Services;
+using LiberaFx.Services.Compilation;
+using LiberaFx.Services.Preview;
+using LiberaFx.Services.Settings;
+using LiberaFx.ViewModels.Graph;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Graph;
 
 public sealed class GraphSceneLayer : Control
 {

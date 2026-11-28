@@ -3,7 +3,7 @@ using System.Text.Json;
 using Avalonia.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Settings;
 
 public sealed class ShortcutEntry : ObservableObject
 {

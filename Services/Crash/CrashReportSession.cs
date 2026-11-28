@@ -1,6 +1,6 @@
 using LiberaFx.Extensions.Abstractions;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Crash;
 
 /// <summary>One UI review. Consent is never persisted. No retries or alternate providers.</summary>
 public sealed class CrashReportSession

@@ -4,8 +4,11 @@ using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
-using LiberaFx.Services;
-using LiberaFx.Views;
+using LiberaFx.Services.Extensions;
+using LiberaFx.Services.Mcp;
+using LiberaFx.Services.Settings;
+using LiberaFx.Views.Controls;
+using LiberaFx.Views.Windows;
 using ModelContextProtocol.Server;
 
 internal static class OperatorSkillTests

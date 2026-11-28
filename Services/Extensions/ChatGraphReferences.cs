@@ -1,8 +1,9 @@
 using System.Text.RegularExpressions;
 using LiberaFx.Models.Graph;
-using LiberaFx.ViewModels;
+using LiberaFx.ViewModels.Graph;
+using LiberaFx.ViewModels.Main;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Extensions;
 
 public sealed record ChatNodeReference(string DocumentId, IReadOnlyList<Guid> ParentPath, Guid NodeId, string Label);
 

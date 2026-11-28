@@ -4,7 +4,7 @@ using System.Text.Json.Serialization;
 using LiberaFx.Models.Graph;
 using LiberaFx.Models.Project;
 using LiberaFx.Models.Resources;
-using LiberaFx.Services;
+using LiberaFx.Services.Assets;
 
 // Set LIBERAFX_CONVERTER_EXE to an isolated, prebuilt converter executable to run this suite.
 internal static class ResourceIdentityConverterTests

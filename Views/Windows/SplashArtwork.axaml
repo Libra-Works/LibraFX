@@ -1,6 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        x:Class="LiberaFx.Views.SplashArtwork"
+        x:Class="LiberaFx.Views.Windows.SplashArtwork"
         Width="720" Height="390">
     <Grid ClipToBounds="True">
         <Grid.Background>

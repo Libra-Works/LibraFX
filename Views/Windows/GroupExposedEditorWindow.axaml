@@ -1,6 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        x:Class="LiberaFx.Views.GroupExposedEditorWindow"
+        x:Class="LiberaFx.Views.Windows.GroupExposedEditorWindow"
         Title="{DynamicResource Text.Panels.ConfigureGroupItems}"
         Width="520" Height="720" MinWidth="420" MinHeight="480"
         WindowStartupLocation="CenterOwner"

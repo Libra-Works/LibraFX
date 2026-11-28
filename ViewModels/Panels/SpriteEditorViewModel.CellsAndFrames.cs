@@ -3,9 +3,10 @@ using System.Globalization;
 using System.Collections.ObjectModel;
 using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
-using LiberaFx.Services;
+using LiberaFx.Services.Settings;
+using LiberaFx.Services.Sprite;
 
-namespace LiberaFx.ViewModels;
+namespace LiberaFx.ViewModels.Panels;
 
 public sealed partial class SpriteEditorViewModel
 {

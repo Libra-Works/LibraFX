@@ -1,7 +1,7 @@
 using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Settings;
 
 public sealed record TeamProfile(Guid Id, string Name, string GroupDirectory, string NodeDirectory = "");
 

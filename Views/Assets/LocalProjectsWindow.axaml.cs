@@ -1,11 +1,13 @@
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
-using LiberaFx.Services;
-using LiberaFx.ViewModels;
+using LiberaFx.Services.Assets;
+using LiberaFx.Services.Gpu;
+using LiberaFx.Services.Settings;
+using LiberaFx.ViewModels.Main;
 using System.Text.Json;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Assets;
 
 public partial class LocalProjectsWindow : UserControl
 {

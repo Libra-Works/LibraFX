@@ -1,4 +1,5 @@
-using LiberaFx.Services;
+using LiberaFx.Services.Assets;
+using LiberaFx.Services.Project;
 using LiberaFx.Services.Compilation;
 using LiberaFx.Models.Graph;
 using LiberaFx.Models.Resources;

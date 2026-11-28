@@ -1,8 +1,8 @@
 <UserControl xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:services="using:LiberaFx.Services"
-        xmlns:views="using:LiberaFx.Views"
-        x:Class="LiberaFx.Views.PreviewProfilerWindow"
+             xmlns:servicesPreview="using:LiberaFx.Services.Preview"
+             xmlns:viewsControls="using:LiberaFx.Views.Controls"
+        x:Class="LiberaFx.Views.Windows.PreviewProfilerWindow"
         Background="{DynamicResource EffectWindowBackgroundBrush}">
     <Grid Margin="10" RowDefinitions="Auto,Auto,Auto,*,Auto" RowSpacing="6">
         <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10">
@@ -11,7 +11,7 @@
             <TextBlock x:Name="PeerStatus" Grid.Column="1" Classes="editor-label" VerticalAlignment="Center" TextWrapping="Wrap" />
             <Border Grid.Column="2" Background="Transparent" Padding="4" VerticalAlignment="Center"
                     ToolTip.Tip="{DynamicResource Text.Profiler.CapabilityNotice}">
-                <views:EditorIconView Icon="Info" />
+                <viewsControls:EditorIconView Icon="Info" />
             </Border>
         </Grid>
         <WrapPanel Grid.Row="1" Orientation="Horizontal" ItemSpacing="8" LineSpacing="4">
@@ -58,12 +58,12 @@
                         <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                             <TextBlock Classes="editor-heading" Text="{DynamicResource Text.Profiler.HistoryTitle}" />
                             <Border Background="Transparent" Padding="2" ToolTip.Tip="{DynamicResource Text.Profiler.HistoryHelp}">
-                                <views:EditorIconView Icon="Info" />
+                                <viewsControls:EditorIconView Icon="Info" />
                             </Border>
                         </StackPanel>
                         <CheckBox x:Name="LiveCheck" Grid.Column="1" Content="{DynamicResource Text.Profiler.Live}" IsChecked="True"
                                   IsCheckedChanged="OnHistoryModeChanged" />
-                        <views:IconButton Grid.Column="2" Classes="editor-tool" Icon="Delete" Click="OnClearHistory"
+                        <viewsControls:IconButton Grid.Column="2" Classes="editor-tool" Icon="Delete" Click="OnClearHistory"
                                           ToolTip.Tip="{DynamicResource Text.Profiler.ClearHistory}"
                                           AutomationProperties.Name="{DynamicResource Text.Profiler.ClearHistory}" />
                     </Grid>
@@ -77,7 +77,7 @@
                             <StackPanel Orientation="Horizontal" Spacing="8"><Border Width="10" Height="10" Background="#8895A7" /><TextBlock Text="{DynamicResource Text.Profiler.CategoryOther}" /></StackPanel>
                         </StackPanel>
                         <Border Grid.Column="1" BorderBrush="{DynamicResource EffectMutedForegroundBrush}" BorderThickness="1" CornerRadius="4">
-                            <views:ProfilerHistoryChart x:Name="HistoryChart" MinHeight="110"
+                            <viewsControls:ProfilerHistoryChart x:Name="HistoryChart" MinHeight="110"
                                 AutomationProperties.Name="{DynamicResource Text.Profiler.HistoryTitle}" />
                         </Border>
                     </Grid>
@@ -85,7 +85,7 @@
                         <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                             <TextBlock x:Name="SelectedSampleStatus" Classes="editor-heading" />
                             <Border Background="Transparent" Padding="2" ToolTip.Tip="{DynamicResource Text.Profiler.CostHelp}">
-                                <views:EditorIconView Icon="Info" />
+                                <viewsControls:EditorIconView Icon="Info" />
                             </Border>
                         </StackPanel>
                         <ComboBox x:Name="CostMode" Grid.Column="1" SelectedIndex="1" SelectionChanged="OnCostModeChanged">
@@ -95,7 +95,7 @@
                     </Grid>
                     <Grid Grid.Row="4" ColumnDefinitions="*,320" ColumnSpacing="14">
                         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                            <views:ProfilerCostChart x:Name="CostChart"
+                            <viewsControls:ProfilerCostChart x:Name="CostChart"
                                 AutomationProperties.Name="{DynamicResource Text.Profiler.CostTitle}" />
                         </ScrollViewer>
                         <Border Grid.Column="1" Classes="editor-card">
@@ -127,7 +127,7 @@
                             <ListBox x:Name="MetricList" Grid.Row="1"
                                      AutomationProperties.Name="{DynamicResource Text.Profiler.Metrics}">
                                 <ListBox.ItemTemplate>
-                                    <DataTemplate DataType="services:PreviewMetric">
+                                    <DataTemplate DataType="servicesPreview:PreviewMetric">
                                         <Grid ColumnDefinitions="160,290,90,150,150,150,150">
                                             <TextBlock Text="{Binding Event}" />
                                             <TextBlock Grid.Column="1" Text="{Binding NodeId}" />
@@ -153,7 +153,7 @@
                         <Button x:Name="WatchButton" Grid.Column="2" Classes="editor-action" Content="{DynamicResource Text.Profiler.Watch}" Click="OnWatch" />
                         <Border Grid.Column="3" Background="Transparent" Padding="4" VerticalAlignment="Center"
                                 ToolTip.Tip="{DynamicResource Text.Profiler.WatchHelp}">
-                            <views:EditorIconView Icon="Info" />
+                            <viewsControls:EditorIconView Icon="Info" />
                         </Border>
                     </Grid>
                     <TextBlock x:Name="ValuesStatus" Grid.Row="1" Classes="editor-label" TextWrapping="Wrap" />

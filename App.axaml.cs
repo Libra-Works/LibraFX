@@ -2,9 +2,15 @@ using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
-using LiberaFx.Services;
-using LiberaFx.ViewModels;
-using LiberaFx.Views;
+using LiberaFx.Services.Assets;
+using LiberaFx.Services.Crash;
+using LiberaFx.Services.Mcp;
+using LiberaFx.Services.Preview;
+using LiberaFx.Services.Project;
+using LiberaFx.Services.Settings;
+using LiberaFx.ViewModels.Graph;
+using LiberaFx.ViewModels.Main;
+using LiberaFx.Views.Windows;
 using System.Diagnostics;
 
 namespace LiberaFx;

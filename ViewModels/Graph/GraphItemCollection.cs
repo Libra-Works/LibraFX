@@ -2,7 +2,7 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
 
-namespace LiberaFx.ViewModels;
+namespace LiberaFx.ViewModels.Graph;
 
 public sealed class GraphItemCollection<T> : ObservableCollection<T>
 {

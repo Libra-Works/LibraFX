@@ -1,7 +1,8 @@
 using Avalonia.Threading;
 using LiberaFx.Models.Graph;
-using LiberaFx.Services;
-using LiberaFx.ViewModels;
+using LiberaFx.Services.Mcp;
+using LiberaFx.ViewModels.Graph;
+using LiberaFx.ViewModels.Main;
 using ModelContextProtocol;
 using System.Net;
 using System.Net.Sockets;

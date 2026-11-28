@@ -1,7 +1,7 @@
 using System.Text.Json;
 using LiberaFx.Models.Graph;
 using LiberaFx.Models.Resources;
-using LiberaFx.Services;
+using LiberaFx.Services.Assets;
 using LiberaFx.Services.Compilation;
 
 // Parent test runner should call Run(); uses only an explicit in-memory binding snapshot.

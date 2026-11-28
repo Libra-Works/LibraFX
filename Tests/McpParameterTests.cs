@@ -2,8 +2,8 @@ using System.Text.Json;
 using Avalonia.Threading;
 using LiberaFx.Models.Commands;
 using LiberaFx.Models.Graph;
-using LiberaFx.Services;
-using LiberaFx.ViewModels;
+using LiberaFx.Services.Mcp;
+using LiberaFx.ViewModels.Graph;
 using ModelContextProtocol;
 
 internal static class McpParameterTests

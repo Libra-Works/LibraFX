@@ -1,9 +1,9 @@
 using System.Text.Json;
 using LiberaFx.Models.Commands;
 using LiberaFx.Models.Graph;
-using LiberaFx.Services;
+using LiberaFx.Services.Settings;
 
-namespace LiberaFx.ViewModels;
+namespace LiberaFx.ViewModels.Graph;
 
 public sealed partial class GraphWorkspaceViewModel
 {

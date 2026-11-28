@@ -1,9 +1,9 @@
 using System.Reflection;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
-using LiberaFx.Services;
+using LiberaFx.Services.Settings;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Windows;
 
 public partial class AboutWindow : Window
 {

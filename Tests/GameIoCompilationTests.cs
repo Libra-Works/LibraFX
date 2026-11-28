@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using LiberaFx.Models.Graph;
 using LiberaFx.Services.Compilation;
+using LiberaFx.Services.Samples;
 
 namespace LiberaFx.Tests;
 

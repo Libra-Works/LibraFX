@@ -3,11 +3,15 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using LibraGpu.Core;
 using LiberaFx.Models.Graph;
+using LiberaFx.Services.Sprite;
 #if !LIBERAFX_CONVERTER
-using LiberaFx.ViewModels;
+using LiberaFx.Services.Assets;
+using LiberaFx.Services.Preview;
+using LiberaFx.Services.Settings;
+using LiberaFx.ViewModels.Graph;
 #endif
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Gpu;
 
 public sealed record GpuPosition(double X, double Y);
 public sealed record GpuTextDraft(string Text, List<GpuDiagnostic> Diagnostics);

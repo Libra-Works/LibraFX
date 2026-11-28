@@ -1,7 +1,7 @@
 using System.Text.Json;
 using LiberaFx.Models.Graph;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Samples;
 
 /// <summary>Synthetic source graphs: no imported model, image, or engine resource mapping.</summary>
 public static class ProceduralSamples

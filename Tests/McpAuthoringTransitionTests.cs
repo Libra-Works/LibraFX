@@ -6,9 +6,12 @@ using Avalonia.Controls;
 using Avalonia.Threading;
 using LiberaFx.Models.Commands;
 using LiberaFx.Models.Graph;
-using LiberaFx.Services;
-using LiberaFx.ViewModels;
-using LiberaFx.Views;
+using LiberaFx.Services.Mcp;
+using LiberaFx.Services.Project;
+using LiberaFx.Services.Samples;
+using LiberaFx.Services.Sprite;
+using LiberaFx.ViewModels.Graph;
+using LiberaFx.Views.Graph;
 
 internal static class McpAuthoringTransitionTests
 {

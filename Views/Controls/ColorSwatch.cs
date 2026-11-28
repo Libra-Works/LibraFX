@@ -2,7 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Controls;
 
 public sealed class ColorSwatch : Control
 {

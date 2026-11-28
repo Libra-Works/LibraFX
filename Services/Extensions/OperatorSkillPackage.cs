@@ -1,4 +1,4 @@
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Extensions;
 
 public sealed record OperatorSkillInstallResult(string SkillPath, string? BackupPath, bool Changed);
 

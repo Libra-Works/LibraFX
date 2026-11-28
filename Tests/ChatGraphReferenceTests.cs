@@ -6,9 +6,11 @@ using Avalonia.Threading;
 using LiberaFx.Models.Graph;
 using LiberaFx.Models.Commands;
 using LiberaFx.Extensions.Abstractions;
-using LiberaFx.Services;
-using LiberaFx.ViewModels;
-using LiberaFx.Views;
+using LiberaFx.Services.Extensions;
+using LiberaFx.Services.Mcp;
+using LiberaFx.ViewModels.Graph;
+using LiberaFx.ViewModels.Main;
+using LiberaFx.Views.Windows;
 
 internal static class ChatGraphReferenceTests
 {

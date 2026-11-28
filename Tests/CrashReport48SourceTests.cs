@@ -1,6 +1,7 @@
 using System.Text;
 using LiberaFx.Extensions.Abstractions;
-using LiberaFx.Services;
+using LiberaFx.Services.Crash;
+using LiberaFx.Services.Settings;
 
 internal static class CrashReport48SourceTests
 {

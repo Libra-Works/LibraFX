@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using LiberaFx.Services.Gpu;
 
 namespace LiberaFx.Models.Graph;
 
@@ -353,7 +354,7 @@ public sealed record GraphNodeDefinition(
     public IReadOnlyList<DynamicPinGroupDefinition>? DynamicPins { get; init; }
     public GraphRuntimeDefinition? Runtime { get; init; }
     public IReadOnlyList<GraphConversionDefinition> Conversions { get; init; } = [];
-    public string KindDomain => Services.GpuParticleEditorService.IsGpu(Kind) ? "GpuParticle" : "Cpu";
+    public string KindDomain => Services.Gpu.GpuParticleEditorService.IsGpu(Kind) ? "GpuParticle" : "Cpu";
 
     public GraphPortCategory GetInputPortCategory(string? portId) =>
         InputPorts?.FirstOrDefault(port => port.Id == portId)?.Category ?? PortCategory;

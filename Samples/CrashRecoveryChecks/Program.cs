@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
-using LiberaFx.Services;
+using LiberaFx.Services.Crash;
 
 if (args is ["managed"])
 {

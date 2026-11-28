@@ -3,8 +3,10 @@ using LiberaFx.Models.Graph;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using LiberaFx.Services.Compilation;
+using LiberaFx.Services.Assets;
+using LiberaFx.Services.Sprite;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Gpu;
 
 public sealed record GpuKernelPacket(string Id, KernelStage Stage, string Base64);
 public sealed record GpuRendererBinding(string FlowId, string Renderer, string Material, double SizeScale,

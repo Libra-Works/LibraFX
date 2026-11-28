@@ -13,9 +13,13 @@ using Avalonia.VisualTree;
 using LiberaFx.Inspector.Abstractions;
 using LiberaFx.Models.Commands;
 using LiberaFx.Models.Graph;
-using LiberaFx.Services;
-using LiberaFx.ViewModels;
-using LiberaFx.Views;
+using LiberaFx.Services.Extensions;
+using LiberaFx.Services.Project;
+using LiberaFx.Services.Settings;
+using LiberaFx.ViewModels.Graph;
+using LiberaFx.ViewModels.Main;
+using LiberaFx.Views.Controls;
+using LiberaFx.Views.Windows;
 
 namespace LiberaFx.Tests;
 

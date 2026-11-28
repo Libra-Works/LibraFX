@@ -1,8 +1,8 @@
 using Avalonia.Interactivity;
-using LiberaFx.Services;
-using LiberaFx.ViewModels;
+using LiberaFx.Services.Crash;
+using LiberaFx.ViewModels.Main;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Windows;
 
 public partial class MainWindow
 {

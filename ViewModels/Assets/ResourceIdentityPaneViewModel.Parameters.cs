@@ -3,9 +3,11 @@ using System.Text.Json;
 using CommunityToolkit.Mvvm.Input;
 using LiberaFx.Models.Graph;
 using LiberaFx.Models.Resources;
-using LiberaFx.Services;
+using LiberaFx.Services.Compilation;
+using LiberaFx.Services.Settings;
+using LiberaFx.ViewModels.Graph;
 
-namespace LiberaFx.ViewModels;
+namespace LiberaFx.ViewModels.Assets;
 
 public sealed partial class ResourceIdentityPaneViewModel
 {

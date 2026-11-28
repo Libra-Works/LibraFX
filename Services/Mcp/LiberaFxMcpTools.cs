@@ -4,11 +4,14 @@ using System.Text.Json.Serialization;
 using Avalonia.Threading;
 using LiberaFx.Models.Graph;
 using LiberaFx.Services.Compilation;
-using LiberaFx.ViewModels;
+using LiberaFx.Services.Preview;
+using LiberaFx.Services.Project;
+using LiberaFx.Services.Samples;
+using LiberaFx.ViewModels.Graph;
 using ModelContextProtocol;
 using ModelContextProtocol.Server;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Mcp;
 
 public sealed record LiberaFxMcpPlanNode(string Key, string Kind, string Name, double? X = null, double? Y = null,
     bool? IsPolymorphic = null);

@@ -8,9 +8,10 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using LiberaFx.Extensions.Abstractions;
 using LiberaFx.Models.Graph;
-using LiberaFx.ViewModels;
+using LiberaFx.Services.Settings;
+using LiberaFx.ViewModels.Graph;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Extensions;
 
 public sealed record ExtensionDependency(string Id, string MinimumVersion, string? MaximumVersion = null);
 public sealed record ExtensionManifest(int ManifestVersion, string Id, string Name, string Version,

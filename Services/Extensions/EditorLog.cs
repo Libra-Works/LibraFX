@@ -1,6 +1,6 @@
 using System.Collections.ObjectModel;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Extensions;
 
 public sealed record EditorLogEntry(string Time, string Category, string Message);
 

@@ -1,8 +1,9 @@
 using System.ComponentModel;
 using Avalonia.Controls;
-using LiberaFx.ViewModels;
+using LiberaFx.ViewModels.Graph;
+using LiberaFx.ViewModels.Main;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Panels;
 
 public partial class ProblemsWindow : UserControl
 {

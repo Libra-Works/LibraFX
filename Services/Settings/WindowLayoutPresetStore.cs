@@ -1,7 +1,8 @@
 using System.Text.Json;
 using LiberaFx.Models;
+using LiberaFx.Views.Windows;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Settings;
 
 public sealed class WindowLayoutPresetStore
 {

@@ -1,5 +1,5 @@
 using LiberaFx.Models.Graph;
-using LiberaFx.ViewModels;
+using LiberaFx.ViewModels.Graph;
 
 namespace LiberaFx.Models.Commands;
 

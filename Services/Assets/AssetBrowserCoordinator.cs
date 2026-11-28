@@ -1,9 +1,12 @@
 using System.Text.Json;
 using LiberaFx.Models.Graph;
-using LiberaFx.Views;
-using LiberaFx.ViewModels;
+using LiberaFx.Services.Project;
+using LiberaFx.Services.Settings;
+using LiberaFx.ViewModels.Assets;
+using LiberaFx.ViewModels.Graph;
+using LiberaFx.ViewModels.Main;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Assets;
 
 public sealed class AssetSelectionRequest
 {

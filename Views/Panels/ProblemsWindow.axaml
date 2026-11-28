@@ -1,9 +1,9 @@
 <UserControl xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:vm="using:LiberaFx.ViewModels"
-        xmlns:views="using:LiberaFx.Views"
-        x:Class="LiberaFx.Views.ProblemsWindow"
-        x:DataType="vm:GraphWorkspaceViewModel"
+             xmlns:viewsControls="using:LiberaFx.Views.Controls"
+             xmlns:vmGraph="using:LiberaFx.ViewModels.Graph"
+        x:Class="LiberaFx.Views.Panels.ProblemsWindow"
+        x:DataType="vmGraph:GraphWorkspaceViewModel"
         Background="{DynamicResource EffectWindowBackgroundBrush}">
     <Grid RowDefinitions="Auto,*" Margin="10" RowSpacing="6">
         <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="6">
@@ -12,7 +12,7 @@
                        IsVisible="{Binding HasTypeProblems}" VerticalAlignment="Center" />
             <Border Grid.Column="3" Background="Transparent" Padding="2"
                     ToolTip.Tip="{DynamicResource Text.Messages.GraphProblemsHelp}">
-                <views:EditorIconView Icon="Info" />
+                <viewsControls:EditorIconView Icon="Info" />
             </Border>
         </Grid>
         <TextBlock Grid.Row="1" Classes="editor-label"
@@ -23,7 +23,7 @@
         <ScrollViewer Grid.Row="1" IsVisible="{Binding HasTypeProblems}">
             <ItemsControl ItemsSource="{Binding TypeProblems}">
                 <ItemsControl.ItemTemplate>
-                    <DataTemplate DataType="vm:GraphProblemViewModel">
+                    <DataTemplate DataType="vmGraph:GraphProblemViewModel">
                         <Button Classes="editor-action" Command="{Binding SelectCommand}" HorizontalAlignment="Stretch"
                                 AutomationProperties.Name="{Binding Message}" ToolTip.Tip="{Binding Message}"
                                 Margin="0,2">

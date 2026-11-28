@@ -3,8 +3,10 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using LiberaFx.Extensions.Abstractions;
+using LiberaFx.Services.Mcp;
+using LiberaFx.Services.Settings;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Extensions;
 
 /// <summary>Only the documented Chat Completions function-tool protocol, not arbitrary CLI protocols.</summary>
 public sealed class OpenAiCompatibleChatAdapter : IChatAdapter, IDisposable

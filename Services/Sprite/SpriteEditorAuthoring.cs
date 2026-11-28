@@ -1,9 +1,10 @@
 using System.Text.Json;
 using LiberaFx.Models.Commands;
 using LiberaFx.Models.Graph;
-using LiberaFx.ViewModels;
+using LiberaFx.Services.Assets;
+using LiberaFx.ViewModels.Graph;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Sprite;
 
 public sealed record SpriteEditorSettings(int Columns, int Rows, double Fps, int Frame, bool Playing)
 {

@@ -1,4 +1,4 @@
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Assets;
 
 // UI-thread owned. Selection uses its existing independent request channel;
 // at most one speculative request is sent for the currently visible rows.

@@ -1,4 +1,4 @@
-namespace LiberaFx.ViewModels;
+namespace LiberaFx.ViewModels.Main;
 
 public partial class MainViewModel
 {

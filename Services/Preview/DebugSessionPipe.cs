@@ -1,7 +1,8 @@
 using System.IO.Pipes;
 using System.Text.Json;
+using LiberaFx.Services.Mcp;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Preview;
 
 // Explicit local debug automation; credentials never enter files or public endpoints.
 public sealed class DebugSessionPipe : IDisposable

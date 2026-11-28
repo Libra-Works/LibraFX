@@ -4,9 +4,10 @@ using LiberaFx.Models.Commands;
 using LiberaFx.Models.Graph;
 using LiberaFx.Models.Project;
 using LiberaFx.Models.Resources;
-using LiberaFx.ViewModels;
+using LiberaFx.Services.Assets;
+using LiberaFx.ViewModels.Graph;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Project;
 
 public sealed class ProjectFileService
 {

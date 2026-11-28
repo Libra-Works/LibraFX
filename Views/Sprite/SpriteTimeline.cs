@@ -4,10 +4,11 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.VisualTree;
-using LiberaFx.Services;
-using LiberaFx.ViewModels;
+using LiberaFx.Services.Compilation;
+using LiberaFx.Services.Settings;
+using LiberaFx.ViewModels.Panels;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Sprite;
 
 public sealed class SpriteTimeline : Control
 {

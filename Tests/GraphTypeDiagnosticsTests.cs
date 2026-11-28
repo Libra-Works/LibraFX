@@ -2,7 +2,7 @@ using System.Text.Json;
 using LiberaFx.Models.Commands;
 using LiberaFx.Models.Graph;
 using LiberaFx.Services.Compilation;
-using LiberaFx.ViewModels;
+using LiberaFx.ViewModels.Graph;
 
 namespace LiberaFx.Tests;
 

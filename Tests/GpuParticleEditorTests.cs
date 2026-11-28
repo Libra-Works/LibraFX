@@ -7,10 +7,14 @@ using ModelContextProtocol;
 using LibraGpu.Core;
 using LiberaFx.Models.Commands;
 using LiberaFx.Models.Graph;
-using LiberaFx.Services;
+using LiberaFx.Services.Assets;
+using LiberaFx.Services.Gpu;
+using LiberaFx.Services.Mcp;
+using LiberaFx.Services.Settings;
+using LiberaFx.ViewModels.Graph;
+using LiberaFx.ViewModels.Panels;
+using LiberaFx.Views.Gpu;
 using LiberaFx.Services.Compilation;
-using LiberaFx.ViewModels;
-using LiberaFx.Views;
 
 namespace LiberaFx.Tests;
 

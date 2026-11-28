@@ -1,4 +1,5 @@
 using LiberaFx.Models.Graph;
+using LiberaFx.Services.Assets;
 
 namespace LiberaFx.Services.Compilation;
 

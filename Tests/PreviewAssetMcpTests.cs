@@ -4,8 +4,11 @@ using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using Avalonia.Threading;
-using LiberaFx.Services;
-using LiberaFx.ViewModels;
+using LiberaFx.Services.Assets;
+using LiberaFx.Services.Mcp;
+using LiberaFx.Services.Preview;
+using LiberaFx.ViewModels.Graph;
+using LiberaFx.ViewModels.Main;
 
 internal static class PreviewAssetMcpTests
 {

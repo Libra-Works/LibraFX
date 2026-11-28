@@ -1,5 +1,7 @@
 using System.Text.Json;
 using LiberaFx.Models.Resources;
+using LiberaFx.Services.Assets;
+using LiberaFx.Services.Gpu;
 
 namespace LiberaFx.Models.Graph;
 
@@ -99,7 +101,7 @@ public sealed record GraphNodeSnapshot(
     IReadOnlyList<GroupInstanceValue>? GroupOverrides = null)
 {
     public IReadOnlyList<SignalTimelineKey>? SignalKeys { get; init; }
-    public string KindDomain => Services.GpuParticleEditorService.IsGpu(Kind) ? "GpuParticle" : "Cpu";
+    public string KindDomain => Services.Gpu.GpuParticleEditorService.IsGpu(Kind) ? "GpuParticle" : "Cpu";
 }
 
 public sealed record GroupAssetReference(Guid Id, long Revision, bool Locked);

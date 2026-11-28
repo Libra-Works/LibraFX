@@ -6,10 +6,13 @@ using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
 using LiberaFx.Models.Graph;
-using LiberaFx.Services;
-using LiberaFx.ViewModels;
+using LiberaFx.Services.Assets;
+using LiberaFx.Services.Extensions;
+using LiberaFx.Services.Settings;
+using LiberaFx.ViewModels.Graph;
+using LiberaFx.ViewModels.Main;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Windows;
 
 public sealed class AnythingSearchWindow : Window
 {

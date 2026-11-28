@@ -7,8 +7,11 @@ using System.Text.Json;
 using Avalonia.Threading;
 using LiberaFx.Models.Commands;
 using LiberaFx.Models.Graph;
-using LiberaFx.Services;
-using LiberaFx.ViewModels;
+using LiberaFx.Services.Compilation;
+using LiberaFx.Services.Preview;
+using LiberaFx.Services.Project;
+using LiberaFx.Services.Samples;
+using LiberaFx.ViewModels.Main;
 
 internal static class PreviewProtocolTests
 {
@@ -92,7 +95,7 @@ internal static class PreviewProtocolTests
         {
             throw new InvalidOperationException("Removing a parameter did not restore its authoring default.");
         }
-        using (var reset = JsonDocument.Parse(resetBytes.AsMemory(LiberaFx.Services.CompiledPreviewProtocol.HeaderSize)))
+        using (var reset = JsonDocument.Parse(resetBytes.AsMemory(LiberaFx.Services.Preview.CompiledPreviewProtocol.HeaderSize)))
         {
             var value = reset.RootElement.GetProperty("updates")[0].GetProperty("floatValue").GetDouble();
             if (value != floatDef.Parameters.Single(item => item.Id == "value").DefaultValue.GetDouble())
@@ -109,7 +112,7 @@ internal static class PreviewProtocolTests
         {
             throw new InvalidOperationException("Nested group delta was not generated.");
         }
-        using (var nested = JsonDocument.Parse(nestedBytes.AsMemory(LiberaFx.Services.CompiledPreviewProtocol.HeaderSize)))
+        using (var nested = JsonDocument.Parse(nestedBytes.AsMemory(LiberaFx.Services.Preview.CompiledPreviewProtocol.HeaderSize)))
         {
             if (nested.RootElement.GetProperty("updates")[0].GetProperty("containerId").GetString() != Guid.Empty.ToString("D"))
             {
@@ -125,7 +128,7 @@ internal static class PreviewProtocolTests
         {
             throw new InvalidOperationException("Nested Spawnable delta was not generated.");
         }
-        using (var spawnDelta = JsonDocument.Parse(spawnBytes.AsMemory(LiberaFx.Services.CompiledPreviewProtocol.HeaderSize)))
+        using (var spawnDelta = JsonDocument.Parse(spawnBytes.AsMemory(LiberaFx.Services.Preview.CompiledPreviewProtocol.HeaderSize)))
         {
             if (spawnDelta.RootElement.GetProperty("updates")[0].GetProperty("containerId").GetGuid() != spawn.Id)
             {
@@ -146,7 +149,7 @@ internal static class PreviewProtocolTests
         {
             throw new InvalidOperationException("Exposed group override did not produce a delta.");
         }
-        using (var groupDelta = JsonDocument.Parse(groupBytes.AsMemory(LiberaFx.Services.CompiledPreviewProtocol.HeaderSize)))
+        using (var groupDelta = JsonDocument.Parse(groupBytes.AsMemory(LiberaFx.Services.Preview.CompiledPreviewProtocol.HeaderSize)))
         {
             var update = groupDelta.RootElement.GetProperty("updates")[0];
             if (update.GetProperty("nodeId").GetGuid() != floatNode.Id || update.GetProperty("floatValue").GetDouble() != 27)
@@ -159,7 +162,7 @@ internal static class PreviewProtocolTests
         {
             throw new InvalidOperationException("Removing a group override did not produce a delta.");
         }
-        using (var groupDelta = JsonDocument.Parse(groupResetBytes.AsMemory(LiberaFx.Services.CompiledPreviewProtocol.HeaderSize)))
+        using (var groupDelta = JsonDocument.Parse(groupResetBytes.AsMemory(LiberaFx.Services.Preview.CompiledPreviewProtocol.HeaderSize)))
         {
             if (groupDelta.RootElement.GetProperty("updates")[0].GetProperty("floatValue").GetDouble() != 10)
             {
@@ -179,7 +182,7 @@ internal static class PreviewProtocolTests
         {
             throw new InvalidOperationException("Enum value did not produce a delta.");
         }
-        using (var enumDelta = JsonDocument.Parse(enumBytes.AsMemory(LiberaFx.Services.CompiledPreviewProtocol.HeaderSize)))
+        using (var enumDelta = JsonDocument.Parse(enumBytes.AsMemory(LiberaFx.Services.Preview.CompiledPreviewProtocol.HeaderSize)))
         {
             var update = enumDelta.RootElement.GetProperty("updates")[0];
             if (!update.GetProperty("isInt32").GetBoolean() || update.GetProperty("intValue").GetInt32() != enumeration.Values[1].Value)
@@ -197,7 +200,7 @@ internal static class PreviewProtocolTests
         {
             throw new InvalidOperationException("Matrix edit did not produce a delta.");
         }
-        using (var matrixDelta = JsonDocument.Parse(matrixBytes.AsMemory(LiberaFx.Services.CompiledPreviewProtocol.HeaderSize)))
+        using (var matrixDelta = JsonDocument.Parse(matrixBytes.AsMemory(LiberaFx.Services.Preview.CompiledPreviewProtocol.HeaderSize)))
         {
             var update = matrixDelta.RootElement.GetProperty("updates")[0];
             var rows = LiberaFx.Models.Graph.GraphMatrixLowering.Lower(matrixNew).Outputs[(matrixNode.Id, "value")];
@@ -218,7 +221,7 @@ internal static class PreviewProtocolTests
         {
             throw new InvalidOperationException("Lowered matrix numeric input did not produce a delta.");
         }
-        using (var pointDelta = JsonDocument.Parse(pointBytes.AsMemory(LiberaFx.Services.CompiledPreviewProtocol.HeaderSize)))
+        using (var pointDelta = JsonDocument.Parse(pointBytes.AsMemory(LiberaFx.Services.Preview.CompiledPreviewProtocol.HeaderSize)))
         {
             var update = pointDelta.RootElement.GetProperty("updates")[0];
             var runtimeId = update.GetProperty("nodeId").GetGuid();
@@ -243,7 +246,7 @@ internal static class PreviewProtocolTests
         {
             throw new InvalidOperationException("An FCurve edit must produce a parameter delta.");
         }
-        using (var curveDelta = JsonDocument.Parse(curveBytes.AsMemory(LiberaFx.Services.CompiledPreviewProtocol.HeaderSize)))
+        using (var curveDelta = JsonDocument.Parse(curveBytes.AsMemory(LiberaFx.Services.Preview.CompiledPreviewProtocol.HeaderSize)))
         {
             var update = curveDelta.RootElement.GetProperty("updates")[0];
             var key = update.GetProperty("keys")[0];
@@ -277,7 +280,7 @@ internal static class PreviewProtocolTests
         {
             throw new InvalidOperationException("SignalKeys edits must use full-package fallback until Core supports them.");
         }
-        var frameText = Encoding.UTF8.GetString(deltaBytes.AsSpan(LiberaFx.Services.CompiledPreviewProtocol.HeaderSize));
+        var frameText = Encoding.UTF8.GetString(deltaBytes.AsSpan(LiberaFx.Services.Preview.CompiledPreviewProtocol.HeaderSize));
         using var doc = JsonDocument.Parse(frameText);
         if (doc.RootElement.GetProperty("type").GetString() != "parameter_delta" ||
             doc.RootElement.GetProperty("updates").GetArrayLength() == 0)

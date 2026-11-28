@@ -5,9 +5,13 @@ using CommunityToolkit.Mvvm.Input;
 using Dock.Model.Mvvm.Controls;
 using LiberaFx.Models.Appearance;
 using LiberaFx.Models.Graph;
-using LiberaFx.Services;
+using LiberaFx.Services.Assets;
+using LiberaFx.Services.Extensions;
+using LiberaFx.Services.Preview;
+using LiberaFx.Services.Settings;
+using LiberaFx.ViewModels.Graph;
 
-namespace LiberaFx.ViewModels;
+namespace LiberaFx.ViewModels.Panels;
 
 public sealed class NodePropertiesPaneViewModel : Tool, IDisposable
 {

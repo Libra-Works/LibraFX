@@ -5,10 +5,11 @@ using Avalonia.Media;
 using Avalonia.Interactivity;
 using Avalonia.Input;
 using Avalonia.Platform.Storage;
-using LiberaFx.Services;
-using LiberaFx.ViewModels;
+using LiberaFx.Services.Extensions;
+using LiberaFx.Services.Settings;
+using LiberaFx.ViewModels.Main;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Windows;
 
 public partial class SettingsWindow : Window
 {

@@ -1,7 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Windows;
 
 public partial class HelpWindow : Window
 {

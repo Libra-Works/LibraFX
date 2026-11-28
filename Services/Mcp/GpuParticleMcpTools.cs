@@ -2,11 +2,12 @@ using System.ComponentModel;
 using System.Text.Json;
 using Avalonia.Threading;
 using LibraGpu.Core;
-using LiberaFx.ViewModels;
+using LiberaFx.Services.Gpu;
+using LiberaFx.ViewModels.Graph;
 using ModelContextProtocol.Server;
 using ModelContextProtocol;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Mcp;
 
 [McpServerToolType]
 public sealed class GpuParticleMcpTools

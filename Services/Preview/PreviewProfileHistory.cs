@@ -1,4 +1,4 @@
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Preview;
 
 public sealed record ProfileCost(PreviewMetric Metric, ulong Calls, double InclusiveMs, double ExclusiveMs,
     bool Cumulative);

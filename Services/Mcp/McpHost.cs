@@ -1,7 +1,11 @@
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
-using LiberaFx.ViewModels;
+using LiberaFx.Services.Assets;
+using LiberaFx.Services.Preview;
+using LiberaFx.Services.Project;
+using LiberaFx.ViewModels.Graph;
+using LiberaFx.ViewModels.Main;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -10,7 +14,7 @@ using Microsoft.Extensions.Hosting;
 using ModelContextProtocol.AspNetCore;
 using ModelContextProtocol.Server;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Mcp;
 
 public sealed class McpHost
 {

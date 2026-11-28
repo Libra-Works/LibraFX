@@ -6,10 +6,11 @@ using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Threading;
 using LiberaFx.Models.Graph;
-using LiberaFx.Services;
-using LiberaFx.ViewModels;
+using LiberaFx.Services.Compilation;
+using LiberaFx.Services.Settings;
+using LiberaFx.ViewModels.Graph;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Procedural;
 
 /// <summary>One ordered Flow editor for all procedural producers. Every edit uses document history.</summary>
 public sealed partial class ProceduralWorkspaceView : UserControl

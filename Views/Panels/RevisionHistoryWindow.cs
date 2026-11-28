@@ -4,10 +4,15 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using LiberaFx.Extensions.Abstractions;
 using LiberaFx.Models.Graph;
-using LiberaFx.Services;
-using LiberaFx.ViewModels;
+using LiberaFx.Services.Compilation;
+using LiberaFx.Services.Project;
+using LiberaFx.Services.Settings;
+using LiberaFx.ViewModels.Graph;
+using LiberaFx.ViewModels.Main;
+using LiberaFx.Views.Controls;
+using LiberaFx.Views.Graph;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Panels;
 
 public sealed class RevisionHistoryWindow : UserControl
 {

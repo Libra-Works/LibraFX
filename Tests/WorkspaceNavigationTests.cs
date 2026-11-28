@@ -5,8 +5,10 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using LiberaFx.Models.Commands;
 using LiberaFx.Models.Graph;
-using LiberaFx.ViewModels;
-using LiberaFx.Views;
+using LiberaFx.ViewModels.Graph;
+using LiberaFx.Views.Gpu;
+using LiberaFx.Views.Graph;
+using LiberaFx.Views.Procedural;
 
 internal static class WorkspaceNavigationTests
 {

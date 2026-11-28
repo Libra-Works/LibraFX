@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Sprite;
 
 public sealed record SpriteTransformKey(Guid Id, double Frame, double X, double Y,
     double RotationDegrees, double ScaleX, double ScaleY);

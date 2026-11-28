@@ -1,4 +1,4 @@
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Assets;
 
 public sealed record LocalProjectAsset(string Path, string Name, DateTime Modified, long Bytes);
 public sealed record LocalProjectPage(IReadOnlyList<LocalProjectAsset> Assets, bool Truncated);

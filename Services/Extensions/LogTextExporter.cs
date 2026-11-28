@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Extensions;
 
 public static class LogTextExporter
 {

@@ -6,7 +6,7 @@ using Avalonia.Controls;
 using Avalonia.Platform;
 using CommunityToolkit.Mvvm.ComponentModel;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Settings;
 
 public sealed record EditorLanguage(string Id, string Name);
 

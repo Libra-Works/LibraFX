@@ -4,7 +4,7 @@ using Avalonia.Controls.Documents;
 using Avalonia.Media;
 using LiberaFx.Models.Graph;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Controls;
 
 public sealed class CommentTaskChangedEventArgs(string source, int offset, bool value) : EventArgs
 {

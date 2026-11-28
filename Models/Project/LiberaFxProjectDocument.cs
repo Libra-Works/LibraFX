@@ -1,6 +1,7 @@
 using LiberaFx.Models.Commands;
 using LiberaFx.Models.Graph;
 using LiberaFx.Models.Resources;
+using LiberaFx.Services.Assets;
 
 namespace LiberaFx.Models.Project;
 

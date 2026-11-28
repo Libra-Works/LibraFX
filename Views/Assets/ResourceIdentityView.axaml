@@ -1,23 +1,23 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vm="using:LiberaFx.ViewModels"
-             xmlns:views="using:LiberaFx.Views"
-             x:Class="LiberaFx.Views.ResourceIdentityView"
-             x:DataType="vm:ResourceIdentityPaneViewModel">
+             xmlns:viewsControls="using:LiberaFx.Views.Controls"
+             xmlns:vmAssets="using:LiberaFx.ViewModels.Assets"
+             x:Class="LiberaFx.Views.Assets.ResourceIdentityView"
+             x:DataType="vmAssets:ResourceIdentityPaneViewModel">
     <ScrollViewer>
         <StackPanel Margin="12" Spacing="10">
             <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="6">
                 <ComboBox ItemsSource="{Binding Peers}" SelectedItem="{Binding SelectedPeer}"
                           HorizontalAlignment="Stretch"
                           AutomationProperties.Name="{DynamicResource Text.Resources.IdentityEditor}" />
-                <views:IconButton Grid.Column="1" Classes="editor-tool" Icon="Refresh" Command="{Binding RefreshPeersCommand}"
+                <viewsControls:IconButton Grid.Column="1" Classes="editor-tool" Icon="Refresh" Command="{Binding RefreshPeersCommand}"
                                   ToolTip.Tip="{DynamicResource Text.Editor.Refresh}"
                                   AutomationProperties.Name="{DynamicResource Text.Editor.Refresh}" />
                 <Button Grid.Column="2" Classes="editor-action" Command="{Binding RefreshProjectCommand}"
                         Content="{DynamicResource Text.Resources.IdentityRefreshProject}" />
                 <Border Grid.Column="3" Background="Transparent" Padding="4" VerticalAlignment="Center"
                         ToolTip.Tip="{DynamicResource Text.Resources.IdentityIntro}">
-                    <views:EditorIconView Icon="Info" />
+                    <viewsControls:EditorIconView Icon="Info" />
                 </Border>
             </Grid>
             <Border Classes="editor-card">
@@ -44,7 +44,7 @@
                             <TextBlock Classes="editor-heading" Text="{DynamicResource Text.Resources.IdentityRegister}" />
                             <Border Grid.Column="1" Background="Transparent" Padding="2"
                                     ToolTip.Tip="{DynamicResource Text.Resources.IdentityLegacyNotice}">
-                                <views:EditorIconView Icon="Info" />
+                                <viewsControls:EditorIconView Icon="Info" />
                             </Border>
                         </Grid>
                         <TextBox Text="{Binding ResourceName, UpdateSourceTrigger=PropertyChanged}"
@@ -86,13 +86,13 @@
                             <TextBlock Classes="editor-heading" Text="{DynamicResource Text.Resources.IdentityRegisteredHeader}" />
                             <Border Grid.Column="1" Background="Transparent" Padding="2"
                                     ToolTip.Tip="{DynamicResource Text.Resources.IdentityParameterNotice}">
-                                <views:EditorIconView Icon="Info" />
+                                <viewsControls:EditorIconView Icon="Info" />
                             </Border>
                         </Grid>
                         <ListBox ItemsSource="{Binding RegisteredResources}" SelectedItem="{Binding SelectedResource}"
                                  MinHeight="110">
                             <ListBox.ItemTemplate>
-                                <DataTemplate x:DataType="vm:RegisteredResourceOption">
+                                <DataTemplate x:DataType="vmAssets:RegisteredResourceOption">
                                     <StackPanel Margin="4">
                                         <TextBlock Classes="editor-heading" Text="{Binding Name}" />
                                         <TextBlock Text="{Binding Kind}" />

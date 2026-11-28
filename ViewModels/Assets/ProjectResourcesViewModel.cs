@@ -5,9 +5,13 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using LiberaFx.Models.Commands;
 using LiberaFx.Models.Graph;
-using LiberaFx.Services;
+using LiberaFx.Services.Assets;
+using LiberaFx.Services.Project;
+using LiberaFx.Services.Settings;
+using LiberaFx.ViewModels.Graph;
+using LiberaFx.ViewModels.Main;
 
-namespace LiberaFx.ViewModels;
+namespace LiberaFx.ViewModels.Assets;
 
 public sealed record WorkspaceResourceEntry(string Name, string Origin, string? Path = null,
     LocalResourceKind? LocalKind = null, GroupAsset? Group = null)

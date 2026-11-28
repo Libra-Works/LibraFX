@@ -1,10 +1,10 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:vm="using:LiberaFx.ViewModels"
-        xmlns:services="using:LiberaFx.Services"
-        xmlns:views="using:LiberaFx.Views"
-        x:Class="LiberaFx.Views.StartupSetupWindow"
-        x:DataType="vm:MainViewModel"
+             xmlns:servicesSettings="using:LiberaFx.Services.Settings"
+             xmlns:viewsControls="using:LiberaFx.Views.Controls"
+             xmlns:vmMain="using:LiberaFx.ViewModels.Main"
+        x:Class="LiberaFx.Views.Windows.StartupSetupWindow"
+        x:DataType="vmMain:MainViewModel"
         Title="{DynamicResource Text.Editor.StartupSetupTitle}" Width="480"
         MaxHeight="600" SizeToContent="Height" CanResize="False" ShowInTaskbar="False"
         WindowStartupLocation="CenterOwner"
@@ -16,7 +16,7 @@
                 <TextBlock Classes="editor-heading" Text="{DynamicResource Text.Editor.Language}" />
                 <Border Grid.Column="1" Background="Transparent" Padding="2"
                         ToolTip.Tip="{DynamicResource Text.Editor.LanguageHint}">
-                    <views:EditorIconView Icon="Info" />
+                    <viewsControls:EditorIconView Icon="Info" />
                 </Border>
             </Grid>
             <ComboBox x:Name="LanguagePicker" ItemsSource="{Binding Localization.Languages}"
@@ -26,7 +26,7 @@
                       HorizontalAlignment="Stretch"
                       AutomationProperties.Name="{DynamicResource Text.Editor.Language}">
                 <ComboBox.ItemTemplate>
-                    <DataTemplate DataType="services:EditorLanguage">
+                    <DataTemplate DataType="servicesSettings:EditorLanguage">
                         <TextBlock Text="{Binding Name}" />
                     </DataTemplate>
                 </ComboBox.ItemTemplate>
@@ -35,7 +35,7 @@
                 <TextBlock Classes="editor-heading" Text="{DynamicResource Text.Editor.ColorScheme}" />
                 <Border Grid.Column="1" Background="Transparent" Padding="2"
                         ToolTip.Tip="{DynamicResource Text.Editor.StartupSetupAppearanceHint}">
-                    <views:EditorIconView Icon="Info" />
+                    <viewsControls:EditorIconView Icon="Info" />
                 </Border>
             </Grid>
             <ComboBox x:Name="ColorSchemePicker" ItemsSource="{Binding ColorSchemes}"
@@ -43,7 +43,7 @@
                       HorizontalAlignment="Stretch"
                       AutomationProperties.Name="{DynamicResource Text.Editor.ColorScheme}">
                 <ComboBox.ItemTemplate>
-                    <DataTemplate><views:LocalizedOptionText Value="{ReflectionBinding}" /></DataTemplate>
+                    <DataTemplate><viewsControls:LocalizedOptionText Value="{ReflectionBinding}" /></DataTemplate>
                 </ComboBox.ItemTemplate>
             </ComboBox>
             <Separator />
@@ -52,7 +52,7 @@
                 <Button Grid.Column="1" Classes="editor-action" Content="{DynamicResource Text.Crash.Title}" Click="OnCrashReportsClick" />
                 <Border Grid.Column="2" Background="Transparent" Padding="2" VerticalAlignment="Center"
                         ToolTip.Tip="{DynamicResource Text.Editor.StartupSetupCrashHint}">
-                    <views:EditorIconView Icon="Info" />
+                    <viewsControls:EditorIconView Icon="Info" />
                 </Border>
             </Grid>
             <TextBlock x:Name="SetupStatus" Classes="editor-label" TextWrapping="Wrap" IsVisible="False" />

@@ -2,7 +2,7 @@ using System.Buffers.Binary;
 using System.Text;
 using System.Text.Json;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Preview;
 
 public enum CompiledPreviewKind : ushort { Program = 1, Playback = 2, CompileError = 3, Control = 4, Scene = 5 }
 

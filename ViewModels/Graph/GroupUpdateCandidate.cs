@@ -1,6 +1,6 @@
 using LiberaFx.Models.Graph;
 
-namespace LiberaFx.ViewModels;
+namespace LiberaFx.ViewModels.Graph;
 
 public sealed record GroupUpdateCandidate(
     Guid NodeId,

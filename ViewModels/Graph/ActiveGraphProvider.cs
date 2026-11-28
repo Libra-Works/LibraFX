@@ -1,6 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 
-namespace LiberaFx.ViewModels;
+namespace LiberaFx.ViewModels.Graph;
 
 public sealed class ActiveGraphProvider : ObservableObject
 {

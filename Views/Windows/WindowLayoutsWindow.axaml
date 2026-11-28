@@ -1,9 +1,9 @@
 <UserControl xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:vm="using:LiberaFx.ViewModels"
-        xmlns:views="using:LiberaFx.Views"
-        x:Class="LiberaFx.Views.WindowLayoutsWindow"
-        x:DataType="vm:WindowLayoutsViewModel">
+             xmlns:viewsControls="using:LiberaFx.Views.Controls"
+             xmlns:vmMain="using:LiberaFx.ViewModels.Main"
+        x:Class="LiberaFx.Views.Windows.WindowLayoutsWindow"
+        x:DataType="vmMain:WindowLayoutsViewModel">
     <ScrollViewer>
     <StackPanel Margin="12" Spacing="10">
         <Border Classes="editor-card">
@@ -11,35 +11,35 @@
                 <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6">
                     <ComboBox ItemsSource="{Binding Choices}" SelectedItem="{Binding Selected}" HorizontalAlignment="Stretch">
                         <ComboBox.ItemTemplate>
-                            <DataTemplate x:DataType="vm:WindowLayoutChoice"><TextBlock Text="{Binding DisplayName}" /></DataTemplate>
+                            <DataTemplate x:DataType="vmMain:WindowLayoutChoice"><TextBlock Text="{Binding DisplayName}" /></DataTemplate>
                         </ComboBox.ItemTemplate>
                     </ComboBox>
                     <Border Grid.Column="1" Classes="editor-toolbar-group" Padding="4,2">
                         <StackPanel Orientation="Horizontal" Spacing="2">
-                            <views:IconButton Classes="editor-tool transport-primary" Icon="Check" Command="{Binding ApplyCommand}"
+                            <viewsControls:IconButton Classes="editor-tool transport-primary" Icon="Check" Command="{Binding ApplyCommand}"
                                               ToolTip.Tip="{DynamicResource Text.Layouts.Apply}"
                                               AutomationProperties.Name="{DynamicResource Text.Layouts.Apply}" />
-                            <views:IconButton Classes="editor-tool" Icon="Save" Command="{Binding SaveSelectedCommand}"
+                            <viewsControls:IconButton Classes="editor-tool" Icon="Save" Command="{Binding SaveSelectedCommand}"
                                               ToolTip.Tip="{DynamicResource Text.Layouts.Update}"
                                               AutomationProperties.Name="{DynamicResource Text.Layouts.Update}" />
-                            <views:IconButton Classes="editor-tool" Icon="Delete" Command="{Binding DeleteCommand}"
+                            <viewsControls:IconButton Classes="editor-tool" Icon="Delete" Command="{Binding DeleteCommand}"
                                               ToolTip.Tip="{DynamicResource Text.Layouts.Delete}"
                                               AutomationProperties.Name="{DynamicResource Text.Layouts.Delete}" />
                             <Border Classes="editor-toolbar-divider" />
-                            <views:IconButton Classes="editor-tool" Icon="Reset" Command="{Binding RestoreDefaultCommand}"
+                            <viewsControls:IconButton Classes="editor-tool" Icon="Reset" Command="{Binding RestoreDefaultCommand}"
                                               ToolTip.Tip="{DynamicResource Text.Layouts.RestoreDefault}"
                                               AutomationProperties.Name="{DynamicResource Text.Layouts.RestoreDefault}" />
                         </StackPanel>
                     </Border>
                     <Border Grid.Column="2" Background="Transparent" Padding="4" VerticalAlignment="Center"
                             ToolTip.Tip="{DynamicResource Text.Layouts.Hint}">
-                        <views:EditorIconView Icon="Info" />
+                        <viewsControls:EditorIconView Icon="Info" />
                     </Border>
                 </Grid>
                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
                     <TextBox x:Name="PresetName" Text="{Binding NewName}" MaxLength="64"
                              PlaceholderText="{DynamicResource Text.Layouts.Name}" />
-                    <views:IconButton Grid.Column="1" Classes="editor-tool" Icon="Add" Command="{Binding CreateCommand}"
+                    <viewsControls:IconButton Grid.Column="1" Classes="editor-tool" Icon="Add" Command="{Binding CreateCommand}"
                                       ToolTip.Tip="{DynamicResource Text.Layouts.Create}"
                                       AutomationProperties.Name="{DynamicResource Text.Layouts.Create}" />
                 </Grid>

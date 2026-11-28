@@ -1,7 +1,7 @@
 using System.Runtime.InteropServices;
 using LiberaFx.Services.Compilation;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Preview;
 
 public sealed record EditorNativeGameIoEvent(Guid ContainerId, ulong InstanceId, string PortName,
     byte Kind, double[] Values);

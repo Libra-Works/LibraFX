@@ -1,6 +1,6 @@
 using Avalonia.Controls;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Assets;
 
 public partial class ResourceIdentityView : UserControl
 {

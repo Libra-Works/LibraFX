@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Sprite;
 
 /// <summary>Prepared, engine-neutral sprite timeline. Offsets address float4 records.</summary>
 public sealed record ParticleSpriteAnimation(

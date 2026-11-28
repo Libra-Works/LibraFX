@@ -5,10 +5,12 @@ using Avalonia.Automation.Peers;
 using Avalonia.Automation.Provider;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
-using LiberaFx.Services;
-using LiberaFx.ViewModels;
-using LiberaFx.Views;
-using Thumbnail = LiberaFx.Services.EngineAssetThumbnail;
+using LiberaFx.Services.Assets;
+using LiberaFx.Services.Preview;
+using LiberaFx.ViewModels.Assets;
+using LiberaFx.ViewModels.Main;
+using LiberaFx.Views.Assets;
+using Thumbnail = LiberaFx.Services.Assets.EngineAssetThumbnail;
 
 internal static class VisibleAssetThumbnailTests
 {
@@ -95,7 +97,7 @@ internal static class VisibleAssetThumbnailTests
             Dispatcher.UIThread.RunJobs();
             Require(requested[0] == assets[0].Path && !requested.Contains(assets[31].Path) && requested.Count < 20,
                 "The selected row and visible rows must load without requesting the whole page.");
-            Require(view.GetVisualDescendants().OfType<LiberaFx.Views.EngineAssetThumbnail>().Count(image => image.Source is not null) > 1,
+            Require(view.GetVisualDescendants().OfType<LiberaFx.Views.Assets.EngineAssetThumbnail>().Count(image => image.Source is not null) > 1,
                 "Visible row thumbnails must appear on the real list controls.");
             var list = view.FindControl<ListBox>("EngineAssetList")!;
             list.ScrollIntoView(model.Assets[31]);

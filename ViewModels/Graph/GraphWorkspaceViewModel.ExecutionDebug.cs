@@ -1,6 +1,6 @@
-using LiberaFx.Services;
+using LiberaFx.Services.Preview;
 
-namespace LiberaFx.ViewModels;
+namespace LiberaFx.ViewModels.Graph;
 
 public sealed partial class GraphWorkspaceViewModel
 {

@@ -1,10 +1,10 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vm="using:LiberaFx.ViewModels"
-             xmlns:views="using:LiberaFx.Views"
-             x:Class="LiberaFx.Views.PreviewPaneView"
+             xmlns:viewsControls="using:LiberaFx.Views.Controls"
+             xmlns:vmPanels="using:LiberaFx.ViewModels.Panels"
+             x:Class="LiberaFx.Views.Panels.PreviewPaneView"
              Classes="editor-inspector"
-             x:DataType="vm:PreviewPaneViewModel">
+             x:DataType="vmPanels:PreviewPaneViewModel">
     <ScrollViewer HorizontalScrollBarVisibility="Disabled">
         <StackPanel Margin="8" Spacing="8">
             <Border Classes="editor-card">
@@ -28,7 +28,7 @@
                         <TextBlock Classes="editor-heading" Text="{DynamicResource Text.ExecutionDebug.Title}" />
                         <Border Grid.Column="1" Background="Transparent" Padding="2"
                                 ToolTip.Tip="{DynamicResource Text.ExecutionDebug.Help}">
-                            <views:EditorIconView Icon="Info" />
+                            <viewsControls:EditorIconView Icon="Info" />
                         </Border>
                     </Grid>
                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
@@ -37,11 +37,11 @@
                                   VerticalAlignment="Center" />
                         <Border Grid.Column="1" Classes="editor-toolbar-group" Padding="4,2">
                             <StackPanel Orientation="Horizontal" Spacing="2">
-                                <views:IconButton Classes="editor-tool transport-primary" Icon="Play"
+                                <viewsControls:IconButton Classes="editor-tool transport-primary" Icon="Play"
                                                   Command="{Binding Main.ExecutionDebugger.StartCommand}"
                                                   ToolTip.Tip="{DynamicResource Text.ExecutionDebug.Start}"
                                                   AutomationProperties.Name="{DynamicResource Text.ExecutionDebug.Start}" />
-                                <views:IconButton Classes="editor-tool" Icon="Disconnect"
+                                <viewsControls:IconButton Classes="editor-tool" Icon="Disconnect"
                                                   Command="{Binding Main.ExecutionDebugger.DisconnectCommand}"
                                                   ToolTip.Tip="{DynamicResource Text.ExecutionDebug.Disconnect}"
                                                   AutomationProperties.Name="{DynamicResource Text.ExecutionDebug.Disconnect}" />
@@ -50,25 +50,25 @@
                     </Grid>
                     <Border Classes="editor-toolbar-group" Padding="4,2" HorizontalAlignment="Left">
                         <StackPanel Orientation="Horizontal" Spacing="2">
-                            <views:IconButton Classes="editor-tool" Icon="Pin"
+                            <viewsControls:IconButton Classes="editor-tool" Icon="Pin"
                                               Command="{Binding Main.ExecutionDebugger.BreakpointCommand}"
                                               ToolTip.Tip="{DynamicResource Text.ExecutionDebug.Toggle}"
                                               AutomationProperties.Name="{DynamicResource Text.ExecutionDebug.Toggle}" />
                             <Border Classes="editor-toolbar-divider" />
-                            <views:IconButton Classes="editor-tool" Icon="Pause"
+                            <viewsControls:IconButton Classes="editor-tool" Icon="Pause"
                                               Command="{Binding Main.ExecutionDebugger.PauseCommand}"
                                               ToolTip.Tip="{DynamicResource Text.ExecutionDebug.Pause}"
                                               AutomationProperties.Name="{DynamicResource Text.ExecutionDebug.Pause}" />
-                            <views:IconButton Classes="editor-tool" Icon="StepForward"
+                            <viewsControls:IconButton Classes="editor-tool" Icon="StepForward"
                                               Command="{Binding Main.ExecutionDebugger.StepCommand}"
                                               ToolTip.Tip="{DynamicResource Text.ExecutionDebug.Step}"
                                               AutomationProperties.Name="{DynamicResource Text.ExecutionDebug.Step}" />
-                            <views:IconButton Classes="editor-tool" Icon="Play"
+                            <viewsControls:IconButton Classes="editor-tool" Icon="Play"
                                               Command="{Binding Main.ExecutionDebugger.ResumeCommand}"
                                               ToolTip.Tip="{DynamicResource Text.ExecutionDebug.Resume}"
                                               AutomationProperties.Name="{DynamicResource Text.ExecutionDebug.Resume}" />
                             <Border Classes="editor-toolbar-divider" />
-                            <views:IconButton Classes="editor-tool" Icon="Frame"
+                            <viewsControls:IconButton Classes="editor-tool" Icon="Frame"
                                               Command="{Binding Main.ExecutionDebugger.LocateCommand}"
                                               ToolTip.Tip="{DynamicResource Text.ExecutionDebug.Locate}"
                                               AutomationProperties.Name="{DynamicResource Text.ExecutionDebug.Locate}" />

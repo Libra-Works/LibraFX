@@ -2,9 +2,9 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
-using LiberaFx.Services;
+using LiberaFx.Services.Sprite;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Sprite;
 
 public sealed class SpriteCellThumbnail : Control
 {

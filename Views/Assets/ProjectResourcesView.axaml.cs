@@ -2,10 +2,11 @@ using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
-using LiberaFx.Services;
-using LiberaFx.ViewModels;
+using LiberaFx.Services.Settings;
+using LiberaFx.ViewModels.Assets;
+using LiberaFx.Views.Panels;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Assets;
 
 public partial class ProjectResourcesView : UserControl
 {

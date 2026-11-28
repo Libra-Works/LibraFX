@@ -1,7 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:views="using:LiberaFx.Views"
-        x:Class="LiberaFx.Views.UnsavedChangesWindow"
+             xmlns:viewsControls="using:LiberaFx.Views.Controls"
+        x:Class="LiberaFx.Views.Windows.UnsavedChangesWindow"
         Title="{DynamicResource Text.Panels.UnsavedChangesTitle}"
         Width="420"
         MinWidth="420"
@@ -15,7 +15,7 @@
         Background="{DynamicResource EffectWindowBackgroundBrush}">
     <Grid RowDefinitions="Auto,Auto" RowSpacing="18" Margin="20,18,20,16">
         <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
-            <views:EditorIconView Icon="Info" VerticalAlignment="Top" Margin="0,2,0,0" />
+            <viewsControls:EditorIconView Icon="Info" VerticalAlignment="Top" Margin="0,2,0,0" />
             <TextBlock Grid.Column="1" Text="{DynamicResource Text.Panels.UnsavedChangesPrompt}"
                        TextWrapping="Wrap" LineHeight="20" VerticalAlignment="Center" />
         </Grid>
@@ -26,14 +26,14 @@
             <Button Classes="editor-action transport-primary" MinWidth="92" IsDefault="True" Click="OnSaveClick"
                     AutomationProperties.Name="{DynamicResource Text.Panels.SaveAll}">
                 <StackPanel Orientation="Horizontal" Spacing="6">
-                    <views:EditorIconView Icon="Save" />
+                    <viewsControls:EditorIconView Icon="Save" />
                     <TextBlock Text="{DynamicResource Text.Panels.SaveAll}" />
                 </StackPanel>
             </Button>
             <Button Classes="editor-action" MinWidth="84" Click="OnDiscardClick"
                     AutomationProperties.Name="{DynamicResource Text.Panels.Discard}">
                 <StackPanel Orientation="Horizontal" Spacing="6">
-                    <views:EditorIconView Icon="Delete" />
+                    <viewsControls:EditorIconView Icon="Delete" />
                     <TextBlock Text="{DynamicResource Text.Panels.Discard}" />
                 </StackPanel>
             </Button>

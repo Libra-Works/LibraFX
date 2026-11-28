@@ -1,4 +1,6 @@
-using LiberaFx.Services;
+using LiberaFx.Services.Assets;
+using LiberaFx.Services.Settings;
+using LiberaFx.Views.Assets;
 
 internal static class LocalProjectCatalogTests
 {
@@ -37,6 +39,6 @@ internal static class LocalProjectCatalogTests
             throw new InvalidOperationException("Relative project root was accepted.");
         }
         catch (ArgumentException) { }
-        var window = new LiberaFx.Views.LocalProjectsWindow();
+        var window = new LiberaFx.Views.Assets.LocalProjectsWindow();
     }
 }

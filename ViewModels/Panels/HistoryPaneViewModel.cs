@@ -5,9 +5,11 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Dock.Model.Mvvm.Controls;
 using LiberaFx.Models.Commands;
-using LiberaFx.Services;
+using LiberaFx.Services.Compilation;
+using LiberaFx.Services.Settings;
+using LiberaFx.ViewModels.Graph;
 
-namespace LiberaFx.ViewModels;
+namespace LiberaFx.ViewModels.Panels;
 
 public sealed class HistoryPaneViewModel : Tool
 {

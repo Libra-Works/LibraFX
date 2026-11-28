@@ -4,6 +4,8 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using LiberaFx.Models.Graph;
 using LiberaFx.Models.Resources;
+using LiberaFx.Services.Assets;
+using LiberaFx.Services.Gpu;
 
 namespace LiberaFx.Services.Compilation;
 
@@ -283,7 +285,7 @@ public sealed record SpawnableGroupPackage(byte[] ParentBytecode, IReadOnlyList<
     private static byte[] CreateGpuPrograms(GraphSnapshot graph, byte[] renderConfiguration,
         IRenderResourceBindingContext? resources)
     {
-        var bytes = LiberaFx.Services.GpuProgramDeliveryService.CreateExecutablePayload(graph, resources: resources);
+        var bytes = LiberaFx.Services.Gpu.GpuProgramDeliveryService.CreateExecutablePayload(graph, resources: resources);
         if (renderConfiguration.Length == 0) return bytes;
         var render = JsonNode.Parse(renderConfiguration)!;
         var bindings = render["nodes"]!.AsArray().Where(node => node?["generatedTextures"] is JsonArray)

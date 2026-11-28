@@ -1,4 +1,4 @@
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Assets;
 
 public static class EngineAssetPath
 {

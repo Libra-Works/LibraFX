@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Settings;
 
 public sealed record AppUpdateInfo(
     string TagName,

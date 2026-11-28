@@ -3,9 +3,10 @@ using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using LiberaFx.Models;
-using LiberaFx.Services;
+using LiberaFx.Services.Settings;
+using LiberaFx.Views.Windows;
 
-namespace LiberaFx.ViewModels;
+namespace LiberaFx.ViewModels.Main;
 
 public sealed record WindowLayoutChoice(string Name, string DisplayName);
 

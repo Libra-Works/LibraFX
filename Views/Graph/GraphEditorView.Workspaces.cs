@@ -1,10 +1,11 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
-using LiberaFx.Services;
-using LiberaFx.ViewModels;
+using LiberaFx.ViewModels.Graph;
+using LiberaFx.Views.Gpu;
+using LiberaFx.Views.Procedural;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Graph;
 
 public partial class GraphEditorView
 {

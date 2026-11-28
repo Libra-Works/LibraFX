@@ -1,6 +1,7 @@
-using LiberaFx.Services;
+using LiberaFx.Services.Assets;
+using LiberaFx.ViewModels.Assets;
 
-namespace LiberaFx.ViewModels;
+namespace LiberaFx.ViewModels.Main;
 
 public partial class MainViewModel
 {

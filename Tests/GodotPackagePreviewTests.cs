@@ -13,9 +13,9 @@ using Avalonia.Automation.Provider;
 using Avalonia.Controls;
 using Avalonia.Threading;
 using LiberaFx.Models.Graph;
-using LiberaFx.Services;
-using LiberaFx.ViewModels;
-using LiberaFx.Views;
+using LiberaFx.Services.Preview;
+using LiberaFx.ViewModels.Main;
+using LiberaFx.Views.Graph;
 
 internal static class GodotPackagePreviewTests
 {

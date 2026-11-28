@@ -3,7 +3,10 @@ using System.Text.Json.Serialization;
 using LiberaFx.Models.Graph;
 using LiberaFx.Models.Project;
 using LiberaFx.Models.Resources;
-using LiberaFx.Services;
+using LiberaFx.Services.Assets;
+using LiberaFx.Services.Compilation;
+using LiberaFx.Services.Project;
+using LiberaFx.ViewModels.Main;
 
 // Parent runner explicitly wires this suite; no engine or editor is started.
 internal static class ResourceIdentityExportTests
@@ -116,7 +119,7 @@ internal static class ResourceIdentityExportTests
         {
             var dest = Path.Combine(dir, "effect.lfxp");
             File.WriteAllBytes(dest, [1, 2, 3, 4]);
-            LiberaFx.ViewModels.MainViewModel.WriteLocalFileAtomicallyAsync(dest, payload).GetAwaiter().GetResult();
+            LiberaFx.ViewModels.Main.MainViewModel.WriteLocalFileAtomicallyAsync(dest, payload).GetAwaiter().GetResult();
             Require(File.ReadAllBytes(dest).SequenceEqual(payload), "Atomic storage write did not replace target bytes.");
             Require(Directory.GetFiles(dir, ".liberafx-*.tmp").Length == 0, "Atomic storage write left temporary files behind.");
         }

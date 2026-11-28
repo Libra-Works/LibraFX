@@ -1,6 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        x:Class="LiberaFx.Views.UpdateWindow"
+        x:Class="LiberaFx.Views.Windows.UpdateWindow"
         Title="{DynamicResource Text.Editor.UpdateTitle}"
         Width="520"
         MaxHeight="620"

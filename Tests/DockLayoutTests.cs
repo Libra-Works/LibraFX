@@ -10,9 +10,14 @@ using Dock.Model.Mvvm.Controls;
 using LiberaFx.Models;
 using LiberaFx.Models.Commands;
 using LiberaFx.Models.Graph;
-using LiberaFx.Services;
-using LiberaFx.ViewModels;
-using LiberaFx.Views;
+using LiberaFx.Services.Settings;
+using LiberaFx.ViewModels.Graph;
+using LiberaFx.ViewModels.Main;
+using LiberaFx.ViewModels.Panels;
+using LiberaFx.Views.Assets;
+using LiberaFx.Views.Panels;
+using LiberaFx.Views.Sprite;
+using LiberaFx.Views.Windows;
 
 namespace LiberaFx.Tests;
 

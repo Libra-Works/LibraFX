@@ -1,9 +1,13 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewsPanels="using:LiberaFx.Views.Panels"
+             xmlns:viewsSprite="using:LiberaFx.Views.Sprite"
+             xmlns:viewsTimeline="using:LiberaFx.Views.Timeline"
+             xmlns:vmGraph="using:LiberaFx.ViewModels.Graph"
+             xmlns:vmMain="using:LiberaFx.ViewModels.Main"
+             xmlns:vmPanels="using:LiberaFx.ViewModels.Panels"
              x:Class="LiberaFx.App"
              xmlns:local="using:LiberaFx"
-             xmlns:vm="using:LiberaFx.ViewModels"
-             xmlns:views="using:LiberaFx.Views"
              RequestedThemeVariant="Default">
 
     <Application.Resources>
@@ -31,34 +35,34 @@
 
     <Application.DataTemplates>
         <local:ViewLocator />
-        <DataTemplate DataType="vm:NodeCatalogViewModel">
-            <views:NodeCatalogView />
+        <DataTemplate DataType="vmGraph:NodeCatalogViewModel">
+            <viewsPanels:NodeCatalogView />
         </DataTemplate>
-        <DataTemplate DataType="vm:OutlinerViewModel">
-            <views:OutlinerView />
+        <DataTemplate DataType="vmPanels:OutlinerViewModel">
+            <viewsPanels:OutlinerView />
         </DataTemplate>
-        <DataTemplate DataType="vm:CurveEditorViewModel">
-            <views:CurveEditorView />
+        <DataTemplate DataType="vmPanels:CurveEditorViewModel">
+            <viewsTimeline:CurveEditorView />
         </DataTemplate>
-        <DataTemplate DataType="vm:TimelineViewModel">
-            <views:TimelineView />
+        <DataTemplate DataType="vmPanels:TimelineViewModel">
+            <viewsTimeline:TimelineView />
         </DataTemplate>
-        <DataTemplate DataType="vm:NodePropertiesPaneViewModel">
-            <views:NodePropertiesView />
+        <DataTemplate DataType="vmPanels:NodePropertiesPaneViewModel">
+            <viewsPanels:NodePropertiesView />
         </DataTemplate>
-        <DataTemplate DataType="vm:SpriteEditorPaneViewModel">
-            <views:SpriteEditorView DataContext="{Binding Editor}" />
+        <DataTemplate DataType="vmPanels:SpriteEditorPaneViewModel">
+            <viewsSprite:SpriteEditorView DataContext="{Binding Editor}" />
         </DataTemplate>
-        <DataTemplate DataType="vm:EditorWorkPaneViewModel">
+        <DataTemplate DataType="vmMain:EditorWorkPaneViewModel">
             <ContentControl Content="{Binding View}" />
         </DataTemplate>
-        <DataTemplate DataType="vm:HistoryPaneViewModel">
-            <views:HistoryView />
+        <DataTemplate DataType="vmPanels:HistoryPaneViewModel">
+            <viewsPanels:HistoryView />
         </DataTemplate>
-        <DataTemplate DataType="vm:PreviewPaneViewModel">
-            <views:PreviewPaneView />
+        <DataTemplate DataType="vmPanels:PreviewPaneViewModel">
+            <viewsPanels:PreviewPaneView />
         </DataTemplate>
-        <DataTemplate DataType="vm:ToolPaneViewModel">
+        <DataTemplate DataType="vmMain:ToolPaneViewModel">
             <ScrollViewer>
                 <TextBlock Margin="12"
                            Text="{Binding Description}"

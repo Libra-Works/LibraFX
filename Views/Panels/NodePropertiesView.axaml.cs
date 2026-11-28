@@ -1,10 +1,14 @@
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Input;
-using LiberaFx.ViewModels;
-using LiberaFx.Services;
+using LiberaFx.Services.Settings;
+using LiberaFx.ViewModels.Graph;
+using LiberaFx.ViewModels.Panels;
+using LiberaFx.Views.Controls;
+using LiberaFx.Views.Timeline;
+using LiberaFx.Views.Windows;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Panels;
 
 public partial class NodePropertiesView : UserControl
 {

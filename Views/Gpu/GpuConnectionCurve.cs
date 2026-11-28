@@ -1,8 +1,9 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
+using LiberaFx.Services.Compilation;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Gpu;
 
 public sealed class GpuConnectionCurve : Control
 {

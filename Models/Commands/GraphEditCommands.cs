@@ -1,4 +1,4 @@
-using LiberaFx.ViewModels;
+using LiberaFx.ViewModels.Graph;
 using LiberaFx.Models.Graph;
 
 namespace LiberaFx.Models.Commands;

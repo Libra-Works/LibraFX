@@ -11,9 +11,12 @@ using Avalonia.Controls;
 using Avalonia.Threading;
 using LiberaFx.Models.Commands;
 using LiberaFx.Models.Graph;
-using LiberaFx.Services;
-using LiberaFx.ViewModels;
-using LiberaFx.Views;
+using LiberaFx.Services.Preview;
+using LiberaFx.Services.Settings;
+using LiberaFx.ViewModels.Graph;
+using LiberaFx.ViewModels.Main;
+using LiberaFx.Views.Controls;
+using LiberaFx.Views.Graph;
 
 // Invoke Run() from the initialized, isolated Avalonia smoke runner.
 // Publication checks use in-memory clients; GodotPackagePreviewTests covers pinned TLS package transport.

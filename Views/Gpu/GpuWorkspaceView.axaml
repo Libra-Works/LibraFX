@@ -1,7 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:views="using:LiberaFx.Views"
-             x:Class="LiberaFx.Views.GpuWorkspaceView"
+             xmlns:viewsControls="using:LiberaFx.Views.Controls"
+             x:Class="LiberaFx.Views.Gpu.GpuWorkspaceView"
              Background="{DynamicResource EffectWindowBackgroundBrush}"
              Focusable="True" KeyDown="OnKeyDown">
   <UserControl.Styles>
@@ -11,20 +11,20 @@
   <Grid RowDefinitions="Auto,*,Auto">
     <Border Classes="editor-bar" BorderThickness="0,0,0,1">
       <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="8">
-        <views:IconButton x:Name="BackButton" Classes="editor-tool" Icon="Previous" Click="OnBack"
+        <viewsControls:IconButton x:Name="BackButton" Classes="editor-tool" Icon="Previous" Click="OnBack"
                           ToolTip.Tip="{DynamicResource Text.Gpu.Back}"
                           AutomationProperties.Name="{DynamicResource Text.Gpu.Back}" />
         <TextBlock x:Name="Breadcrumb" Classes="editor-heading" Grid.Column="1" VerticalAlignment="Center" />
         <Border Grid.Column="2" Classes="editor-toolbar-group" Padding="4,2">
           <StackPanel Orientation="Horizontal" Spacing="2">
-            <views:IconButton Classes="editor-tool transport-primary" Icon="Play" Click="OnCompile"
+            <viewsControls:IconButton Classes="editor-tool transport-primary" Icon="Play" Click="OnCompile"
                               ToolTip.Tip="{DynamicResource Text.Gpu.Compile}"
                               AutomationProperties.Name="{DynamicResource Text.Gpu.Compile}" />
           </StackPanel>
         </Border>
         <Border Grid.Column="3" Background="Transparent" Padding="4" VerticalAlignment="Center"
                 ToolTip.Tip="{DynamicResource Text.Gpu.Status}">
-          <views:EditorIconView Icon="Info" />
+          <viewsControls:EditorIconView Icon="Info" />
         </Border>
       </Grid>
     </Border>
@@ -38,14 +38,14 @@
           <TextBlock x:Name="CapacityLabel" Classes="editor-label" />
           <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
             <TextBox x:Name="Capacity" />
-            <views:IconButton x:Name="ApplyCapacityButton" Grid.Column="1" Classes="editor-tool" Icon="Check" Click="OnCapacity"
+            <viewsControls:IconButton x:Name="ApplyCapacityButton" Grid.Column="1" Classes="editor-tool" Icon="Check" Click="OnCapacity"
                               ToolTip.Tip="{DynamicResource Text.Gpu.ApplyCapacity}"
                               AutomationProperties.Name="{DynamicResource Text.Gpu.ApplyCapacity}" />
           </Grid>
           <Separator />
           <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
             <ComboBox x:Name="ExportFormat" HorizontalAlignment="Stretch" />
-            <views:IconButton Grid.Column="1" Classes="editor-tool" Icon="Export" Click="OnExport"
+            <viewsControls:IconButton Grid.Column="1" Classes="editor-tool" Icon="Export" Click="OnExport"
                               ToolTip.Tip="{DynamicResource Text.Gpu.Export}"
                               AutomationProperties.Name="{DynamicResource Text.Gpu.Export}" />
           </Grid>
@@ -61,21 +61,21 @@
           <TabItem Header="{DynamicResource Text.Gpu.Visual}">
             <Grid RowDefinitions="*,Auto">
               <StackPanel x:Name="KernelToolbar" Grid.Row="1" Orientation="Horizontal" Spacing="6" Margin="6">
-                <views:IconButton Classes="editor-tool" Icon="ZoomOut" Click="OnZoomOut"
+                <viewsControls:IconButton Classes="editor-tool" Icon="ZoomOut" Click="OnZoomOut"
                                   ToolTip.Tip="{DynamicResource Text.Editor.ZoomOut}"
                                   AutomationProperties.Name="{DynamicResource Text.Editor.ZoomOut}" />
                 <Button x:Name="ZoomLabel" Classes="editor-tool" Content="100%" Click="OnResetZoom" />
-                <views:IconButton Classes="editor-tool" Icon="ZoomIn" Click="OnZoomIn"
+                <viewsControls:IconButton Classes="editor-tool" Icon="ZoomIn" Click="OnZoomIn"
                                   ToolTip.Tip="{DynamicResource Text.Editor.ZoomIn}"
                                   AutomationProperties.Name="{DynamicResource Text.Editor.ZoomIn}" />
-                <views:IconButton x:Name="FrameButton" Classes="editor-tool" Icon="Frame" Click="OnFrame" IsEnabled="False"
+                <viewsControls:IconButton x:Name="FrameButton" Classes="editor-tool" Icon="Frame" Click="OnFrame" IsEnabled="False"
                                   ToolTip.Tip="{DynamicResource Text.Gpu.Frame}"
                                   AutomationProperties.Name="{DynamicResource Text.Gpu.Frame}" />
                 <Button x:Name="FrameAllButton" Classes="editor-action" Content="{DynamicResource Text.Gpu.FrameAll}" Click="OnFrameAll" />
                 <Button x:Name="ArrangeButton" Classes="editor-action" Content="{DynamicResource Text.Gpu.Arrange}" Click="OnArrange" />
                 <Border Background="Transparent" Padding="4" VerticalAlignment="Center"
                         ToolTip.Tip="{DynamicResource Text.Gpu.Gestures}">
-                  <views:EditorIconView Icon="Info" />
+                  <viewsControls:EditorIconView Icon="Info" />
                 </Border>
               </StackPanel>
               <ScrollViewer x:Name="GpuGraphScrollViewer" Focusable="True"
@@ -99,7 +99,7 @@
                 <Button Classes="editor-action" Click="OnEmitText" Content="{DynamicResource Text.Gpu.EmitText}" />
                 <Border Background="Transparent" Padding="4" VerticalAlignment="Center"
                         ToolTip.Tip="{DynamicResource Text.Gpu.Grammar}">
-                  <views:EditorIconView Icon="Info" />
+                  <viewsControls:EditorIconView Icon="Info" />
                 </Border>
               </StackPanel>
             </Grid>

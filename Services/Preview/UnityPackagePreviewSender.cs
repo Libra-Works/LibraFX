@@ -2,8 +2,10 @@ using System.Buffers.Binary;
 using System.Text.Json;
 using LiberaFx.Models.Graph;
 using LiberaFx.Services.Compilation;
+using LiberaFx.Services.Assets;
+using LiberaFx.Services.Gpu;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Preview;
 
 internal sealed class UnityPackagePreviewSender
 {

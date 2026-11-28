@@ -5,8 +5,9 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Dock.Model.Mvvm.Controls;
 using LiberaFx.Models.Graph;
+using LiberaFx.ViewModels.Graph;
 
-namespace LiberaFx.ViewModels;
+namespace LiberaFx.ViewModels.Panels;
 
 public sealed class OutlinerViewModel : Tool
 {

@@ -10,10 +10,11 @@ using Avalonia.Interactivity;
 using System.ComponentModel;
 using System.Text.Json;
 using LiberaFx.Models.Graph;
-using LiberaFx.Services;
-using LiberaFx.ViewModels;
+using LiberaFx.Services.Compilation;
+using LiberaFx.Services.Settings;
+using LiberaFx.ViewModels.Graph;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Graph;
 
 public partial class GraphNodeView : UserControl
 {

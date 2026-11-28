@@ -3,9 +3,11 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
-using LiberaFx.Services;
+using LiberaFx.Services.Compilation;
+using LiberaFx.Services.Preview;
+using LiberaFx.Services.Settings;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Controls;
 
 public sealed class ProfilerCostChart : Control
 {

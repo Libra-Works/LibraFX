@@ -1,4 +1,4 @@
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Assets;
 
 public enum LocalResourceKind { Effect, Image }
 public sealed record LocalResourceAsset(string Path, string Name, LocalResourceKind Kind, long Bytes);

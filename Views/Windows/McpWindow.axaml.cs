@@ -1,10 +1,11 @@
 using Avalonia.Controls;
 using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
-using LiberaFx.Services;
-using LiberaFx.ViewModels;
+using LiberaFx.Services.Extensions;
+using LiberaFx.Services.Settings;
+using LiberaFx.ViewModels.Main;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Windows;
 
 public partial class McpWindow : UserControl
 {

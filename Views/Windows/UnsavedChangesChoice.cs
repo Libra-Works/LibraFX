@@ -1,4 +1,4 @@
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Windows;
 
 public enum UnsavedChangesChoice
 {

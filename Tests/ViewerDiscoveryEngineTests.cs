@@ -1,8 +1,8 @@
 using System.Net;
 using System.Net.Sockets;
 using Avalonia.Threading;
-using LiberaFx.Services;
-using LiberaFx.ViewModels;
+using LiberaFx.Services.Preview;
+using LiberaFx.ViewModels.Main;
 
 internal static class ViewerDiscoveryEngineTests
 {

@@ -1,24 +1,25 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vm="using:LiberaFx.ViewModels"
-             xmlns:views="using:LiberaFx.Views"
-             x:Class="LiberaFx.Views.GraphEditorView"
+             xmlns:viewsControls="using:LiberaFx.Views.Controls"
+             xmlns:viewsGraph="using:LiberaFx.Views.Graph"
+             xmlns:vmGraph="using:LiberaFx.ViewModels.Graph"
+             x:Class="LiberaFx.Views.Graph.GraphEditorView"
              Focusable="True"
              KeyDown="OnGraphKeyDown"
-             x:DataType="vm:GraphWorkspaceViewModel">
+             x:DataType="vmGraph:GraphWorkspaceViewModel">
     <UserControl.Resources>
-        <views:GraphPositionConverter x:Key="GraphPositionConverter" />
-        <views:GraphNodeViewTemplate x:Key="GraphNodeViewTemplate" />
+        <viewsGraph:GraphPositionConverter x:Key="GraphPositionConverter" />
+        <viewsGraph:GraphNodeViewTemplate x:Key="GraphNodeViewTemplate" />
     </UserControl.Resources>
     <Grid RowDefinitions="Auto,*,Auto">
         <Border Grid.Row="0" Classes="editor-bar" BorderThickness="0,0,0,1"
                 IsVisible="{Binding !IsInlineWorkspace}">
             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
                 <StackPanel Orientation="Horizontal">
-                <views:IconButton Classes="editor-tool" Icon="Previous" IsEnabled="{Binding CanNavigateBack}"
+                <viewsControls:IconButton Classes="editor-tool" Icon="Previous" IsEnabled="{Binding CanNavigateBack}"
                                   Click="OnNavigateBackClick" ToolTip.Tip="{DynamicResource Text.Editor.NavigateBack}"
                                   AutomationProperties.Name="{DynamicResource Text.Editor.NavigateBack}" />
-                <views:IconButton Classes="editor-tool" Icon="Next" IsEnabled="{Binding CanNavigateForward}"
+                <viewsControls:IconButton Classes="editor-tool" Icon="Next" IsEnabled="{Binding CanNavigateForward}"
                                   Click="OnNavigateForwardClick" ToolTip.Tip="{DynamicResource Text.Editor.NavigateForward}"
                                   AutomationProperties.Name="{DynamicResource Text.Editor.NavigateForward}" />
                 <ItemsControl ItemsSource="{Binding Breadcrumbs}">
@@ -26,7 +27,7 @@
                         <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
-                        <DataTemplate DataType="vm:GraphBreadcrumb">
+                        <DataTemplate DataType="vmGraph:GraphBreadcrumb">
                             <StackPanel Orientation="Horizontal" Spacing="4">
                                 <TextBlock Classes="editor-heading" Text="›" IsVisible="{Binding HasSeparator}"
                                            VerticalAlignment="Center"
@@ -34,7 +35,7 @@
                                 <Button Classes="editor-tool" Tag="{Binding}" AutomationProperties.Name="{Binding Name}"
                                         Click="OnBreadcrumbClick" Padding="8,2">
                                     <StackPanel Orientation="Horizontal" Spacing="6">
-                                        <views:EditorIconView Icon="{Binding Icon}" />
+                                        <viewsControls:EditorIconView Icon="{Binding Icon}" />
                                         <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
                                     </StackPanel>
                                 </Button>
@@ -43,7 +44,7 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
                 </StackPanel>
-                <views:IconButton Grid.Column="1" Classes="editor-tool" Icon="Settings"
+                <viewsControls:IconButton Grid.Column="1" Classes="editor-tool" Icon="Settings"
                                   IsVisible="{Binding IsRootGraph}"
                                   ToolTip.Tip="{DynamicResource Text.Editor.EffectSettings}"
                                   AutomationProperties.Name="{DynamicResource Text.Editor.EffectSettings}">
@@ -57,7 +58,7 @@
                             </StackPanel>
                         </Flyout>
                     </Button.Flyout>
-                </views:IconButton>
+                </viewsControls:IconButton>
             </Grid>
         </Border>
         <Border x:Name="GraphToolbar" Grid.Row="2" Classes="editor-bar" BorderThickness="0,1,0,0"
@@ -66,7 +67,7 @@
             <TextBlock Text="{DynamicResource Text.Inline.Locked}" IsVisible="{Binding IsReadOnly}"
                        TextWrapping="Wrap" />
             <StackPanel Orientation="Horizontal" Spacing="6">
-                <views:IconButton Classes="editor-tool" Icon="ZoomOut" ToolTip.Tip="{DynamicResource Text.Editor.ZoomOut}"
+                <viewsControls:IconButton Classes="editor-tool" Icon="ZoomOut" ToolTip.Tip="{DynamicResource Text.Editor.ZoomOut}"
                         AutomationProperties.Name="{DynamicResource Text.Editor.ZoomOut}" Click="OnZoomOutClick" />
                 <Slider x:Name="ZoomSlider" Width="105" Minimum="-4.321928094887363" Maximum="2"
                         Value="0" ValueChanged="OnZoomSliderChanged"
@@ -77,26 +78,26 @@
                         AutomationProperties.Name="{DynamicResource Text.Editor.ResetZoom}"
                         Click="OnResetZoomClick">
                     <StackPanel Orientation="Horizontal" Spacing="6">
-                        <views:EditorIconView Icon="Reset" />
+                        <viewsControls:EditorIconView Icon="Reset" />
                         <TextBlock x:Name="ZoomText" Text="100%" VerticalAlignment="Center" />
                     </StackPanel>
                 </Button>
-                <views:IconButton Classes="editor-tool" Icon="ZoomIn" ToolTip.Tip="{DynamicResource Text.Editor.ZoomIn}"
+                <viewsControls:IconButton Classes="editor-tool" Icon="ZoomIn" ToolTip.Tip="{DynamicResource Text.Editor.ZoomIn}"
                         AutomationProperties.Name="{DynamicResource Text.Editor.ZoomIn}" Click="OnZoomInClick" />
-                <views:IconButton Classes="editor-tool" Icon="Frame" ToolTip.Tip="{DynamicResource Text.Editor.Frame}"
+                <viewsControls:IconButton Classes="editor-tool" Icon="Frame" ToolTip.Tip="{DynamicResource Text.Editor.Frame}"
                         AutomationProperties.Name="{DynamicResource Text.Editor.Frame}" Click="OnFrameSelectionClick"
                         IsEnabled="{Binding HasSelection}" />
-                <views:IconButton Classes="editor-tool" Icon="Group" ToolTip.Tip="{DynamicResource Text.Editor.Group}"
+                <viewsControls:IconButton Classes="editor-tool" Icon="Group" ToolTip.Tip="{DynamicResource Text.Editor.Group}"
                         AutomationProperties.Name="{DynamicResource Text.Editor.Group}" Click="OnGroupSelectionClick"
                         IsEnabled="{Binding HasSelection}" />
-                <views:IconButton Classes="editor-tool" Icon="Disconnect" IsEnabled="{Binding HasSelection}"
+                <viewsControls:IconButton Classes="editor-tool" Icon="Disconnect" IsEnabled="{Binding HasSelection}"
                                   ToolTip.Tip="{DynamicResource Text.Inline.Disconnect}"
                                   AutomationProperties.Name="{DynamicResource Text.Inline.Disconnect}">
                     <Button.Flyout>
                         <Flyout>
                             <ItemsControl ItemsSource="{Binding IncidentConnections}" MaxWidth="380">
                                 <ItemsControl.ItemTemplate>
-                                    <DataTemplate DataType="vm:GraphConnectionViewModel">
+                                    <DataTemplate DataType="vmGraph:GraphConnectionViewModel">
                                         <Button Content="{Binding Description}" Tag="{Binding}"
                                                 Click="OnDisconnectConnectionClick"
                                                 HorizontalAlignment="Stretch" />
@@ -105,7 +106,7 @@
                             </ItemsControl>
                         </Flyout>
                     </Button.Flyout>
-                </views:IconButton>
+                </viewsControls:IconButton>
                 <TextBlock Classes="editor-label" Text="{Binding ConnectionStatus}"
                            IsVisible="{Binding ConnectionStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
             </StackPanel>
@@ -137,41 +138,41 @@
                 <Grid.ContextMenu>
                     <ContextMenu>
                         <MenuItem x:Name="AddNodeMenu" Header="{DynamicResource Text.Editor.AddNode}">
-                            <MenuItem.Icon><views:EditorIconView Icon="Add" /></MenuItem.Icon>
+                            <MenuItem.Icon><viewsControls:EditorIconView Icon="Add" /></MenuItem.Icon>
                         </MenuItem>
                         <MenuItem Header="{DynamicResource Text.Editor.AddComment}" Click="OnAddCommentClick">
-                            <MenuItem.Icon><views:EditorIconView Icon="Info" /></MenuItem.Icon>
+                            <MenuItem.Icon><viewsControls:EditorIconView Icon="Info" /></MenuItem.Icon>
                         </MenuItem>
                         <MenuItem x:Name="AddRerouteMenu" Header="{DynamicResource Text.Editor.AddReroute}" Click="OnAddRerouteClick" IsVisible="False">
-                            <MenuItem.Icon><views:EditorIconView Icon="Add" /></MenuItem.Icon>
+                            <MenuItem.Icon><viewsControls:EditorIconView Icon="Add" /></MenuItem.Icon>
                         </MenuItem>
                         <MenuItem x:Name="NewGraphGroupMenu" Header="{DynamicResource Text.Editor.NewGraphGroup}" Click="OnAddGraphGroupClick">
-                            <MenuItem.Icon><views:EditorIconView Icon="Add" /></MenuItem.Icon>
+                            <MenuItem.Icon><viewsControls:EditorIconView Icon="Add" /></MenuItem.Icon>
                         </MenuItem>
                         <MenuItem x:Name="NewSpawnableGroupMenu" Header="{DynamicResource Text.Editor.NewSpawnableGroup}" Click="OnAddSpawnableGroupClick">
-                            <MenuItem.Icon><views:EditorIconView Icon="Add" /></MenuItem.Icon>
+                            <MenuItem.Icon><viewsControls:EditorIconView Icon="Add" /></MenuItem.Icon>
                         </MenuItem>
                         <Separator />
                         <MenuItem Header="{DynamicResource Text.Editor.NewCpuParticle}" Click="OnAddCpuParticleClick">
-                            <MenuItem.Icon><views:EditorIconView Icon="Add" /></MenuItem.Icon>
+                            <MenuItem.Icon><viewsControls:EditorIconView Icon="Add" /></MenuItem.Icon>
                         </MenuItem>
                         <MenuItem Header="{DynamicResource Text.Editor.NewGpuParticle}" Click="OnAddGpuParticleClick">
-                            <MenuItem.Icon><views:EditorIconView Icon="Add" /></MenuItem.Icon>
+                            <MenuItem.Icon><viewsControls:EditorIconView Icon="Add" /></MenuItem.Icon>
                         </MenuItem>
                         <Separator />
                         <MenuItem Header="{DynamicResource Text.Editor.Copy}" IsEnabled="{Binding HasSelection}" Click="OnCopyClick">
-                            <MenuItem.Icon><views:EditorIconView Icon="Copy" /></MenuItem.Icon>
+                            <MenuItem.Icon><viewsControls:EditorIconView Icon="Copy" /></MenuItem.Icon>
                         </MenuItem>
                         <MenuItem Header="{DynamicResource Text.Editor.Cut}" IsEnabled="{Binding HasSelection}" Click="OnCutClick">
-                            <MenuItem.Icon><views:EditorIconView Icon="Cut" /></MenuItem.Icon>
+                            <MenuItem.Icon><viewsControls:EditorIconView Icon="Cut" /></MenuItem.Icon>
                         </MenuItem>
                         <MenuItem Header="{DynamicResource Text.Editor.Paste}" Click="OnPasteClick">
-                            <MenuItem.Icon><views:EditorIconView Icon="Paste" /></MenuItem.Icon>
+                            <MenuItem.Icon><viewsControls:EditorIconView Icon="Paste" /></MenuItem.Icon>
                         </MenuItem>
                         <Separator x:Name="BreakpointSeparator" IsVisible="{Binding HasSelection}" />
                         <MenuItem x:Name="ToggleBreakpointMenu" Header="{DynamicResource Text.ExecutionDebug.Toggle}"
                                   InputGesture="F9" IsVisible="{Binding HasSelection}" Click="OnToggleBreakpointClick">
-                            <MenuItem.Icon><views:EditorIconView Icon="Pin" /></MenuItem.Icon>
+                            <MenuItem.Icon><viewsControls:EditorIconView Icon="Pin" /></MenuItem.Icon>
                         </MenuItem>
                     </ContextMenu>
                 </Grid.ContextMenu>
@@ -182,7 +183,7 @@
                         PointerReleased="OnBackgroundPointerReleased"
                         PointerCaptureLost="OnBackgroundPointerCaptureLost" />
 
-                <views:GraphSceneLayer x:Name="SceneLayer" DataContext="{Binding}" GridOnly="True" />
+                <viewsGraph:GraphSceneLayer x:Name="SceneLayer" DataContext="{Binding}" GridOnly="True" />
 
                 <Border IsVisible="{Binding IsGraphEmpty}"
                         IsHitTestVisible="False"
@@ -212,14 +213,14 @@
                                 <MultiBinding Converter="{StaticResource GraphPositionConverter}">
                                     <ReflectionBinding Path="DisplayX" />
                                     <ReflectionBinding Path="OriginX"
-                                                       RelativeSource="{RelativeSource FindAncestor, AncestorType={x:Type views:GraphEditorView}}" />
+                                                       RelativeSource="{RelativeSource FindAncestor, AncestorType={x:Type viewsGraph:GraphEditorView}}" />
                                 </MultiBinding>
                             </Setter>
                             <Setter Property="Canvas.Top">
                                 <MultiBinding Converter="{StaticResource GraphPositionConverter}">
                                     <ReflectionBinding Path="DisplayY" />
                                     <ReflectionBinding Path="OriginY"
-                                                       RelativeSource="{RelativeSource FindAncestor, AncestorType={x:Type views:GraphEditorView}}" />
+                                                       RelativeSource="{RelativeSource FindAncestor, AncestorType={x:Type viewsGraph:GraphEditorView}}" />
                                 </MultiBinding>
                             </Setter>
                         </ControlTheme>
@@ -231,7 +232,7 @@
                         <StaticResource ResourceKey="GraphNodeViewTemplate" />
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
-                <views:GraphSceneLayer x:Name="ConnectionLayer" DataContext="{Binding}" ConnectionsOnly="True" />
+                <viewsGraph:GraphSceneLayer x:Name="ConnectionLayer" DataContext="{Binding}" ConnectionsOnly="True" />
                 <ItemsControl x:Name="NodeItems" ItemsSource="{Binding ForegroundNodes}">
                     <ItemsControl.ItemContainerTheme>
                         <ControlTheme TargetType="ContentPresenter">
@@ -239,14 +240,14 @@
                                 <MultiBinding Converter="{StaticResource GraphPositionConverter}">
                                     <ReflectionBinding Path="DisplayX" />
                                     <ReflectionBinding Path="OriginX"
-                                                       RelativeSource="{RelativeSource FindAncestor, AncestorType={x:Type views:GraphEditorView}}" />
+                                                       RelativeSource="{RelativeSource FindAncestor, AncestorType={x:Type viewsGraph:GraphEditorView}}" />
                                 </MultiBinding>
                             </Setter>
                             <Setter Property="Canvas.Top">
                                 <MultiBinding Converter="{StaticResource GraphPositionConverter}">
                                     <ReflectionBinding Path="DisplayY" />
                                     <ReflectionBinding Path="OriginY"
-                                                       RelativeSource="{RelativeSource FindAncestor, AncestorType={x:Type views:GraphEditorView}}" />
+                                                       RelativeSource="{RelativeSource FindAncestor, AncestorType={x:Type viewsGraph:GraphEditorView}}" />
                                 </MultiBinding>
                             </Setter>
                         </ControlTheme>
@@ -268,8 +269,8 @@
             </Grid>
             </Grid>
         </ScrollViewer>
-        <views:GraphInteractionOverlay x:Name="InteractionOverlay" Grid.Row="1" />
-        <views:CpuParticleFlowView Grid.Row="1" IsVisible="{Binding IsCpuParticleOverview}" />
+        <viewsGraph:GraphInteractionOverlay x:Name="InteractionOverlay" Grid.Row="1" />
+        <viewsGraph:CpuParticleFlowView Grid.Row="1" IsVisible="{Binding IsCpuParticleOverview}" />
         <ContentControl x:Name="SpecializedWorkspace" Grid.Row="1" Grid.RowSpan="2" IsVisible="False"
                         Background="{DynamicResource EffectWindowBackgroundBrush}" />
         <Popup x:Name="NodeSearchPopup" Grid.Row="2" PlacementTarget="{Binding #GraphScrollViewer}"
@@ -284,7 +285,7 @@
                              MaxHeight="320" DoubleTapped="OnNodeSearchDoubleTapped"
                              KeyDown="OnNodeSearchKeyDown">
                         <ListBox.ItemTemplate>
-                            <DataTemplate DataType="vm:NodeCatalogEntryViewModel">
+                            <DataTemplate DataType="vmGraph:NodeCatalogEntryViewModel">
                                 <StackPanel>
                                     <TextBlock Text="{Binding Name}" />
                                     <TextBlock Text="{Binding Group}"

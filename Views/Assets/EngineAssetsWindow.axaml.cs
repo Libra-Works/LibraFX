@@ -1,9 +1,11 @@
 using Avalonia.Controls;
 using Avalonia.Interactivity;
-using LiberaFx.Services;
-using LiberaFx.ViewModels;
+using LiberaFx.Services.Assets;
+using LiberaFx.Services.Settings;
+using LiberaFx.ViewModels.Assets;
+using LiberaFx.ViewModels.Main;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Assets;
 
 public partial class EngineAssetsWindow : UserControl
 {

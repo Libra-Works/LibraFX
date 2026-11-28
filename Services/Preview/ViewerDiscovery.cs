@@ -5,7 +5,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Win32.SafeHandles;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Preview;
 
 public sealed record AvailableViewer(string PipeName, int ProcessId, Guid InstanceId,
     string Engine, string Name, bool Connected)

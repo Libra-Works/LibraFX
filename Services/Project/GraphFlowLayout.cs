@@ -1,8 +1,9 @@
 using Avalonia;
 using LiberaFx.Models.Graph;
-using LiberaFx.ViewModels;
+using LiberaFx.Services.Compilation;
+using LiberaFx.ViewModels.Graph;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Project;
 
 public sealed record GraphLayoutMove(Guid NodeId, double OldX, double OldY, double X, double Y,
     double Width, double Height, bool Fixed)

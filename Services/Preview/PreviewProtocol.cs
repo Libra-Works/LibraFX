@@ -1,7 +1,7 @@
 using System.Text.Json;
 using LiberaFx.Models.Graph;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Preview;
 
 public sealed record PreviewSignalRequest(long Sequence, Guid NodeId);
 

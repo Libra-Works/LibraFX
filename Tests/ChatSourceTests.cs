@@ -1,7 +1,8 @@
 using System.Text.Json;
 using LiberaFx.Models.Commands;
-using LiberaFx.Services;
-using LiberaFx.ViewModels;
+using LiberaFx.Services.Extensions;
+using LiberaFx.Services.Mcp;
+using LiberaFx.ViewModels.Graph;
 using ModelContextProtocol;
 
 /// <summary>Source regressions; no model, HTTP service, keys or settings required. Run on initialized UI thread.</summary>

@@ -1,8 +1,9 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
+using LiberaFx.Services.Compilation;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Graph;
 
 // Distances are measured in the window, so nested editors and zoom share the same target size.
 internal sealed class PortSnapFeedback : IDisposable

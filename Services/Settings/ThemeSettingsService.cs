@@ -8,7 +8,7 @@ using Avalonia.Platform;
 using Avalonia.Styling;
 using LiberaFx.Models.Appearance;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Settings;
 
 public sealed class ThemeSettingsService
 {

@@ -2,7 +2,7 @@ using System.Text.Json;
 using Avalonia.Media;
 using LiberaFx.Models.Graph;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Settings;
 
 public sealed class ColorPaletteService
 {

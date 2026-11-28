@@ -2,7 +2,7 @@ using System.Globalization;
 using Avalonia;
 using Avalonia.Data.Converters;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Graph;
 
 public sealed class GraphPositionConverter : IMultiValueConverter
 {

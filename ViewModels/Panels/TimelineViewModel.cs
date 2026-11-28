@@ -5,9 +5,11 @@ using System.Globalization;
 using Dock.Model.Mvvm.Controls;
 using CommunityToolkit.Mvvm.Input;
 using LiberaFx.Models.Graph;
-using LiberaFx.Services;
+using LiberaFx.Services.Preview;
+using LiberaFx.Services.Settings;
+using LiberaFx.ViewModels.Graph;
 
-namespace LiberaFx.ViewModels;
+namespace LiberaFx.ViewModels.Panels;
 
 public sealed class TimelineViewModel : Tool
 {

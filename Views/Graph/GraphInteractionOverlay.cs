@@ -1,9 +1,10 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
-using LiberaFx.ViewModels;
+using LiberaFx.Services.Compilation;
+using LiberaFx.ViewModels.Graph;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Graph;
 
 // Draw only transient interaction wires above the document graph; settled wires stay below nodes.
 public sealed class GraphInteractionOverlay : Control

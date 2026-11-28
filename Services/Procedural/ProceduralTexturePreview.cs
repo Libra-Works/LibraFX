@@ -1,8 +1,9 @@
 using System.Runtime.InteropServices;
 using LiberaFx.Models.Graph;
 using LiberaFx.Services.Compilation;
+using LiberaFx.Services.Preview;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Procedural;
 
 internal sealed record ProceduralTexturePreviewFrame(int Width, int Height, byte[] Pixels, bool UsesTime);
 

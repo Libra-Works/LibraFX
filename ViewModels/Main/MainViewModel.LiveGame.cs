@@ -1,8 +1,10 @@
 using Avalonia.Threading;
-using LiberaFx.Services;
-using LiberaFx.Views;
+using LiberaFx.Services.Preview;
+using LiberaFx.Services.Settings;
+using LiberaFx.ViewModels.Panels;
+using LiberaFx.Views.Windows;
 
-namespace LiberaFx.ViewModels;
+namespace LiberaFx.ViewModels.Main;
 
 public partial class MainViewModel
 {

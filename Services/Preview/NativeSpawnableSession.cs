@@ -1,6 +1,6 @@
 using LiberaFx.Services.Compilation;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Preview;
 
 public sealed record SpawnableSessionEvent(Guid ContainerId, ulong InstanceId, uint Kind, double Time, ulong Seed,
     Guid SignalNodeId = default);

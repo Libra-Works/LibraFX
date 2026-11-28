@@ -1,11 +1,12 @@
 using System.ComponentModel;
 using System.Text.Json;
 using Avalonia.Threading;
-using LiberaFx.ViewModels;
+using LiberaFx.ViewModels.Graph;
+using LiberaFx.ViewModels.Main;
 using ModelContextProtocol;
 using ModelContextProtocol.Server;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Mcp;
 
 [McpServerToolType]
 public sealed class ProjectFileMcpTools

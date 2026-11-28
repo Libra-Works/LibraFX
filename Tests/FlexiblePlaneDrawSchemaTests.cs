@@ -1,7 +1,7 @@
 using System.Buffers.Binary;
 using System.Text.Json;
 using LiberaFx.Models.Graph;
-using LiberaFx.Services;
+using LiberaFx.Services.Assets;
 using LiberaFx.Services.Compilation;
 
 namespace LiberaFx.Tests;

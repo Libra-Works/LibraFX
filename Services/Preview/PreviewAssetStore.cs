@@ -1,7 +1,8 @@
 using System.Text.Json;
 using LiberaFx.Models.Resources;
+using LiberaFx.Services.Assets;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Preview;
 
 public sealed class PreviewAssetStore(PreviewTelemetryStore telemetry)
 {

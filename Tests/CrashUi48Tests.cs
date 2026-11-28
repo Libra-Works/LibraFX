@@ -4,8 +4,9 @@ using Avalonia.Automation.Peers;
 using Avalonia.Automation.Provider;
 using Avalonia.Controls;
 using LiberaFx.Extensions.Abstractions;
-using LiberaFx.Services;
-using LiberaFx.Views;
+using LiberaFx.Services.Crash;
+using LiberaFx.Services.Settings;
+using LiberaFx.Views.Windows;
 
 internal static class CrashUi48Tests
 {

@@ -3,8 +3,9 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
 using LibraGpu.Core;
+using LiberaFx.Services.Compilation;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Gpu;
 
 /// <summary>
 /// Interactive inline curve editor control for <see cref="GpuCurveData"/> in the GPU node inspector.

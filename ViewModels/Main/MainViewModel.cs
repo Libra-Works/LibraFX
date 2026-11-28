@@ -8,10 +8,17 @@ using Dock.Model.Mvvm.Controls;
 using LiberaFx.Models.Appearance;
 using LiberaFx.Models.Commands;
 using LiberaFx.Models.Graph;
-using LiberaFx.Services;
+using LiberaFx.Services.Assets;
+using LiberaFx.Services.Extensions;
+using LiberaFx.Services.Mcp;
+using LiberaFx.Services.Preview;
+using LiberaFx.Services.Project;
+using LiberaFx.Services.Settings;
+using LiberaFx.ViewModels.Graph;
+using LiberaFx.ViewModels.Panels;
 using LiberaFx.Services.Compilation;
 
-namespace LiberaFx.ViewModels;
+namespace LiberaFx.ViewModels.Main;
 
 public partial class MainViewModel : ViewModelBase
 {

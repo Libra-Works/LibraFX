@@ -1,4 +1,4 @@
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Crash;
 
 /// <summary>Owned by application lifetime, not a document or extension. No network operations.</summary>
 public sealed class CrashReportLifecycle : IDisposable

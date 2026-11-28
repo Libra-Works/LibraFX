@@ -4,8 +4,8 @@ using System.IO.Pipes;
 using System.Text.Json;
 using Avalonia.Threading;
 using LiberaFx.Models.Graph;
-using LiberaFx.Services;
-using LiberaFx.ViewModels;
+using LiberaFx.Services.Preview;
+using LiberaFx.ViewModels.Main;
 
 internal static class ExecutionDebugPaneTests
 {

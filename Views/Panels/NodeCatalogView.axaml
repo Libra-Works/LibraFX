@@ -1,9 +1,9 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vm="using:LiberaFx.ViewModels"
-             xmlns:views="using:LiberaFx.Views"
-             x:Class="LiberaFx.Views.NodeCatalogView"
-             x:DataType="vm:NodeCatalogViewModel">
+             xmlns:viewsControls="using:LiberaFx.Views.Controls"
+             xmlns:vmGraph="using:LiberaFx.ViewModels.Graph"
+             x:Class="LiberaFx.Views.Panels.NodeCatalogView"
+             x:DataType="vmGraph:NodeCatalogViewModel">
     <Grid RowDefinitions="Auto,*,Auto">
         <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" Margin="10" ColumnSpacing="6" RowSpacing="6">
             <TextBlock Grid.ColumnSpan="2" Text="{Binding ProjectName}"
@@ -11,7 +11,7 @@
             <TextBox Grid.Row="1" PlaceholderText="{DynamicResource Text.Editor.SearchNodes}"
                      AutomationProperties.Name="{DynamicResource Text.Editor.SearchNodes}"
                      Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-            <views:IconButton Grid.Row="1" Grid.Column="1" Icon="Refresh" Command="{Binding RefreshCommand}"
+            <viewsControls:IconButton Grid.Row="1" Grid.Column="1" Icon="Refresh" Command="{Binding RefreshCommand}"
                               ToolTip.Tip="{DynamicResource Text.Editor.Refresh}"
                               AutomationProperties.Name="{DynamicResource Text.Editor.Refresh}" />
         </Grid>
@@ -19,14 +19,14 @@
         <StackPanel Margin="10,0,10,10" Spacing="6">
             <ItemsControl ItemsSource="{Binding Groups}">
                 <ItemsControl.ItemTemplate>
-                    <DataTemplate DataType="vm:NodeCatalogGroupViewModel">
+                    <DataTemplate DataType="vmGraph:NodeCatalogGroupViewModel">
                         <StackPanel Spacing="6">
                             <TextBlock Text="{Binding Name}"
                                        FontWeight="SemiBold"
                                        Foreground="{DynamicResource EffectForegroundBrush}" />
                             <ItemsControl ItemsSource="{Binding Nodes}">
                                 <ItemsControl.ItemTemplate>
-                                    <DataTemplate DataType="vm:NodeCatalogEntryViewModel">
+                                    <DataTemplate DataType="vmGraph:NodeCatalogEntryViewModel">
                                         <Border Padding="8,5" Margin="0,1"
                                                 Background="{DynamicResource EffectSurfaceBrush}"
                                                 Opacity="{Binding DisplayOpacity}"

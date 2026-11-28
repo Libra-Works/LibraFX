@@ -1,5 +1,11 @@
 using LiberaFx.Models.Graph;
 using System.Text.Json;
+using LiberaFx.Services.Assets;
+using LiberaFx.Services.Gpu;
+using LiberaFx.Services.Project;
+#if !LIBERAFX_CONVERTER
+using LiberaFx.Services.Settings;
+#endif
 
 namespace LiberaFx.Services.Compilation;
 

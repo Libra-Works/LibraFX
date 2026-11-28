@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Preview;
 
 public sealed record LiveGameEndpoint(int Protocol, string Session, string Engine, string Transport,
     string SupportedUpdate, int Process, string? DebugDisconnect = null);

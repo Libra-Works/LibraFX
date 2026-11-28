@@ -1,9 +1,9 @@
 using System.Reflection;
 using System.Runtime.Loader;
 using Avalonia.Controls;
-using LiberaFx.ViewModels;
+using LiberaFx.ViewModels.Graph;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Extensions;
 
 public interface IInspectorEditorProvider
 {

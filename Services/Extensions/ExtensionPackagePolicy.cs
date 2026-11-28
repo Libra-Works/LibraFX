@@ -3,7 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Extensions;
 
 internal static partial class ExtensionPackagePolicy
 {

@@ -3,11 +3,12 @@ using Avalonia.Automation;
 using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia;
-using LiberaFx.Services;
+using LiberaFx.Services.Settings;
+using LiberaFx.Views.Controls;
 using LiberaFx.Models.Graph;
 using System.Globalization;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Windows;
 
 public partial class ColorEditorWindow : Window
 {

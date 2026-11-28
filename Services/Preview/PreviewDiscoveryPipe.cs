@@ -1,7 +1,7 @@
 using System.IO.Pipes;
 using System.Text;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Preview;
 
 public sealed class PreviewDiscoveryPipe : IDisposable
 {

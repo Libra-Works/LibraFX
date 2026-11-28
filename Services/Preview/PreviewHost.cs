@@ -9,13 +9,16 @@ using System.Threading.Channels;
 using Avalonia.Threading;
 using LiberaFx.Models.Graph;
 using LiberaFx.Services.Compilation;
-using LiberaFx.ViewModels;
+using LiberaFx.Services.Assets;
+using LiberaFx.Services.Settings;
+using LiberaFx.ViewModels.Graph;
+using LiberaFx.ViewModels.Main;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Hosting;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Preview;
 
 public sealed class PreviewHost : IDisposable
 {

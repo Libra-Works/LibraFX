@@ -1,9 +1,10 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.Input;
 using LiberaFx.Models.Resources;
-using LiberaFx.Services;
+using LiberaFx.Services.Assets;
+using LiberaFx.Services.Settings;
 
-namespace LiberaFx.ViewModels;
+namespace LiberaFx.ViewModels.Assets;
 
 public sealed partial class EngineAssetsWindowViewModel
 {

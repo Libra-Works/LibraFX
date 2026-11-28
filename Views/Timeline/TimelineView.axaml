@@ -1,33 +1,35 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vm="using:LiberaFx.ViewModels" xmlns:views="using:LiberaFx.Views"
-             x:Class="LiberaFx.Views.TimelineView" x:DataType="vm:TimelineViewModel"
+             xmlns:viewsControls="using:LiberaFx.Views.Controls"
+             xmlns:viewsTimeline="using:LiberaFx.Views.Timeline"
+             xmlns:vmPanels="using:LiberaFx.ViewModels.Panels"
+             x:Class="LiberaFx.Views.Timeline.TimelineView" x:DataType="vmPanels:TimelineViewModel"
              Background="{DynamicResource EffectWindowBackgroundBrush}">
     <Grid RowDefinitions="Auto,Auto,*">
         <Border Classes="editor-bar" BorderThickness="0,0,0,1">
             <WrapPanel Orientation="Horizontal" ItemSpacing="8" LineSpacing="6">
                 <Border Classes="editor-toolbar-group" Padding="4,2">
                     <StackPanel Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
-                        <views:IconButton Classes="editor-tool" Icon="Frame" Click="OnFrameAllClick"
+                        <viewsControls:IconButton Classes="editor-tool" Icon="Frame" Click="OnFrameAllClick"
                                           ToolTip.Tip="{DynamicResource Text.Panels.FrameAll}"
                                           AutomationProperties.Name="{DynamicResource Text.Panels.FrameAll}" />
-                        <views:IconButton Classes="editor-tool" Icon="ZoomOut" Click="OnZoomOutClick"
+                        <viewsControls:IconButton Classes="editor-tool" Icon="ZoomOut" Click="OnZoomOutClick"
                                           ToolTip.Tip="{DynamicResource Text.Panels.ZoomOut}"
                                           AutomationProperties.Name="{DynamicResource Text.Panels.ZoomOut}" />
-                        <views:IconButton Classes="editor-tool" Icon="ZoomIn" Click="OnZoomInClick"
+                        <viewsControls:IconButton Classes="editor-tool" Icon="ZoomIn" Click="OnZoomInClick"
                                           ToolTip.Tip="{DynamicResource Text.Panels.ZoomIn}"
                                           AutomationProperties.Name="{DynamicResource Text.Panels.ZoomIn}" />
                         <ToggleButton Classes="editor-tool" IsChecked="{Binding Playback.ShowSeconds}"
                                       ToolTip.Tip="{DynamicResource Text.Timeline.UseSeconds}"
                                       AutomationProperties.Name="{DynamicResource Text.Timeline.UseSeconds}">
-                            <views:EditorIconView Icon="Clock" />
+                            <viewsControls:EditorIconView Icon="Clock" />
                         </ToggleButton>
                         <Border Classes="editor-toolbar-divider" />
-                        <views:IconButton x:Name="AddPreviewSignalButton" Classes="editor-tool"
+                        <viewsControls:IconButton x:Name="AddPreviewSignalButton" Classes="editor-tool"
                                           Icon="SignalPreview" Command="{Binding AddPreviewSignalKeyCommand}"
                                           ToolTip.Tip="{DynamicResource Text.Timeline.AddPreviewSignal}"
                                           AutomationProperties.Name="{DynamicResource Text.Timeline.AddPreviewSignal}" />
-                        <views:IconButton x:Name="AddRuntimeSignalButton" Classes="editor-tool"
+                        <viewsControls:IconButton x:Name="AddRuntimeSignalButton" Classes="editor-tool"
                                           Icon="SignalRuntime" Command="{Binding AddRuntimeSignalKeyCommand}"
                                           ToolTip.Tip="{DynamicResource Text.Timeline.AddRuntimeSignal}"
                                           AutomationProperties.Name="{DynamicResource Text.Timeline.AddRuntimeSignal}" />
@@ -35,7 +37,7 @@
                 </Border>
                 <Border Background="Transparent" Padding="4" VerticalAlignment="Center"
                         ToolTip.Tip="{Binding Status}">
-                    <views:EditorIconView Icon="Info" />
+                    <viewsControls:EditorIconView Icon="Info" />
                 </Border>
             </WrapPanel>
         </Border>
@@ -57,7 +59,7 @@
                     <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding SelectedTrack.IsSignal}" VerticalAlignment="Center">
                         <ComboBox ItemsSource="{Binding SelectedTrack.SignalKeys}" SelectedItem="{Binding SelectedSignalKey}" MinWidth="88">
                             <ComboBox.ItemTemplate>
-                                <DataTemplate x:DataType="vm:TimelineSignalKeyViewModel">
+                                <DataTemplate x:DataType="vmPanels:TimelineSignalKeyViewModel">
                                     <TextBlock Text="{Binding TimeText}" />
                                 </DataTemplate>
                             </ComboBox.ItemTemplate>
@@ -73,7 +75,7 @@
         </Border>
         <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Disabled"
                       Background="{DynamicResource EffectCurveBackgroundBrush}">
-            <views:TimelineCanvas x:Name="Canvas" MinHeight="{Binding CanvasHeight}" VerticalAlignment="Stretch"
+            <viewsTimeline:TimelineCanvas x:Name="Canvas" MinHeight="{Binding CanvasHeight}" VerticalAlignment="Stretch"
                                   HeaderBackground="{DynamicResource EffectSurfaceBrush}" />
         </ScrollViewer>
     </Grid>

@@ -3,11 +3,13 @@ using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Input;
 using Avalonia.Threading;
-using LiberaFx.ViewModels;
-using LiberaFx.Services;
+using LiberaFx.Services.Extensions;
+using LiberaFx.Services.Settings;
+using LiberaFx.ViewModels.Graph;
+using LiberaFx.ViewModels.Main;
 using LiberaFx.Models;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Windows;
 
 public partial class MainWindow : Window
 {

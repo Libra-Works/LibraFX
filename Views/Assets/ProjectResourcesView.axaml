@@ -1,9 +1,10 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vm="using:LiberaFx.ViewModels"
-             xmlns:views="using:LiberaFx.Views"
-             x:Class="LiberaFx.Views.ProjectResourcesView"
-             x:DataType="vm:ProjectResourcesViewModel">
+             xmlns:viewsControls="using:LiberaFx.Views.Controls"
+             xmlns:viewsGraph="using:LiberaFx.Views.Graph"
+             xmlns:vmAssets="using:LiberaFx.ViewModels.Assets"
+             x:Class="LiberaFx.Views.Assets.ProjectResourcesView"
+             x:DataType="vmAssets:ProjectResourcesViewModel">
     <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="12" RowSpacing="10">
         <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
             <ComboBox SelectedIndex="{Binding SourceIndex}" MinWidth="180">
@@ -13,13 +14,13 @@
             <TextBox Grid.Column="1" Text="{Binding Query, UpdateSourceTrigger=PropertyChanged}"
                      PlaceholderText="{DynamicResource Text.Asset.SearchHint}"
                      AutomationProperties.Name="{DynamicResource Text.Asset.Search}" />
-            <views:IconButton Grid.Column="2" Classes="editor-tool" Icon="Refresh" Command="{Binding RefreshCommand}"
+            <viewsControls:IconButton Grid.Column="2" Classes="editor-tool" Icon="Refresh" Command="{Binding RefreshCommand}"
                               ToolTip.Tip="{DynamicResource Text.Editor.Refresh}"
                               AutomationProperties.Name="{DynamicResource Text.Editor.Refresh}" />
         </Grid>
         <Grid Grid.Row="1" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8" IsVisible="{Binding IsLocal}">
             <TextBox Text="{Binding Folder}" AutomationProperties.Name="{DynamicResource Text.Library.ChooseFolder}" />
-            <views:IconButton Grid.Column="1" Classes="editor-tool" Icon="Open" Click="OnChooseFolder"
+            <viewsControls:IconButton Grid.Column="1" Classes="editor-tool" Icon="Open" Click="OnChooseFolder"
                               ToolTip.Tip="{DynamicResource Text.Library.ChooseFolder}"
                               AutomationProperties.Name="{DynamicResource Text.Library.ChooseFolder}" />
             <CheckBox Grid.Column="2" IsChecked="{Binding Recursive}" Content="{DynamicResource Text.Resources.Recursive}" />
@@ -33,7 +34,7 @@
                     </Style>
                 </ListBox.Styles>
                 <ListBox.ItemTemplate>
-                    <DataTemplate x:DataType="vm:WorkspaceResourceEntry">
+                    <DataTemplate x:DataType="vmAssets:WorkspaceResourceEntry">
                         <StackPanel Margin="4">
                             <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
                             <TextBlock Text="{Binding KindLabel}" />
@@ -50,7 +51,7 @@
                 <Grid Grid.Row="2">
                     <Image x:Name="LocalThumbnail" Source="{Binding Thumbnail}" Stretch="Uniform" MaxHeight="450" />
                     <Border IsVisible="{Binding HasGraphPreview}">
-                        <views:GraphEditorView x:Name="ResourceGraphPreview" DataContext="{Binding PreviewGraph}"
+                        <viewsGraph:GraphEditorView x:Name="ResourceGraphPreview" DataContext="{Binding PreviewGraph}"
                                                IsEnabled="False" IsHitTestVisible="False" />
                     </Border>
                 </Grid>

@@ -12,7 +12,7 @@ using LiberaFx.Extensions.Abstractions;
 [assembly: InternalsVisibleTo("CommentImageSmokeTests")]
 [assembly: InternalsVisibleTo("ProviderUiChecks")]
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Crash;
 
 /// <summary>Explicitly configured github.com only. No fallback, shell, saved token or redirects.</summary>
 public sealed class GitHubCrashReportProvider : ICrashReportProvider

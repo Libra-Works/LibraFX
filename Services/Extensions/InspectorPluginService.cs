@@ -6,9 +6,10 @@ using Avalonia.Controls;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using LiberaFx.Inspector.Abstractions;
-using LiberaFx.ViewModels;
+using LiberaFx.Services.Settings;
+using LiberaFx.ViewModels.Graph;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Extensions;
 
 public sealed class InspectorPluginService : ObservableObject, IDisposable
 {

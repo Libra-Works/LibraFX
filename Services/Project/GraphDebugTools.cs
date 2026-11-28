@@ -9,13 +9,14 @@ using Avalonia.Input.Raw;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
-using LiberaFx.ViewModels;
-using LiberaFx.Views;
+using LiberaFx.Services.Compilation;
+using LiberaFx.ViewModels.Graph;
+using LiberaFx.Views.Graph;
 using ModelContextProtocol;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Project;
 
 [McpServerToolType]
 public sealed class GraphDebugTools

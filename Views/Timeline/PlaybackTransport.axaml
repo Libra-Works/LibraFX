@@ -1,9 +1,9 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:services="using:LiberaFx.Services"
-             xmlns:views="using:LiberaFx.Views"
-             x:Class="LiberaFx.Views.PlaybackTransport"
-             x:DataType="services:EditorPlayback"
+             xmlns:servicesPreview="using:LiberaFx.Services.Preview"
+             xmlns:viewsControls="using:LiberaFx.Views.Controls"
+             x:Class="LiberaFx.Views.Timeline.PlaybackTransport"
+             x:DataType="servicesPreview:EditorPlayback"
              x:Name="Transport">
     <WrapPanel Orientation="Horizontal" ItemSpacing="8" LineSpacing="4" VerticalAlignment="Center">
         <Expander Header="{DynamicResource Text.Timeline.Motion}" ExpandDirection="Down">
@@ -17,18 +17,18 @@
         </Expander>
         <Border Classes="editor-toolbar-group" Padding="4,2">
             <StackPanel Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
-                <views:IconButton Classes="editor-tool" Icon="StepBack" Command="{Binding StepBackCommand}"
+                <viewsControls:IconButton Classes="editor-tool" Icon="StepBack" Command="{Binding StepBackCommand}"
                                   IsVisible="{ReflectionBinding ShowFrameTools, ElementName=Transport}"
                                   ToolTip.Tip="{DynamicResource Text.Timeline.StepBack}"
                                   AutomationProperties.Name="{DynamicResource Text.Timeline.StepBack}" />
-                <views:IconButton Classes="editor-tool transport-primary" Classes.playing="{Binding IsPlaying}"
+                <viewsControls:IconButton Classes="editor-tool transport-primary" Classes.playing="{Binding IsPlaying}"
                                   Icon="{Binding PlayIcon}" Command="{Binding PlayPauseCommand}"
                                   ToolTip.Tip="{DynamicResource Text.Timeline.PlayPause}"
                                   AutomationProperties.Name="{DynamicResource Text.Timeline.PlayPause}" />
-                <views:IconButton Classes="editor-tool" Icon="Stop" Command="{Binding StopCommand}"
+                <viewsControls:IconButton Classes="editor-tool" Icon="Stop" Command="{Binding StopCommand}"
                                   ToolTip.Tip="{DynamicResource Text.Timeline.Stop}"
                                   AutomationProperties.Name="{DynamicResource Text.Timeline.Stop}" />
-                <views:IconButton Classes="editor-tool" Icon="StepForward" Command="{Binding StepForwardCommand}"
+                <viewsControls:IconButton Classes="editor-tool" Icon="StepForward" Command="{Binding StepForwardCommand}"
                                   IsVisible="{ReflectionBinding ShowFrameTools, ElementName=Transport}"
                                   ToolTip.Tip="{DynamicResource Text.Timeline.StepForward}"
                                   AutomationProperties.Name="{DynamicResource Text.Timeline.StepForward}" />
@@ -80,12 +80,12 @@
                 <ToggleButton Classes="editor-tool" IsChecked="{Binding ShowSeconds}"
                               ToolTip.Tip="{DynamicResource Text.Timeline.UseSeconds}"
                               AutomationProperties.Name="{DynamicResource Text.Timeline.UseSeconds}">
-                    <views:EditorIconView Icon="Clock" />
+                    <viewsControls:EditorIconView Icon="Clock" />
                 </ToggleButton>
                 <ToggleButton Classes="editor-tool" IsChecked="{Binding Loop}"
                               ToolTip.Tip="{DynamicResource Text.Timeline.Loop}"
                               AutomationProperties.Name="{DynamicResource Text.Timeline.Loop}">
-                    <views:EditorIconView Icon="Refresh" />
+                    <viewsControls:EditorIconView Icon="Refresh" />
                 </ToggleButton>
             </StackPanel>
         </Border>

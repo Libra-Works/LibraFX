@@ -1,7 +1,7 @@
 using Dock.Model.Mvvm.Controls;
-using LiberaFx.Services;
+using LiberaFx.Services.Settings;
 
-namespace LiberaFx.ViewModels;
+namespace LiberaFx.ViewModels.Main;
 
 public sealed class ToolPaneViewModel : Tool
 {

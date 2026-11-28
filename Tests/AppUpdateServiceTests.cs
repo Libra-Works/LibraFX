@@ -1,4 +1,4 @@
-using LiberaFx.Services;
+using LiberaFx.Services.Settings;
 
 internal static class AppUpdateServiceTests
 {

@@ -1,4 +1,4 @@
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Preview;
 
 internal static class PreviewNativeLibrary
 {

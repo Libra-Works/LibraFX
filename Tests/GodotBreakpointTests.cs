@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Text.Json;
 using LiberaFx.Models.Graph;
-using LiberaFx.Services;
+using LiberaFx.Services.Preview;
 using LiberaFx.Services.Compilation;
 
 internal static class GodotBreakpointTests

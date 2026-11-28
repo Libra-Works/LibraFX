@@ -1,9 +1,12 @@
 using Avalonia;
 using LiberaFx.Models.Commands;
 using LiberaFx.Models.Graph;
-using LiberaFx.Services;
+using LiberaFx.Services.Assets;
+using LiberaFx.Services.Compilation;
+using LiberaFx.Services.Gpu;
+using LiberaFx.Services.Project;
 
-namespace LiberaFx.ViewModels;
+namespace LiberaFx.ViewModels.Graph;
 
 public sealed partial class GraphWorkspaceViewModel
 {

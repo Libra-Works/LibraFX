@@ -1,11 +1,13 @@
 using System.ComponentModel;
 using System.Text.Json;
 using LiberaFx.Models.Graph;
-using LiberaFx.ViewModels;
+using LiberaFx.Services.Assets;
+using LiberaFx.Services.Settings;
+using LiberaFx.ViewModels.Graph;
 using ModelContextProtocol;
 using ModelContextProtocol.Server;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Mcp;
 
 public sealed record McpCurveKey(double TimeSeconds, double Value, string Interpolation,
     double InSlope = 0, double OutSlope = 0, Guid? Id = null);

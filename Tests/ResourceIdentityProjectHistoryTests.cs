@@ -2,8 +2,9 @@ using System.Text.Json;
 using LiberaFx.Models.Commands;
 using LiberaFx.Models.Graph;
 using LiberaFx.Models.Resources;
-using LiberaFx.Services;
-using LiberaFx.ViewModels;
+using LiberaFx.Services.Compilation;
+using LiberaFx.Services.Project;
+using LiberaFx.ViewModels.Graph;
 
 // Parent test runner should call Run(); the suite is isolated to in-memory projects.
 internal static class ResourceIdentityProjectHistoryTests

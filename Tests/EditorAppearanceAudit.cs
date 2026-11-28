@@ -12,9 +12,16 @@ using Avalonia.VisualTree;
 using System.Runtime.InteropServices;
 using LiberaFx.Models.Commands;
 using LiberaFx.Models.Graph;
-using LiberaFx.Services;
-using LiberaFx.ViewModels;
-using LiberaFx.Views;
+using LiberaFx.Services.Compilation;
+using LiberaFx.Services.Crash;
+using LiberaFx.Services.Extensions;
+using LiberaFx.Services.Preview;
+using LiberaFx.Services.Settings;
+using LiberaFx.ViewModels.Graph;
+using LiberaFx.ViewModels.Main;
+using LiberaFx.ViewModels.Panels;
+using LiberaFx.Views.Timeline;
+using LiberaFx.Views.Windows;
 
 internal static class EditorAppearanceAudit
 {

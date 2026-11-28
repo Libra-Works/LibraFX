@@ -1,7 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Timeline;
 
 public partial class TimelineView : UserControl
 {

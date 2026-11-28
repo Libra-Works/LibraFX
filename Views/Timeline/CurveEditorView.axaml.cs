@@ -1,8 +1,8 @@
 using Avalonia.Interactivity;
 using Avalonia.Controls;
-using LiberaFx.ViewModels;
+using LiberaFx.ViewModels.Panels;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Timeline;
 
 public partial class CurveEditorView : UserControl
 {

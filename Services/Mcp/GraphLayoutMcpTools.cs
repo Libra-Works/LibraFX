@@ -1,10 +1,11 @@
 using System.ComponentModel;
 using System.Text.Json;
-using LiberaFx.ViewModels;
+using LiberaFx.Services.Project;
+using LiberaFx.ViewModels.Graph;
 using ModelContextProtocol;
 using ModelContextProtocol.Server;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Mcp;
 
 [McpServerToolType]
 public sealed class GraphLayoutMcpTools

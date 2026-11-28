@@ -2,9 +2,11 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
-using LiberaFx.ViewModels;
+using LiberaFx.Services.Compilation;
+using LiberaFx.Services.Samples;
+using LiberaFx.ViewModels.Panels;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Sprite;
 
 public sealed class SpriteCompositionPreview : Control
 {

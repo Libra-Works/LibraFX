@@ -1,6 +1,6 @@
 using System.Text;
 using System.Text.Json;
-using LiberaFx.Services;
+using LiberaFx.Services.Mcp;
 
 internal sealed class LocalPreviewMcpClient : IDisposable
 {

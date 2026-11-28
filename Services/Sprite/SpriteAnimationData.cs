@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Sprite;
 
 public sealed record SpriteAnimationCell(Guid Id, string Name, int X, int Y, int Width, int Height);
 public sealed record SpriteAnimationFrame(Guid Id, Guid CellId, double DurationFrames);

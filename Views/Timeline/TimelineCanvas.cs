@@ -5,10 +5,11 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Media.Immutable;
-using LiberaFx.Services;
-using LiberaFx.ViewModels;
+using LiberaFx.Services.Compilation;
+using LiberaFx.Services.Settings;
+using LiberaFx.ViewModels.Panels;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Timeline;
 
 public sealed class TimelineCanvas : Control
 {

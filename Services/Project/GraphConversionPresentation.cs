@@ -1,6 +1,7 @@
 using LiberaFx.Models.Graph;
+using LiberaFx.Services.Settings;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Project;
 
 public static class GraphConversionPresentation
 {

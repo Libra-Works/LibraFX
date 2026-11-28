@@ -8,9 +8,15 @@ using Avalonia.VisualTree;
 using LiberaFx.Extensions.Abstractions;
 using LiberaFx.Models.Commands;
 using LiberaFx.Models.Graph;
-using LiberaFx.Services;
-using LiberaFx.ViewModels;
-using LiberaFx.Views;
+using LiberaFx.Services.Crash;
+using LiberaFx.Services.Extensions;
+using LiberaFx.Services.Project;
+using LiberaFx.Services.Settings;
+using LiberaFx.ViewModels.Graph;
+using LiberaFx.ViewModels.Main;
+using LiberaFx.Views.Assets;
+using LiberaFx.Views.Panels;
+using LiberaFx.Views.Windows;
 
 internal static class ExtensionHostTests
 {

@@ -2,7 +2,7 @@ using System.Buffers.Binary;
 using System.IO.Pipes;
 using System.Threading.Channels;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Preview;
 
 internal enum ExecutionDebugState : byte { Detached, Running, Paused, Aborted, Complete }
 internal enum ExecutionDebugCommand : byte { Poll, Attach, AddBreakpoint, RemoveBreakpoint, Pause, Step, Resume }

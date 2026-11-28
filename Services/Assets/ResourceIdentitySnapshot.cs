@@ -1,8 +1,9 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using LiberaFx.Models.Resources;
+using LiberaFx.Services.Compilation;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Assets;
 
 // Explicit assertions from a caller-supplied snapshot, not a live engine query.
 public sealed record ResourceSnapshotEntry([property: JsonRequired] OpaqueBinding Binding,

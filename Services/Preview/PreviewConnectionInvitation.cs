@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Preview;
 
 public static class PreviewConnectionInvitation
 {

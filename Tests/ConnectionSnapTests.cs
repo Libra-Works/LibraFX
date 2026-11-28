@@ -6,8 +6,9 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using LiberaFx.Models.Commands;
 using LiberaFx.Models.Graph;
-using LiberaFx.ViewModels;
-using LiberaFx.Views;
+using LiberaFx.Services.Compilation;
+using LiberaFx.ViewModels.Graph;
+using LiberaFx.Views.Graph;
 
 internal static class ConnectionSnapTests
 {

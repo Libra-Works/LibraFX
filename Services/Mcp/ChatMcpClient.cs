@@ -4,7 +4,7 @@ using System.Text;
 using System.Text.Json;
 using LiberaFx.Extensions.Abstractions;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Mcp;
 
 /// <summary>Real stateless Streamable HTTP MCP client. Never connects to a remote MCP endpoint.</summary>
 public sealed class ChatMcpClient : IDisposable

@@ -8,10 +8,14 @@ using Avalonia.Media;
 using Avalonia.Threading;
 using LiberaFx.Extensions.Abstractions;
 using LiberaFx.Models.Appearance;
-using LiberaFx.Services;
-using LiberaFx.ViewModels;
+using LiberaFx.Services.Extensions;
+using LiberaFx.Services.Mcp;
+using LiberaFx.Services.Settings;
+using LiberaFx.ViewModels.Graph;
+using LiberaFx.ViewModels.Main;
+using LiberaFx.Views.Controls;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Windows;
 
 /// <summary>Session-only chat: no keys, transcripts or tool results are persisted or logged.</summary>
 public sealed partial class ChatWindow : UserControl, IDisposable

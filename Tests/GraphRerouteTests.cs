@@ -1,10 +1,10 @@
 using System.Text.Json;
 using Avalonia.Threading;
 using LiberaFx.Models.Commands;
-using LiberaFx.Services;
+using LiberaFx.Services.Mcp;
+using LiberaFx.ViewModels.Graph;
 using LiberaFx.Models.Graph;
 using LiberaFx.Services.Compilation;
-using LiberaFx.ViewModels;
 
 internal static class GraphRerouteTests
 {

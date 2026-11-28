@@ -1,8 +1,8 @@
 using Avalonia;
 using Avalonia.Controls;
-using LiberaFx.Services;
+using LiberaFx.Services.Settings;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Controls;
 
 public sealed class LocalizedOptionText : TextBlock
 {

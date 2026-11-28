@@ -3,8 +3,9 @@ using LiberaFx.Models.Commands;
 using LiberaFx.Models.Project;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using LiberaFx.Services.Assets;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Samples;
 
 public static class SolarSystemSample
 {

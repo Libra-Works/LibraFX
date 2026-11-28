@@ -3,9 +3,11 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
-using LiberaFx.ViewModels;
+using LiberaFx.ViewModels.Graph;
+using LiberaFx.Views.Gpu;
+using LiberaFx.Views.Procedural;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Graph;
 
 // Lazy creation is essential: a collapsed group must not recursively construct its descendants.
 public sealed class InlineGraphHost : ContentControl

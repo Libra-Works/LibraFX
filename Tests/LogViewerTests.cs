@@ -1,8 +1,10 @@
 using Avalonia.Controls;
 using Avalonia.Threading;
-using LiberaFx.Services;
-using LiberaFx.ViewModels;
-using LiberaFx.Views;
+using LiberaFx.Services.Extensions;
+using LiberaFx.Services.Settings;
+using LiberaFx.ViewModels.Main;
+using LiberaFx.ViewModels.Panels;
+using LiberaFx.Views.Windows;
 
 internal static class LogViewerTests
 {

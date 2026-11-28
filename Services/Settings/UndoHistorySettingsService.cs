@@ -3,7 +3,7 @@ using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using LiberaFx.Models.Commands;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Settings;
 
 public sealed class UndoHistorySettingsService : ObservableObject
 {

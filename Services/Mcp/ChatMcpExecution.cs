@@ -3,10 +3,10 @@ using System.ComponentModel;
 using System.Security.Cryptography;
 using Avalonia.Threading;
 using LiberaFx.Models.Graph;
-using LiberaFx.ViewModels;
+using LiberaFx.ViewModels.Graph;
 using ModelContextProtocol;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Mcp;
 
 /// <summary>In-process capability carried over authenticated HTTP, checked on the UI thread.</summary>
 public static class ChatMcpExecution

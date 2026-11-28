@@ -2,9 +2,10 @@ using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
 using LibraGpu.Core;
-using LiberaFx.Services;
+using LiberaFx.Services.Compilation;
+using LiberaFx.Services.Settings;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Gpu;
 
 public partial class GpuWorkspaceView
 {

@@ -3,10 +3,12 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using LiberaFx.Extensions.Abstractions;
-using LiberaFx.Services;
-using LiberaFx.ViewModels;
+using LiberaFx.Services.Extensions;
+using LiberaFx.Services.Mcp;
+using LiberaFx.ViewModels.Graph;
+using LiberaFx.Views.Controls;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Windows;
 
 public sealed partial class ChatWindow
 {

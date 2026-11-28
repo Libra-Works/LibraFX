@@ -2,9 +2,11 @@ using System.Text;
 using System.Text.Json;
 using LiberaFx.Models.Commands;
 using LiberaFx.Models.Graph;
-using LiberaFx.Services;
+using LiberaFx.Services.Preview;
+using LiberaFx.Services.Project;
+using LiberaFx.Services.Samples;
+using LiberaFx.ViewModels.Graph;
 using LiberaFx.Services.Compilation;
-using LiberaFx.ViewModels;
 
 namespace LiberaFx.Tests;
 
@@ -70,7 +72,7 @@ internal static class SkeletalPoseSourceTests
             "A desktop render_scene must not pretend to resolve engine bones.");
         RequireNotSupported(() => RenderProgramBindings.CreateScene(lowered, 1), "Desktop render_scene",
             "Manually lowered SOURCE metadata must not bypass the render_scene boundary.");
-        RequireNotSupported(() => LiberaFx.Services.LiveGameGraphCompiler.Compile(new(graph, "SOURCE")),
+        RequireNotSupported(() => LiberaFx.Services.Preview.LiveGameGraphCompiler.Compile(new(graph, "SOURCE")),
             "Live game transfer",
             "Live game transfer must reject SOURCE rather than send default-valued inputs.");
 

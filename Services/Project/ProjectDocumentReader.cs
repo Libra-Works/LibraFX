@@ -4,8 +4,9 @@ using LiberaFx.Models.Commands;
 using LiberaFx.Models.Graph;
 using LiberaFx.Models.Project;
 using LiberaFx.Models.Resources;
+using LiberaFx.Services.Assets;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Project;
 
 public static class ProjectDocumentReader
 {

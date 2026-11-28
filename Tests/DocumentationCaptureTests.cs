@@ -1,4 +1,4 @@
-using LiberaFx.Services;
+using LiberaFx.Services.Mcp;
 using ModelContextProtocol;
 
 internal static class DocumentationCaptureTests

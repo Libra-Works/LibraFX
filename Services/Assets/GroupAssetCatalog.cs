@@ -1,6 +1,7 @@
 using Avalonia.Threading;
+using LiberaFx.Services.Settings;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Assets;
 
 public sealed class GroupAssetCatalog : IDisposable
 {

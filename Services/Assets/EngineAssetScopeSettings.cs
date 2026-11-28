@@ -1,7 +1,8 @@
 using System.Text.Json;
 using LiberaFx.Models.Resources;
+using LiberaFx.Services.Settings;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Assets;
 
 public static class EngineAssetScopeSettings
 {

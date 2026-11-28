@@ -2,9 +2,11 @@ using System.Text.Json;
 using LibraGpu.Core;
 using LiberaFx.Models.Commands;
 using LiberaFx.Models.Graph;
-using LiberaFx.ViewModels;
+using LiberaFx.Services.Assets;
+using LiberaFx.Services.Gpu;
+using LiberaFx.ViewModels.Graph;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Sprite;
 
 public static class ParticleSpriteAuthoring
 {

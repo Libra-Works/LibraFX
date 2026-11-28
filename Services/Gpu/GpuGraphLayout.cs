@@ -1,6 +1,6 @@
 using LibraGpu.Core;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Gpu;
 
 public static class GpuGraphLayout
 {

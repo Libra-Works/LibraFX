@@ -1,7 +1,7 @@
 using System.Text.Json;
 using LiberaFx.Models.Graph;
 using LiberaFx.Models.Resources;
-using LiberaFx.Services;
+using LiberaFx.Services.Assets;
 using LiberaFx.Services.Compilation;
 
 // Parent test runner must call Run(); this file does not start an editor or engine.

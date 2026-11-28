@@ -4,9 +4,13 @@ using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using LiberaFx.Models.Commands;
 using LiberaFx.Models.Graph;
-using LiberaFx.Services;
+using LiberaFx.Services.Assets;
+using LiberaFx.Services.Gpu;
+using LiberaFx.Services.Sprite;
+using LiberaFx.ViewModels.Graph;
+using LiberaFx.ViewModels.Main;
+using LiberaFx.ViewModels.Panels;
 using LiberaFx.Services.Compilation;
-using LiberaFx.ViewModels;
 using ManagedSprite = LiberaFx.Unity.ParticleSpriteAnimation;
 
 internal static class ParticleSpriteAnimationTests

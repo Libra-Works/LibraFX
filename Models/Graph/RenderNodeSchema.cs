@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using LiberaFx.Services;
+using LiberaFx.Services.Assets;
 
 namespace LiberaFx.Models.Graph;
 

@@ -4,9 +4,11 @@ using System.Globalization;
 using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.Input;
 using LiberaFx.Models.Graph;
-using LiberaFx.Services;
+using LiberaFx.Services.Assets;
+using LiberaFx.Services.Project;
+using LiberaFx.Services.Settings;
 
-namespace LiberaFx.ViewModels;
+namespace LiberaFx.ViewModels.Assets;
 
 public sealed partial class EngineAssetsWindowViewModel
 {

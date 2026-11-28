@@ -2,9 +2,10 @@ using Avalonia;
 using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using LiberaFx.Models.Graph;
-using LiberaFx.Services;
+using LiberaFx.Services.Compilation;
+using LiberaFx.Services.Settings;
 
-namespace LiberaFx.ViewModels;
+namespace LiberaFx.ViewModels.Graph;
 
 public sealed class GraphConnectionViewModel : ObservableObject
 {

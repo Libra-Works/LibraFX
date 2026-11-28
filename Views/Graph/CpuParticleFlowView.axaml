@@ -1,9 +1,9 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:views="using:LiberaFx.Views"
-             xmlns:vm="using:LiberaFx.ViewModels"
-             x:Class="LiberaFx.Views.CpuParticleFlowView"
-             x:DataType="vm:GraphWorkspaceViewModel">
+             xmlns:viewsGraph="using:LiberaFx.Views.Graph"
+             xmlns:vmGraph="using:LiberaFx.ViewModels.Graph"
+             x:Class="LiberaFx.Views.Graph.CpuParticleFlowView"
+             x:DataType="vmGraph:GraphWorkspaceViewModel">
     <UserControl.Styles>
         <Style Selector="Border.cpu-flow-stage">
             <Setter Property="BorderBrush" Value="{DynamicResource EffectBorderBrush}" />
@@ -19,7 +19,7 @@
                        Foreground="{DynamicResource EffectMutedForegroundBrush}" />
             <ItemsControl x:Name="StageList">
                 <ItemsControl.ItemTemplate>
-                    <DataTemplate DataType="views:CpuParticleFlowStage">
+                    <DataTemplate DataType="viewsGraph:CpuParticleFlowStage">
                         <StackPanel Spacing="8">
                             <TextBlock Text="↓" IsVisible="{Binding HasPredecessor}" FontSize="20"
                                        HorizontalAlignment="Center"
@@ -49,7 +49,7 @@
                     <Button x:Name="AddNoteButton" Content="{DynamicResource Text.Editor.AddComment}" Click="OnAddNoteClick" />
                     <ItemsControl ItemsSource="{Binding CommentNodes}">
                         <ItemsControl.ItemTemplate>
-                            <DataTemplate DataType="vm:GraphNodeViewModel">
+                            <DataTemplate DataType="vmGraph:GraphNodeViewModel">
                                 <TextBox Text="{Binding CommentText}" AcceptsReturn="True" TextWrapping="Wrap"
                                          Margin="0,4" MinHeight="64" />
                             </DataTemplate>

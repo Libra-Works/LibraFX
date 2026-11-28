@@ -4,9 +4,9 @@ using System.Text;
 using Avalonia.Threading;
 using LiberaFx.Models.Commands;
 using LiberaFx.Models.Graph;
-using LiberaFx.Services;
+using LiberaFx.Services.Mcp;
+using LiberaFx.ViewModels.Graph;
 using LiberaFx.Services.Compilation;
-using LiberaFx.ViewModels;
 
 namespace LiberaFx.Tests;
 

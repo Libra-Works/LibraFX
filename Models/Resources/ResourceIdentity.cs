@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using LiberaFx.Services.Compilation;
 
 namespace LiberaFx.Models.Resources;
 

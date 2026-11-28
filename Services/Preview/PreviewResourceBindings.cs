@@ -1,8 +1,9 @@
 using LiberaFx.Models.Graph;
 using LiberaFx.Models.Resources;
 using LiberaFx.Services.Compilation;
+using LiberaFx.Services.Assets;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Preview;
 
 internal static class PreviewResourceBindings
 {

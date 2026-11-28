@@ -1,4 +1,4 @@
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Assets;
 
 public sealed record EngineMaterialParameter(string Name, string Kind,
     System.Text.Json.JsonElement Value, int Association = 2, int Index = -1);

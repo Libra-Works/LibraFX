@@ -3,10 +3,10 @@ using System.ComponentModel;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using LiberaFx.Models.Graph;
-using LiberaFx.Services;
-using LiberaFx.ViewModels;
+using LiberaFx.Services.Settings;
+using LiberaFx.ViewModels.Graph;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Graph;
 
 public sealed record CpuParticleFlowStage(GraphNodeViewModel? Node, string Title,
     string Detail, string ButtonText, bool HasPredecessor, bool IsSelected)

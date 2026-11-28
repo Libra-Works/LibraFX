@@ -1,8 +1,8 @@
 using Avalonia.Controls;
 using Avalonia.Input;
-using LiberaFx.ViewModels;
+using LiberaFx.ViewModels.Panels;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Panels;
 
 public partial class HistoryView : UserControl
 {

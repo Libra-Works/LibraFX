@@ -11,10 +11,14 @@ using Avalonia.VisualTree;
 using LibraGpu.Core;
 using LiberaFx.Models.Commands;
 using LiberaFx.Models.Graph;
-using LiberaFx.Services;
-using LiberaFx.ViewModels;
-using LiberaFx.Views;
-using Line = LiberaFx.Views.GpuConnectionCurve;
+using LiberaFx.Services.Compilation;
+using LiberaFx.Services.Gpu;
+using LiberaFx.Services.Settings;
+using LiberaFx.ViewModels.Graph;
+using LiberaFx.ViewModels.Panels;
+using LiberaFx.Views.Gpu;
+using LiberaFx.Views.Graph;
+using Line = LiberaFx.Views.Gpu.GpuConnectionCurve;
 using Pointer = Avalonia.Input.Pointer;
 
 namespace LiberaFx.Tests;

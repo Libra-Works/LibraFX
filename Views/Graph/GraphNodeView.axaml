@@ -1,13 +1,14 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vm="using:LiberaFx.ViewModels"
+             xmlns:viewsControls="using:LiberaFx.Views.Controls"
+             xmlns:viewsGraph="using:LiberaFx.Views.Graph"
+             xmlns:vmGraph="using:LiberaFx.ViewModels.Graph"
              xmlns:graph="using:LiberaFx.Models.Graph"
-             xmlns:views="using:LiberaFx.Views"
-             x:Class="LiberaFx.Views.GraphNodeView"
+             x:Class="LiberaFx.Views.Graph.GraphNodeView"
              PointerPressed="OnNodePointerPressed"
-             x:DataType="vm:GraphNodeViewModel">
+             x:DataType="vmGraph:GraphNodeViewModel">
     <UserControl.Resources>
-        <views:GraphPortBrushConverter x:Key="PortBrushConverter" />
+        <viewsGraph:GraphPortBrushConverter x:Key="PortBrushConverter" />
     </UserControl.Resources>
     <Grid>
     <Border x:Name="NodeBody" Width="{Binding RenderedWidth}" IsVisible="{Binding ShowStandardNodeBody}"
@@ -37,10 +38,10 @@
                 <DockPanel>
                     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="4" Margin="4,0,0,0"
                                 VerticalAlignment="Center" IsVisible="{Binding HasInlineWorkspace}">
-                        <views:IconButton MinWidth="26" MinHeight="26" Width="26" Height="26" Padding="0" Icon="Group" Click="OnToggleInlineClick"
+                        <viewsControls:IconButton MinWidth="26" MinHeight="26" Width="26" Height="26" Padding="0" Icon="Group" Click="OnToggleInlineClick"
                                           ToolTip.Tip="{DynamicResource Text.Inline.Toggle}"
                                           AutomationProperties.Name="{DynamicResource Text.Inline.Toggle}" />
-                        <views:IconButton MinWidth="26" MinHeight="26" Width="26" Height="26" Padding="0" Icon="Frame" Click="OnMaximizeInlineClick"
+                        <viewsControls:IconButton MinWidth="26" MinHeight="26" Width="26" Height="26" Padding="0" Icon="Frame" Click="OnMaximizeInlineClick"
                                           ToolTip.Tip="{DynamicResource Text.Inline.Maximize}"
                                           AutomationProperties.Name="{DynamicResource Text.Inline.Maximize}" />
                     </StackPanel>
@@ -121,7 +122,7 @@
                                         <Button.Foreground>
                                             <MultiBinding Converter="{StaticResource PortBrushConverter}">
                                                 <Binding Path="Category" />
-                                                <Binding Path="$parent[views:GraphNodeView].((vm:GraphNodeViewModel)DataContext).PortBrush" />
+                                                <Binding Path="$parent[viewsGraph:GraphNodeView].((vmGraph:GraphNodeViewModel)DataContext).PortBrush" />
                                             </MultiBinding>
                                         </Button.Foreground>
                                     </Button>
@@ -133,7 +134,7 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right" VerticalAlignment="Top">
-                    <views:IconButton x:Name="PreviewSignalSendButton" Icon="Play"
+                    <viewsControls:IconButton x:Name="PreviewSignalSendButton" Icon="Play"
                                       Width="24" Height="24" MinWidth="24" MinHeight="24" Padding="3"
                                       IsVisible="{Binding IsPreviewSignal}"
                                       ToolTip.Tip="{Binding PreviewSignalSendHelp}"
@@ -175,7 +176,7 @@
                                         <TextBlock.Foreground>
                                             <MultiBinding Converter="{StaticResource PortBrushConverter}">
                                                 <Binding Path="Category" />
-                                                <Binding Path="$parent[views:GraphNodeView].((vm:GraphNodeViewModel)DataContext).PortBrush" />
+                                                <Binding Path="$parent[viewsGraph:GraphNodeView].((vmGraph:GraphNodeViewModel)DataContext).PortBrush" />
                                             </MultiBinding>
                                         </TextBlock.Foreground>
                                     </TextBlock>
@@ -209,22 +210,22 @@
             </Border>
             <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Left"
                         Margin="8,2,8,6" Spacing="4" IsVisible="{Binding HasDynamicInputs}">
-                <views:IconButton x:Name="DynamicAddInputButton" Icon="Add"
+                <viewsControls:IconButton x:Name="DynamicAddInputButton" Icon="Add"
                                   Command="{Binding AddDynamicInputCommand}"
                                   ToolTip.Tip="{DynamicResource Text.Editor.DynamicPins.AddInput}"
                                   AutomationProperties.Name="{DynamicResource Text.Editor.DynamicPins.AddInput}" />
-                <views:IconButton x:Name="DynamicRemoveInputButton" Icon="Remove"
+                <viewsControls:IconButton x:Name="DynamicRemoveInputButton" Icon="Remove"
                                   Command="{Binding RemoveDynamicInputCommand}"
                                   ToolTip.Tip="{DynamicResource Text.Editor.DynamicPins.RemoveInput}"
                                   AutomationProperties.Name="{DynamicResource Text.Editor.DynamicPins.RemoveInput}" />
             </StackPanel>
             <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right"
                         Margin="8,2,8,6" Spacing="4" IsVisible="{Binding HasDynamicOutputs}">
-                <views:IconButton x:Name="SequenceAddOutputButton" Icon="Add"
+                <viewsControls:IconButton x:Name="SequenceAddOutputButton" Icon="Add"
                                   Command="{Binding AddDynamicOutputCommand}"
                                   ToolTip.Tip="{DynamicResource Text.Editor.DynamicPins.AddOutput}"
                                   AutomationProperties.Name="{DynamicResource Text.Editor.DynamicPins.AddOutput}" />
-                <views:IconButton x:Name="SequenceRemoveOutputButton" Icon="Remove"
+                <viewsControls:IconButton x:Name="SequenceRemoveOutputButton" Icon="Remove"
                                   Command="{Binding RemoveDynamicOutputCommand}"
                                   ToolTip.Tip="{DynamicResource Text.Editor.DynamicPins.RemoveOutput}"
                                   AutomationProperties.Name="{DynamicResource Text.Editor.DynamicPins.RemoveOutput}" />
@@ -232,8 +233,8 @@
             <Border Grid.Row="4" IsVisible="{Binding HasConstantEditor}" Padding="8,2,8,8">
                 <ItemsControl x:Name="ConstantEditors" ItemsSource="{Binding InlineParameters}">
                     <ItemsControl.ItemTemplate>
-                        <DataTemplate DataType="vm:NodeParameterEditorViewModel">
-                            <views:ParameterEditorHost Compact="True" WrapVectorComponents="True" />
+                        <DataTemplate DataType="vmGraph:NodeParameterEditorViewModel">
+                            <viewsControls:ParameterEditorHost Compact="True" WrapVectorComponents="True" />
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
@@ -248,7 +249,7 @@
                 </Border.IsVisible>
                 <ItemsControl ItemsSource="{Binding InlineParameters}">
                     <ItemsControl.ItemTemplate>
-                        <DataTemplate DataType="vm:NodeParameterEditorViewModel">
+                        <DataTemplate DataType="vmGraph:NodeParameterEditorViewModel">
                             <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8" Margin="0,2">
                                 <TextBlock Text="{Binding Name}"
                                            Foreground="{DynamicResource EffectMutedForegroundBrush}" />
@@ -262,7 +263,7 @@
                 </ItemsControl>
             </Border>
             <Grid Grid.Row="5" IsVisible="{Binding IsInlineExpanded}" RowDefinitions="*,Auto">
-                <views:InlineGraphHost Height="{Binding InlineHeight}" ClipToBounds="True" />
+                <viewsGraph:InlineGraphHost Height="{Binding InlineHeight}" ClipToBounds="True" />
                 <Border Grid.Row="1" HorizontalAlignment="Right" Padding="6,1" Background="Transparent"
                         Cursor="BottomRightCorner"
                         ToolTip.Tip="{DynamicResource Text.Inline.Resize}"
@@ -312,15 +313,15 @@
                     PointerPressed="OnHeaderPointerPressed" PointerMoved="OnHeaderPointerMoved"
                     PointerReleased="OnHeaderPointerReleased" PointerCaptureLost="OnHeaderPointerCaptureLost">
                 <DockPanel>
-                    <views:IconButton x:Name="EditCommentButton" DockPanel.Dock="Right" Icon="Edit" Padding="5,0"
+                    <viewsControls:IconButton x:Name="EditCommentButton" DockPanel.Dock="Right" Icon="Edit" Padding="5,0"
                                       IsVisible="{Binding HasFormattedComment}" Click="OnEditCommentClick"
                                       ToolTip.Tip="{DynamicResource Text.Comments.EditSource}"
                                       AutomationProperties.Name="{DynamicResource Text.Comments.EditSource}" />
-                    <views:IconButton DockPanel.Dock="Right" Icon="Delete" Padding="5,0"
+                    <viewsControls:IconButton DockPanel.Dock="Right" Icon="Delete" Padding="5,0"
                                       Click="OnRemoveImageClick"
                                       ToolTip.Tip="{DynamicResource Text.Panels.RemoveCommentImage}"
                                       AutomationProperties.Name="{DynamicResource Text.Panels.RemoveCommentImage}" />
-                    <views:IconButton DockPanel.Dock="Right" Icon="Image" Padding="5,0"
+                    <viewsControls:IconButton DockPanel.Dock="Right" Icon="Image" Padding="5,0"
                                       Click="OnAddImageClick"
                                       ToolTip.Tip="{DynamicResource Text.Panels.EmbedCommentImage}"
                                       AutomationProperties.Name="{DynamicResource Text.Panels.EmbedCommentImage}" />
@@ -332,7 +333,7 @@
                 <TextBox x:Name="CommentSource" Margin="8" AcceptsReturn="True" TextWrapping="Wrap" MaxLength="4096"
                          Text="{Binding CommentText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
                          PlaceholderText="{DynamicResource Text.Panels.WriteComment}" VerticalContentAlignment="Top" />
-                <views:CommentMarkupView x:Name="CommentPreview" Margin="8" IsVisible="False"
+                <viewsControls:CommentMarkupView x:Name="CommentPreview" Margin="8" IsVisible="False"
                                          Text="{Binding CommentText}" Format="{Binding CommentStyle}"
                                          TaskChanged="OnCommentTaskChanged" />
                 <StackPanel Grid.Column="1" MaxWidth="160" Margin="4">

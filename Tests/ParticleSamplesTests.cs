@@ -1,6 +1,7 @@
 using System.Text.Json;
 using LiberaFx.Models.Graph;
-using LiberaFx.Services;
+using LiberaFx.Services.Gpu;
+using LiberaFx.Services.Samples;
 using LiberaFx.Services.Compilation;
 using LibraGpu.Core;
 

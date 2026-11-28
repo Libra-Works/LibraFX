@@ -1,9 +1,11 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using LibraGpu.Core;
-using LiberaFx.Services;
+using LiberaFx.Services.Gpu;
+using LiberaFx.Services.Settings;
+using LiberaFx.ViewModels.Graph;
 using System.Text.Json;
 
-namespace LiberaFx.ViewModels;
+namespace LiberaFx.ViewModels.Panels;
 
 public sealed class GpuWorkspaceViewModel : ObservableObject, IDisposable
 {

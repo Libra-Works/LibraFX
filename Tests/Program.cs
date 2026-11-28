@@ -7,8 +7,15 @@ using Avalonia.Platform.Storage;
 using LiberaFx;
 using LiberaFx.Models.Commands;
 using LiberaFx.Models.Graph;
-using LiberaFx.ViewModels;
-using LiberaFx.Views;
+using LiberaFx.Services.Compilation;
+using LiberaFx.Services.Crash;
+using LiberaFx.Services.Project;
+using LiberaFx.Services.Samples;
+using LiberaFx.Services.Settings;
+using LiberaFx.ViewModels.Graph;
+using LiberaFx.ViewModels.Main;
+using LiberaFx.Views.Graph;
+using LiberaFx.Views.Windows;
 
 internal static class Program
 {
@@ -31,7 +38,7 @@ internal static class Program
     {
         if (Application.Current is not App app) return;
         var field = typeof(App).GetField("_crashReports", BindingFlags.Instance | BindingFlags.NonPublic);
-        if (field?.GetValue(app) is not LiberaFx.Services.CrashReportLifecycle reports) return;
+        if (field?.GetValue(app) is not LiberaFx.Services.Crash.CrashReportLifecycle reports) return;
         reports.CompleteCleanExit();
         reports.Dispose();
         field.SetValue(app, null);
@@ -49,10 +56,10 @@ internal static class Program
         {
             InitializeIsolatedUi();
             Directory.CreateDirectory(authoringSampleOutput);
-            foreach (var name in LiberaFx.Services.ParticleSamples.Names)
+            foreach (var name in LiberaFx.Services.Samples.ParticleSamples.Names)
             {
                 using var buffer = new MemoryStream();
-                LiberaFx.Services.ParticleSamples.SaveAsync(buffer, name).GetAwaiter().GetResult();
+                LiberaFx.Services.Samples.ParticleSamples.SaveAsync(buffer, name).GetAwaiter().GetResult();
                 File.WriteAllBytes(Path.Combine(authoringSampleOutput, name + ".lfxproj"), buffer.ToArray());
             }
             return;
@@ -581,7 +588,7 @@ internal static class Program
             if (File.Exists(fireworksSamplePath))
             {
                 using var existing = new MemoryStream(File.ReadAllBytes(fireworksSamplePath));
-                var project = new LiberaFx.Services.ProjectFileService().LoadAsync(existing).GetAwaiter().GetResult();
+                var project = new LiberaFx.Services.Project.ProjectFileService().LoadAsync(existing).GetAwaiter().GetResult();
                 if (!project.Graph.Nodes.Any(node => node.Kind == GraphNodeKind.SpawnableGroup && node.Name == "Launch") ||
                     !project.Graph.Nodes.Any(node => node.Kind == GraphNodeKind.SpawnableGroup && node.Name == "Burst"))
                     throw new InvalidOperationException("Refusing to overwrite an unrelated project with Fireworks instructions.");
@@ -591,30 +598,30 @@ internal static class Program
                 workspace.InitializeFromSnapshot(project.Graph);
                 if (project.History is not null) workspace.History.LoadSnapshot(project.History);
                 var comment = workspace.Nodes.FirstOrDefault(node => node.Definition.Kind == GraphNodeKind.Comment &&
-                    node.Name == LiberaFx.Services.FireworksSample.PreviewSetupTitle)
+                    node.Name == LiberaFx.Services.Samples.FireworksSample.PreviewSetupTitle)
                     ?? workspace.CreateNode(GraphNodeKind.Comment, 0, 220);
-                workspace.RenameNode(comment, LiberaFx.Services.FireworksSample.PreviewSetupTitle);
-                workspace.SetParameter(comment, "text", System.Text.Json.JsonSerializer.SerializeToElement(LiberaFx.Services.FireworksSample.PreviewSetupText));
-                workspace.SetParameter(comment, "width", System.Text.Json.JsonSerializer.SerializeToElement(LiberaFx.Services.FireworksSample.PreviewSetupWidth));
-                workspace.SetParameter(comment, "height", System.Text.Json.JsonSerializer.SerializeToElement(LiberaFx.Services.FireworksSample.PreviewSetupHeight));
-                workspace.MoveNodes(workspace.Nodes.Where(node => LiberaFx.Services.FireworksSample.RootPosition(node.Name) is not null)
+                workspace.RenameNode(comment, LiberaFx.Services.Samples.FireworksSample.PreviewSetupTitle);
+                workspace.SetParameter(comment, "text", System.Text.Json.JsonSerializer.SerializeToElement(LiberaFx.Services.Samples.FireworksSample.PreviewSetupText));
+                workspace.SetParameter(comment, "width", System.Text.Json.JsonSerializer.SerializeToElement(LiberaFx.Services.Samples.FireworksSample.PreviewSetupWidth));
+                workspace.SetParameter(comment, "height", System.Text.Json.JsonSerializer.SerializeToElement(LiberaFx.Services.Samples.FireworksSample.PreviewSetupHeight));
+                workspace.MoveNodes(workspace.Nodes.Where(node => LiberaFx.Services.Samples.FireworksSample.RootPosition(node.Name) is not null)
                     .Select(node =>
                     {
-                        var position = LiberaFx.Services.FireworksSample.RootPosition(node.Name)!.Value;
+                        var position = LiberaFx.Services.Samples.FireworksSample.RootPosition(node.Name)!.Value;
                         return (node, position.X, position.Y);
                     }));
-                new LiberaFx.Services.ProjectFileService().SaveAsync(memory, workspace).GetAwaiter().GetResult();
+                new LiberaFx.Services.Project.ProjectFileService().SaveAsync(memory, workspace).GetAwaiter().GetResult();
             }
-            else LiberaFx.Services.FireworksSample.SaveAsync(memory).GetAwaiter().GetResult();
+            else LiberaFx.Services.Samples.FireworksSample.SaveAsync(memory).GetAwaiter().GetResult();
             File.WriteAllBytes(fireworksSamplePath, memory.ToArray());
             memory.Position = 0;
-            var saved = new LiberaFx.Services.ProjectFileService().LoadAsync(memory).GetAwaiter().GetResult();
+            var saved = new LiberaFx.Services.Project.ProjectFileService().LoadAsync(memory).GetAwaiter().GetResult();
             if (saved.History is null) throw new InvalidOperationException("Fireworks sample lacks project history.");
             if (previousPackage is not null && !previousPackage.AsSpan().SequenceEqual(
                 System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(LiberaFx.Services.Compilation.SpawnableGroupPackage.Compile(saved.Graph))))
                 throw new InvalidOperationException("Layout update changed compiled Fireworks IDs, values or lifecycle metadata.");
             foreach (var node in saved.Graph.Nodes)
-                if (LiberaFx.Services.FireworksSample.RootPosition(node.Name) is { } placement &&
+                if (LiberaFx.Services.Samples.FireworksSample.RootPosition(node.Name) is { } placement &&
                     (node.X != placement.X || node.Y != placement.Y))
                     throw new InvalidOperationException("Saved Fireworks root layout does not match the compact factory layout.");
             Console.WriteLine("History-bearing Fireworks sample saved with End=240 instructions (existing node UUIDs preserved): " + fireworksSamplePath);
@@ -695,7 +702,7 @@ internal static class Program
                 "save-failure" => "",
                 _ => throw new ArgumentException("Unknown language startup fixture.")
             };
-            var directory = Path.Combine(LiberaFx.Services.AppDataDirectory.Root, "LiberaFx");
+            var directory = Path.Combine(LiberaFx.Services.Settings.AppDataDirectory.Root, "LiberaFx");
             Directory.CreateDirectory(directory);
             if (mode == "save-failure") Directory.CreateDirectory(Path.Combine(directory, "language.json"));
             else File.WriteAllText(Path.Combine(directory, "language.json"), languageFixture);
@@ -710,7 +717,7 @@ internal static class Program
         if (args is ["--matrix-save-sample", var samplePath])
         {
             using var stream = File.Create(samplePath);
-            Task.Run(() => LiberaFx.Services.SolarSystemSample.SaveDedicatedAsync(stream)).GetAwaiter().GetResult();
+            Task.Run(() => LiberaFx.Services.Samples.SolarSystemSample.SaveDedicatedAsync(stream)).GetAwaiter().GetResult();
             Console.WriteLine("Saved dedicated Matrix sample with its project history.");
             return;
         }
@@ -812,7 +819,7 @@ internal static class Program
         }
         if (languageFixture is not null)
         {
-            var localization = LiberaFx.Services.LocalizationService.Shared;
+            var localization = LiberaFx.Services.Settings.LocalizationService.Shared;
             var valid = args[1] == "ja";
             if (args[1] == "save-failure")
             {
@@ -825,9 +832,9 @@ internal static class Program
                     languageList.SelectedItem = localization.Languages.Single(language => language.Id == "ja");
                     Avalonia.Threading.Dispatcher.UIThread.RunJobs();
                     if (localization.SelectedLanguage.Id != "en" || string.IsNullOrEmpty(localization.Status) ||
-                        languageList.SelectedItem is not LiberaFx.Services.EditorLanguage selected ||
+                        languageList.SelectedItem is not LiberaFx.Services.Settings.EditorLanguage selected ||
                         selected != localization.SelectedLanguage ||
-                        Directory.EnumerateFiles(Path.Combine(LiberaFx.Services.AppDataDirectory.Root, "LiberaFx"), ".language-*.tmp").Any())
+                        Directory.EnumerateFiles(Path.Combine(LiberaFx.Services.Settings.AppDataDirectory.Root, "LiberaFx"), ".language-*.tmp").Any())
                         throw new InvalidOperationException("Failed language saves changed the UI or left temporary files.");
                 }
                 finally
@@ -842,7 +849,7 @@ internal static class Program
                 throw new InvalidOperationException("Startup did not load the expected language.");
             localization.SelectedLanguage = localization.Languages.Single(language => language.Id == (valid ? "en" : "ja"));
             if (!valid && (localization.SelectedLanguage.Id != "en" || string.IsNullOrEmpty(localization.Status) ||
-                          File.ReadAllText(Path.Combine(LiberaFx.Services.AppDataDirectory.Root, "LiberaFx", "language.json")) != languageFixture))
+                          File.ReadAllText(Path.Combine(LiberaFx.Services.Settings.AppDataDirectory.Root, "LiberaFx", "language.json")) != languageFixture))
                 throw new InvalidOperationException("Invalid language settings were overwritten or not safely rejected.");
             Console.WriteLine("Language startup and settings protection checks passed.");
             return;

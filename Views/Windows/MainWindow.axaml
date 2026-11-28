@@ -1,20 +1,21 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:viewsControls="using:LiberaFx.Views.Controls"
+             xmlns:viewsTimeline="using:LiberaFx.Views.Timeline"
+             xmlns:vmMain="using:LiberaFx.ViewModels.Main"
         xmlns:dock="using:Dock.Avalonia.Controls"
-        xmlns:vm="using:LiberaFx.ViewModels"
-        xmlns:views="using:LiberaFx.Views"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
-        x:Class="LiberaFx.Views.MainWindow"
+        x:Class="LiberaFx.Views.Windows.MainWindow"
         KeyDown="OnMainKeyDown"
-        x:DataType="vm:MainViewModel"
+        x:DataType="vmMain:MainViewModel"
         Title="LIBERA FX"
         Icon="avares://LiberaFx/Assets/Brand/LibraFx.ico"
         Background="{DynamicResource EffectWindowBackgroundBrush}">
 
     <Design.DataContext>
-        <vm:MainViewModel />
+        <vmMain:MainViewModel />
     </Design.DataContext>
 
     <Grid RowDefinitions="Auto,*,Auto">
@@ -24,29 +25,29 @@
             <MenuItem Header="{DynamicResource Text.Editor.File}">
                 <MenuItem Header="{DynamicResource Text.Editor.New}"
                           Command="{Binding NewDocumentCommand}">
-                    <MenuItem.Icon><views:EditorIconView Icon="Add" /></MenuItem.Icon>
+                    <MenuItem.Icon><viewsControls:EditorIconView Icon="Add" /></MenuItem.Icon>
                 </MenuItem>
                 <MenuItem Header="{DynamicResource Text.Editor.Open}"
                           Command="{Binding OpenProjectCommand}">
-                    <MenuItem.Icon><views:EditorIconView Icon="Open" /></MenuItem.Icon>
+                    <MenuItem.Icon><viewsControls:EditorIconView Icon="Open" /></MenuItem.Icon>
                 </MenuItem>
                 <Separator />
                 <MenuItem Header="{DynamicResource Text.Editor.Save}"
                           Command="{Binding SaveProjectCommand}">
-                    <MenuItem.Icon><views:EditorIconView Icon="Save" /></MenuItem.Icon>
+                    <MenuItem.Icon><viewsControls:EditorIconView Icon="Save" /></MenuItem.Icon>
                 </MenuItem>
                 <MenuItem Header="{DynamicResource Text.Editor.SaveAs}"
                           Command="{Binding SaveProjectAsCommand}">
-                    <MenuItem.Icon><views:EditorIconView Icon="SaveAs" /></MenuItem.Icon>
+                    <MenuItem.Icon><viewsControls:EditorIconView Icon="SaveAs" /></MenuItem.Icon>
                 </MenuItem>
                 <MenuItem Header="{DynamicResource Text.Editor.Export}"
                           Command="{Binding ExportVfxCommand}">
-                    <MenuItem.Icon><views:EditorIconView Icon="Export" /></MenuItem.Icon>
+                    <MenuItem.Icon><viewsControls:EditorIconView Icon="Export" /></MenuItem.Icon>
                 </MenuItem>
                 <Separator />
                 <MenuItem Header="{DynamicResource Text.Editor.CloseDocument}"
                           Click="OnCloseDocumentClick">
-                    <MenuItem.Icon><views:EditorIconView Icon="Close" /></MenuItem.Icon>
+                    <MenuItem.Icon><viewsControls:EditorIconView Icon="Close" /></MenuItem.Icon>
                 </MenuItem>
             </MenuItem>
             <MenuItem Header="{DynamicResource Text.Editor.Edit}">
@@ -55,16 +56,16 @@
                 <MenuItem Header="{DynamicResource Text.Vcs.Title}" Tag="RevisionHistory" Click="OnDockPanelClick" />
                 <MenuItem Header="{DynamicResource Text.Editor.Undo}"
                           Command="{Binding UndoCommand}">
-                    <MenuItem.Icon><views:EditorIconView Icon="Undo" /></MenuItem.Icon>
+                    <MenuItem.Icon><viewsControls:EditorIconView Icon="Undo" /></MenuItem.Icon>
                 </MenuItem>
                 <MenuItem Header="{DynamicResource Text.Editor.Redo}"
                           Command="{Binding RedoCommand}">
-                    <MenuItem.Icon><views:EditorIconView Icon="Redo" /></MenuItem.Icon>
+                    <MenuItem.Icon><viewsControls:EditorIconView Icon="Redo" /></MenuItem.Icon>
                 </MenuItem>
                 <Separator />
                 <MenuItem Header="{DynamicResource Text.Editor.Settings}"
                           Click="OnSettingsClick">
-                    <MenuItem.Icon><views:EditorIconView Icon="Settings" /></MenuItem.Icon>
+                    <MenuItem.Icon><viewsControls:EditorIconView Icon="Settings" /></MenuItem.Icon>
                 </MenuItem>
             </MenuItem>
             <MenuItem Header="{DynamicResource Text.Editor.View}">
@@ -72,10 +73,10 @@
                 <MenuItem Header="{DynamicResource Text.LiveGame.Title}" Tag="LiveGame" Click="OnDockPanelClick" />
                 <MenuItem Header="{DynamicResource Text.Crash.Title}" Click="OnCrashReportsClick" />
                 <MenuItem Header="{DynamicResource Text.Editor.Log}" Tag="Log" Click="OnDockPanelClick">
-                    <MenuItem.Icon><views:EditorIconView Icon="Info" /></MenuItem.Icon>
+                    <MenuItem.Icon><viewsControls:EditorIconView Icon="Info" /></MenuItem.Icon>
                 </MenuItem>
                 <MenuItem Header="{DynamicResource Text.Editor.Mcp}" Tag="Mcp" Click="OnDockPanelClick">
-                    <MenuItem.Icon><views:EditorIconView Icon="Link" /></MenuItem.Icon>
+                    <MenuItem.Icon><viewsControls:EditorIconView Icon="Link" /></MenuItem.Icon>
                 </MenuItem>
                 <MenuItem Header="{DynamicResource Text.Profiler.Title}" Tag="PreviewProfiler" Click="OnDockPanelClick" />
                 <MenuItem Header="{DynamicResource Text.Connections.Title}" Tag="PreviewConnections" Click="OnDockPanelClick" />
@@ -119,14 +120,14 @@
             </MenuItem>
             <MenuItem Header="{DynamicResource Text.Editor.Help}">
                 <MenuItem Header="{DynamicResource Text.Editor.GettingStarted}" Click="OnHelpClick">
-                    <MenuItem.Icon><views:EditorIconView Icon="Help" /></MenuItem.Icon>
+                    <MenuItem.Icon><viewsControls:EditorIconView Icon="Help" /></MenuItem.Icon>
                 </MenuItem>
                 <MenuItem Header="{DynamicResource Text.Editor.UpdateCheckMenu}" Click="OnCheckForUpdatesClick">
-                    <MenuItem.Icon><views:EditorIconView Icon="Reset" /></MenuItem.Icon>
+                    <MenuItem.Icon><viewsControls:EditorIconView Icon="Reset" /></MenuItem.Icon>
                 </MenuItem>
                 <Separator />
                 <MenuItem Header="{DynamicResource Text.Editor.About}" Click="OnAboutClick">
-                    <MenuItem.Icon><views:EditorIconView Icon="Info" /></MenuItem.Icon>
+                    <MenuItem.Icon><viewsControls:EditorIconView Icon="Info" /></MenuItem.Icon>
                 </MenuItem>
             </MenuItem>
         </Menu>
@@ -139,9 +140,9 @@
         <Border Grid.Row="2" Classes="editor-bar" BorderThickness="0,1,0,0">
             <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
                 <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                    <views:PlaybackTransport ShowFrameTools="True" DataContext="{Binding Playback}" />
+                    <viewsTimeline:PlaybackTransport ShowFrameTools="True" DataContext="{Binding Playback}" />
                     <Border Classes="editor-toolbar-group" Padding="4,2">
-                        <views:IconButton Classes="editor-tool" Icon="Reset"
+                        <viewsControls:IconButton Classes="editor-tool" Icon="Reset"
                                           Command="{Binding ForceRefreshPreviewCommand}"
                                           ToolTip.Tip="{DynamicResource Text.Editor.RefreshPreviewTip}"
                                           AutomationProperties.Name="{DynamicResource Text.Editor.RefreshPreview}" />

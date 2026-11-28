@@ -5,7 +5,7 @@ using Avalonia.Media;
 using LiberaFx.Models.Appearance;
 using Path = Avalonia.Controls.Shapes.Path;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Controls;
 
 public sealed class EditorIconView : Path
 {

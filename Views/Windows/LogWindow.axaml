@@ -1,11 +1,11 @@
 <UserControl xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:vm="using:LiberaFx.ViewModels"
-        xmlns:views="using:LiberaFx.Views"
-        x:Class="LiberaFx.Views.LogWindow"
+             xmlns:viewsControls="using:LiberaFx.Views.Controls"
+             xmlns:vmPanels="using:LiberaFx.ViewModels.Panels"
+        x:Class="LiberaFx.Views.Windows.LogWindow"
         KeyDown="OnLogKeyDown"
         Background="{DynamicResource EffectWindowBackgroundBrush}">
-    <Grid x:Name="LogContent" x:DataType="vm:LogViewerViewModel" RowDefinitions="Auto,*,Auto">
+    <Grid x:Name="LogContent" x:DataType="vmPanels:LogViewerViewModel" RowDefinitions="Auto,*,Auto">
         <Border Padding="10" Background="{DynamicResource EffectSurfaceBrush}"
                 BorderBrush="{DynamicResource EffectBorderBrush}" BorderThickness="0,0,0,1">
             <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="180,*,Auto,Auto,Auto,Auto"
@@ -13,25 +13,25 @@
                 <ComboBox ItemsSource="{Binding Categories}" SelectedItem="{Binding SelectedCategory}"
                           AutomationProperties.Name="{DynamicResource Text.Logs.Category}">
                     <ComboBox.ItemTemplate>
-                        <DataTemplate DataType="vm:LogCategoryOption"><TextBlock Text="{Binding Label}" /></DataTemplate>
+                        <DataTemplate DataType="vmPanels:LogCategoryOption"><TextBlock Text="{Binding Label}" /></DataTemplate>
                     </ComboBox.ItemTemplate>
                 </ComboBox>
                 <TextBox Grid.Column="1" Text="{Binding FilterText, UpdateSourceTrigger=PropertyChanged}"
                          PlaceholderText="{DynamicResource Text.Logs.Filter}" AutomationProperties.Name="{DynamicResource Text.Logs.Filter}" />
-                <views:IconButton Grid.Column="2" Icon="Reset" Command="{Binding ResetFiltersCommand}"
+                <viewsControls:IconButton Grid.Column="2" Icon="Reset" Command="{Binding ResetFiltersCommand}"
                                   ToolTip.Tip="{DynamicResource Text.Logs.ResetFilters}" AutomationProperties.Name="{DynamicResource Text.Logs.ResetFilters}" />
-                <views:IconButton Grid.Column="3" Icon="Save" Click="OnSaveAllClick"
+                <viewsControls:IconButton Grid.Column="3" Icon="Save" Click="OnSaveAllClick"
                                   ToolTip.Tip="{DynamicResource Text.Logs.SaveAll}" AutomationProperties.Name="{DynamicResource Text.Logs.SaveAll}" />
-                <views:IconButton Grid.Column="4" Icon="Export" Click="OnSaveVisibleClick"
+                <viewsControls:IconButton Grid.Column="4" Icon="Export" Click="OnSaveVisibleClick"
                                   ToolTip.Tip="{DynamicResource Text.Logs.SaveVisible}" AutomationProperties.Name="{DynamicResource Text.Logs.SaveVisible}" />
-                <views:IconButton Grid.Column="5" Icon="Delete" Command="{Binding ClearCommand}"
+                <viewsControls:IconButton Grid.Column="5" Icon="Delete" Command="{Binding ClearCommand}"
                                   ToolTip.Tip="{DynamicResource Text.Panels.ClearLog}" AutomationProperties.Name="{DynamicResource Text.Panels.ClearLog}" />
                 <TextBox x:Name="SearchBox" Grid.Row="1" Grid.ColumnSpan="2"
                          Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" KeyDown="OnSearchKeyDown"
                          PlaceholderText="{DynamicResource Text.Logs.Search}" AutomationProperties.Name="{DynamicResource Text.Logs.Search}" />
-                <views:IconButton Grid.Row="1" Grid.Column="2" Icon="Previous" Command="{Binding PreviousMatchCommand}"
+                <viewsControls:IconButton Grid.Row="1" Grid.Column="2" Icon="Previous" Command="{Binding PreviousMatchCommand}"
                                   ToolTip.Tip="{DynamicResource Text.Logs.PreviousMatch}" AutomationProperties.Name="{DynamicResource Text.Logs.PreviousMatch}" />
-                <views:IconButton Grid.Row="1" Grid.Column="3" Icon="Next" Command="{Binding NextMatchCommand}"
+                <viewsControls:IconButton Grid.Row="1" Grid.Column="3" Icon="Next" Command="{Binding NextMatchCommand}"
                                   ToolTip.Tip="{DynamicResource Text.Logs.NextMatch}" AutomationProperties.Name="{DynamicResource Text.Logs.NextMatch}" />
                 <StackPanel Grid.Row="1" Grid.Column="4" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="8">
                     <CheckBox Content="{DynamicResource Text.Logs.Wrap}" IsChecked="{Binding WrapLines}" />

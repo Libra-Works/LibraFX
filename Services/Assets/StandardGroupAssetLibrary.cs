@@ -2,7 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using LiberaFx.Models.Graph;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Assets;
 
 public sealed record StandardGroupParameterMetadata(Guid ItemId, string NameKey, string DescriptionKey);
 

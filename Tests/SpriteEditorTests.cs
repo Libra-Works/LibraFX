@@ -11,10 +11,13 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using LiberaFx.Models.Commands;
 using LiberaFx.Models.Graph;
-using LiberaFx.Services;
+using LiberaFx.Services.Assets;
+using LiberaFx.Services.Sprite;
+using LiberaFx.ViewModels.Graph;
+using LiberaFx.ViewModels.Main;
+using LiberaFx.ViewModels.Panels;
+using LiberaFx.Views.Sprite;
 using LiberaFx.Services.Compilation;
-using LiberaFx.ViewModels;
-using LiberaFx.Views;
 
 internal static class SpriteEditorTests
 {

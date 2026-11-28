@@ -3,9 +3,14 @@ using System.Globalization;
 using System.Collections.ObjectModel;
 using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
-using LiberaFx.Services;
+using LiberaFx.Services.Assets;
+using LiberaFx.Services.Settings;
+using LiberaFx.Services.Sprite;
+using LiberaFx.ViewModels.Assets;
+using LiberaFx.ViewModels.Graph;
+using LiberaFx.ViewModels.Main;
 
-namespace LiberaFx.ViewModels;
+namespace LiberaFx.ViewModels.Panels;
 
 public sealed partial class SpriteEditorViewModel : ObservableObject, IDisposable
 {

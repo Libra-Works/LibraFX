@@ -1,8 +1,12 @@
 using LiberaFx.Models.Graph;
-using LiberaFx.ViewModels;
+using LiberaFx.Services.Gpu;
+using LiberaFx.Services.Preview;
+using LiberaFx.Services.Samples;
+using LiberaFx.Services.Settings;
+using LiberaFx.ViewModels.Graph;
 using LibraGpu.Core;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Assets;
 
 public enum ResourceTargetKind { RenderAsset, MaterialTexture, GpuTexture, RenderMaterial }
 public sealed record ResourceAssignmentTarget(Guid NodeId, ResourceTargetKind Kind, string Id, string Label)

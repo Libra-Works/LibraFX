@@ -6,9 +6,9 @@ using Avalonia.Controls;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using LiberaFx.Inspector.Abstractions;
-using LiberaFx.ViewModels;
+using LiberaFx.ViewModels.Graph;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Extensions;
 
 internal sealed class InspectorPluginPreferences
 {

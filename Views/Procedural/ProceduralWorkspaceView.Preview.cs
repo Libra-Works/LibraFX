@@ -8,9 +8,10 @@ using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Threading;
 using LiberaFx.Models.Graph;
-using LiberaFx.Services;
+using LiberaFx.Services.Procedural;
+using LiberaFx.Views.Controls;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Procedural;
 
 public sealed partial class ProceduralWorkspaceView
 {

@@ -1,8 +1,9 @@
 using System.Text.Json;
 using LiberaFx.Models.Graph;
 using LiberaFx.Models.Resources;
+using LiberaFx.Services.Compilation;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Assets;
 
 public sealed class ResourceIdentityResolver
 {

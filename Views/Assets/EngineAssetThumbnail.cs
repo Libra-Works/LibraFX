@@ -3,10 +3,11 @@ using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.VisualTree;
-using LiberaFx.Services;
-using LiberaFx.ViewModels;
+using LiberaFx.Services.Assets;
+using LiberaFx.Services.Project;
+using LiberaFx.ViewModels.Assets;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Assets;
 
 // EffectiveViewport includes clipping by the list's ScrollViewer. Realized but
 // offscreen virtualization buffers must not initiate engine asset requests.

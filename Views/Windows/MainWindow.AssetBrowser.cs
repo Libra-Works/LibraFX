@@ -1,6 +1,7 @@
-using LiberaFx.ViewModels;
+using LiberaFx.ViewModels.Assets;
+using LiberaFx.ViewModels.Main;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Windows;
 
 public partial class MainWindow
 {

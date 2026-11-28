@@ -1,4 +1,4 @@
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Settings;
 
 internal sealed class StartupSetupState
 {

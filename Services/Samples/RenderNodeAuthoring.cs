@@ -1,8 +1,10 @@
 using System.Text.Json;
 using LiberaFx.Models.Graph;
-using LiberaFx.ViewModels;
+using LiberaFx.Services.Assets;
+using LiberaFx.Services.Project;
+using LiberaFx.ViewModels.Graph;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Samples;
 
 public static class RenderNodeAuthoring
 {

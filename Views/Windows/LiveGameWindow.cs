@@ -6,10 +6,12 @@ using Avalonia.Data;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
-using LiberaFx.Services;
-using LiberaFx.ViewModels;
+using LiberaFx.Services.Compilation;
+using LiberaFx.Services.Preview;
+using LiberaFx.Services.Settings;
+using LiberaFx.ViewModels.Panels;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Windows;
 
 /// <summary>Actual game editing UI; never routes to PreviewHost or auto-discovers games.</summary>
 public sealed class LiveGameWindow : UserControl, IDisposable

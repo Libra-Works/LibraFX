@@ -1,9 +1,9 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vm="using:LiberaFx.ViewModels"
-             xmlns:views="using:LiberaFx.Views"
-             x:Class="LiberaFx.Views.HistoryView"
-             x:DataType="vm:HistoryPaneViewModel">
+             xmlns:viewsControls="using:LiberaFx.Views.Controls"
+             xmlns:vmPanels="using:LiberaFx.ViewModels.Panels"
+             x:Class="LiberaFx.Views.Panels.HistoryView"
+             x:DataType="vmPanels:HistoryPaneViewModel">
     <Grid RowDefinitions="Auto,*">
         <Border Padding="12,10" Background="{DynamicResource EffectSurfaceBrush}"
                 BorderBrush="{DynamicResource EffectBorderBrush}" BorderThickness="0,0,0,1">
@@ -13,7 +13,7 @@
                     <TextBlock Text="{Binding CurrentDescription}" TextTrimming="CharacterEllipsis"
                                Foreground="{DynamicResource EffectMutedForegroundBrush}" />
                 </StackPanel>
-                <views:IconButton Grid.Column="1" Icon="Pin"
+                <viewsControls:IconButton Grid.Column="1" Icon="Pin"
                                   ToolTip.Tip="{DynamicResource Text.Panels.PinCurrent}"
                                   AutomationProperties.Name="{DynamicResource Text.Panels.PinCurrent}"
                                   Command="{Binding PinCurrentCommand}" IsEnabled="{Binding CanPinCurrent}"
@@ -28,7 +28,7 @@
                         <ItemsPanelTemplate><Canvas /></ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
-                        <DataTemplate DataType="vm:HistoryEdgeViewModel">
+                        <DataTemplate DataType="vmPanels:HistoryEdgeViewModel">
                             <Line StartPoint="{Binding Start}" EndPoint="{Binding End}"
                                   Stroke="{DynamicResource EffectMutedForegroundBrush}"
                                   StrokeThickness="1.5" />
@@ -46,7 +46,7 @@
                         </ControlTheme>
                     </ItemsControl.ItemContainerTheme>
                     <ItemsControl.ItemTemplate>
-                        <DataTemplate DataType="vm:HistoryEntryViewModel">
+                        <DataTemplate DataType="vmPanels:HistoryEntryViewModel">
                             <Border Width="{Binding Width}" Height="{Binding Height}"
                                     CornerRadius="4"
                                     Background="{DynamicResource EffectSurfaceBrush}"
@@ -63,7 +63,7 @@
                                             Padding="7,3" Command="{Binding NavigateCommand}">
                                         <StackPanel Spacing="1">
                                             <StackPanel Orientation="Horizontal" Spacing="4">
-                                                <views:EditorIconView Icon="Group" IsVisible="{Binding IsArchive}" />
+                                                <viewsControls:EditorIconView Icon="Group" IsVisible="{Binding IsArchive}" />
                                                 <TextBlock Text="{Binding Description}" FontSize="11.5" FontWeight="Medium"
                                                            TextTrimming="CharacterEllipsis" />
                                             </StackPanel>
@@ -72,7 +72,7 @@
                                                        Foreground="{DynamicResource EffectMutedForegroundBrush}" />
                                         </StackPanel>
                                     </Button>
-                                    <views:IconButton Grid.Column="2" Icon="Pin"
+                                    <viewsControls:IconButton Grid.Column="2" Icon="Pin"
                                                       IsVisible="{Binding !IsPinned}"
                                                       ToolTip.Tip="{Binding PinToolTip}"
                                                       AutomationProperties.Name="{Binding PinToolTip}"
@@ -80,7 +80,7 @@
                                                       Width="24" Height="24" MinWidth="24" MinHeight="24"
                                                       Background="Transparent" BorderThickness="0" Padding="3"
                                                       VerticalAlignment="Center" Margin="0,0,2,0" />
-                                    <views:IconButton Grid.Column="2" Icon="Unpin"
+                                    <viewsControls:IconButton Grid.Column="2" Icon="Unpin"
                                                       IsVisible="{Binding IsPinned}"
                                                       ToolTip.Tip="{Binding PinToolTip}"
                                                       AutomationProperties.Name="{Binding PinToolTip}"

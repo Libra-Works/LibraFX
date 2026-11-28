@@ -7,8 +7,9 @@ using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.VisualTree;
 using LiberaFx.Models.Graph;
-using LiberaFx.ViewModels;
-using LiberaFx.Services;
+using LiberaFx.Services.Compilation;
+using LiberaFx.Services.Settings;
+using LiberaFx.ViewModels.Graph;
 using System.Text.Json;
 using System.Collections.Specialized;
 using System.ComponentModel;
@@ -16,7 +17,7 @@ using System.Runtime.CompilerServices;
 using Avalonia.Controls.Templates;
 using Avalonia.Threading;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Graph;
 
 public partial class GraphEditorView : UserControl
 {

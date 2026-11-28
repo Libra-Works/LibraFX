@@ -1,7 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Controls;
 
 internal sealed class VectorComponentPanel : Panel
 {

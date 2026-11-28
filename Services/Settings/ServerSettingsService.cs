@@ -1,7 +1,9 @@
 using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
+using LiberaFx.Services.Mcp;
+using LiberaFx.Services.Preview;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Settings;
 
 public sealed class ServerSettingsService : ObservableObject
 {

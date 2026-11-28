@@ -3,7 +3,8 @@ using System.Text.Json;
 using LiberaFx.Models.Graph;
 using LiberaFx.Models.Commands;
 using LiberaFx.Services.Compilation;
-using LiberaFx.ViewModels;
+using LiberaFx.Services.Samples;
+using LiberaFx.ViewModels.Graph;
 
 namespace LiberaFx.Tests;
 
@@ -11,7 +12,7 @@ public static class CpuParticleCompilationTests
 {
     private static void VerifyAheadOfTimeKernels()
     {
-        var graph = LiberaFx.Services.ParticleSamples.Create("CpuFountain");
+        var graph = LiberaFx.Services.Samples.ParticleSamples.Create("CpuFountain");
         var saved = JsonSerializer.Deserialize<GraphSnapshot>(JsonSerializer.Serialize(graph))!;
         var original = SpawnableGroupPackage.Compile(graph,
             options: new VfxCompileOptions { OptimizeCpuParticleKernels = false });
@@ -29,7 +30,7 @@ public static class CpuParticleCompilationTests
             "Preoptimized CPU code must survive ordinary package serialization.");
         Require(BinaryPrimitives.ReadUInt32LittleEndian(original.CpuPrograms) == 2,
             "CPU payloads without an emitter mesh must use version 2.");
-        var mesh = SpawnableGroupPackage.Compile(LiberaFx.Services.ParticleSamples.Create("CpuMeshSurface"));
+        var mesh = SpawnableGroupPackage.Compile(LiberaFx.Services.Samples.ParticleSamples.Create("CpuMeshSurface"));
         Require(BinaryPrimitives.ReadUInt32LittleEndian(mesh.CpuPrograms) == 2,
             "CPU payloads with an emitter mesh must use version 2.");
         var oldPayload = original.CpuPrograms.ToArray();
@@ -45,7 +46,7 @@ public static class CpuParticleCompilationTests
         Require(CpuParticleBinaryOptimizer.OptimizePackage(rewritten).SequenceEqual(rewritten),
             "Optimizing an already optimized binary must be idempotent.");
         Reject(() => CpuParticleBinaryOptimizer.OptimizePackage(originalBytes[..^1]), "Truncated binary optimization");
-        var fireworks = LiberaFx.Services.ParticleSamples.Create("Fireworks");
+        var fireworks = LiberaFx.Services.Samples.ParticleSamples.Create("Fireworks");
         var nestedOriginal = SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(fireworks,
             options: new VfxCompileOptions { OptimizeCpuParticleKernels = false }));
         var nestedOptimized = SpawnableGroupPackageBinary.Serialize(SpawnableGroupPackage.Compile(fireworks));

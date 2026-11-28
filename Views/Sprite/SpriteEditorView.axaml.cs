@@ -5,12 +5,12 @@ using Avalonia.Interactivity;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
 using LiberaFx.Models.Graph;
-using LiberaFx.Services;
+using LiberaFx.Services.Settings;
+using LiberaFx.ViewModels.Panels;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
-using LiberaFx.ViewModels;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Sprite;
 
 public partial class SpriteEditorView : UserControl
 {

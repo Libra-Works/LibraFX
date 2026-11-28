@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Preview;
 
 public sealed record PreviewMetric(string Event, Guid? NodeId, ulong Calls, ulong InclusiveNs,
     ulong ExclusiveNs, ulong MinNs, ulong MaxNs)

@@ -1,9 +1,11 @@
 <UserControl xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:vm="using:LiberaFx.ViewModels"
-        xmlns:services="using:LiberaFx.Services"
-        xmlns:views="using:LiberaFx.Views"
-        x:Class="LiberaFx.Views.SpriteEditorView" x:DataType="vm:SpriteEditorViewModel"
+             xmlns:servicesAssets="using:LiberaFx.Services.Assets"
+             xmlns:servicesSprite="using:LiberaFx.Services.Sprite"
+             xmlns:viewsControls="using:LiberaFx.Views.Controls"
+             xmlns:viewsSprite="using:LiberaFx.Views.Sprite"
+             xmlns:vmPanels="using:LiberaFx.ViewModels.Panels"
+        x:Class="LiberaFx.Views.Sprite.SpriteEditorView" x:DataType="vmPanels:SpriteEditorViewModel"
         Background="{DynamicResource EffectWindowBackgroundBrush}">
     <ScrollViewer x:Name="EditorSurface" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
     <Border Padding="12" MinWidth="640" MinHeight="520"
@@ -20,7 +22,7 @@
                       IsVisible="{Binding #ToggleAssetsButton.IsChecked}"/>
             <TextBox Width="180" PlaceholderText="{DynamicResource Text.Asset.SearchHint}" Text="{Binding Catalog.Query}"
                      IsVisible="{Binding #ToggleAssetsButton.IsChecked}"/>
-            <views:IconButton Classes="editor-tool transport-primary" Icon="Refresh" Command="{Binding Catalog.SearchCommand}"
+            <viewsControls:IconButton Classes="editor-tool transport-primary" Icon="Refresh" Command="{Binding Catalog.SearchCommand}"
                               IsVisible="{Binding #ToggleAssetsButton.IsChecked}"
                               ToolTip.Tip="{DynamicResource Text.Asset.Search}"
                               AutomationProperties.Name="{DynamicResource Text.Asset.Search}"/>
@@ -33,7 +35,7 @@
                   IsVisible="{Binding #ToggleAssetsButton.IsChecked}">
                 <ListBox ItemsSource="{Binding Catalog.Assets}" SelectedItem="{Binding Catalog.SelectedAsset}">
                     <ListBox.ItemTemplate>
-                        <DataTemplate x:DataType="services:EngineAsset">
+                        <DataTemplate x:DataType="servicesAssets:EngineAsset">
                             <StackPanel Margin="4">
                                 <TextBlock Classes="editor-heading" Text="{Binding Name}"/>
                                 <TextBlock Classes="editor-label" Text="{Binding Path}" TextWrapping="Wrap"/>
@@ -42,10 +44,10 @@
                     </ListBox.ItemTemplate>
                 </ListBox>
                 <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="6" Margin="0,4,0,0">
-                    <views:IconButton Classes="editor-tool" Icon="Previous" Command="{Binding Catalog.PreviousCommand}"
+                    <viewsControls:IconButton Classes="editor-tool" Icon="Previous" Command="{Binding Catalog.PreviousCommand}"
                                       ToolTip.Tip="{DynamicResource Text.Asset.Previous}"
                                       AutomationProperties.Name="{DynamicResource Text.Asset.Previous}"/>
-                    <views:IconButton Classes="editor-tool" Icon="Next" Command="{Binding Catalog.NextCommand}"
+                    <viewsControls:IconButton Classes="editor-tool" Icon="Next" Command="{Binding Catalog.NextCommand}"
                                       ToolTip.Tip="{DynamicResource Text.Asset.Next}"
                                       AutomationProperties.Name="{DynamicResource Text.Asset.Next}"/>
                     <TextBlock Classes="editor-label" Text="{Binding Catalog.Total}"/>
@@ -65,34 +67,34 @@
                 </WrapPanel>
                 <TabControl x:Name="AuthoringTabs" Grid.Row="1" MinHeight="170" SelectionChanged="OnAuthoringTabChanged">
                     <TabItem Header="{DynamicResource Text.Sprite.CutCells}">
-                        <views:SpriteAtlasPreview x:Name="Atlas" MinHeight="140"/>
+                        <viewsSprite:SpriteAtlasPreview x:Name="Atlas" MinHeight="140"/>
                     </TabItem>
                     <TabItem Header="{DynamicResource Text.Sprite.ComposeParts}">
-                        <views:SpriteCompositionPreview x:Name="CompositionPreview" MinHeight="140"
+                        <viewsSprite:SpriteCompositionPreview x:Name="CompositionPreview" MinHeight="140"
                                                         ToolTip.Tip="{DynamicResource Text.Sprite.CompositionHelp}"/>
                     </TabItem>
                 </TabControl>
                 <WrapPanel Grid.Row="2" Orientation="Horizontal" ItemSpacing="6" LineSpacing="4">
                     <Border Classes="editor-toolbar-group" Padding="4,2">
                         <StackPanel Orientation="Horizontal" Spacing="2">
-                            <views:IconButton Classes="editor-tool" Icon="Open" Click="OnOpenLocal"
+                            <viewsControls:IconButton Classes="editor-tool" Icon="Open" Click="OnOpenLocal"
                                               ToolTip.Tip="{DynamicResource Text.Sprite.OpenLocal}"
                                               AutomationProperties.Name="{DynamicResource Text.Sprite.OpenLocal}"/>
-                            <views:IconButton Classes="editor-tool" Icon="Link" Click="OnUseEnginePreview"
+                            <viewsControls:IconButton Classes="editor-tool" Icon="Link" Click="OnUseEnginePreview"
                                               ToolTip.Tip="{DynamicResource Text.Sprite.UseEnginePreview}"
                                               AutomationProperties.Name="{DynamicResource Text.Sprite.UseEnginePreview}"/>
                             <Border Classes="editor-toolbar-divider"/>
-                            <views:IconButton Classes="editor-tool" Icon="Add" Click="OnAddCell"
+                            <viewsControls:IconButton Classes="editor-tool" Icon="Add" Click="OnAddCell"
                                               ToolTip.Tip="{DynamicResource Text.Sprite.AddCell}"
                                               AutomationProperties.Name="{DynamicResource Text.Sprite.AddCell}"/>
-                            <views:IconButton Classes="editor-tool" Icon="Reset" Click="OnResetZoom"
+                            <viewsControls:IconButton Classes="editor-tool" Icon="Reset" Click="OnResetZoom"
                                               ToolTip.Tip="{DynamicResource Text.Sprite.ZoomReset}"
                                               AutomationProperties.Name="{DynamicResource Text.Sprite.ZoomReset}"/>
                         </StackPanel>
                     </Border>
                     <Border Background="Transparent" Padding="4" VerticalAlignment="Center"
                             ToolTip.Tip="{DynamicResource Text.Sprite.CanvasHelp}">
-                        <views:EditorIconView Icon="Info"/>
+                        <viewsControls:EditorIconView Icon="Info"/>
                     </Border>
                 </WrapPanel>
                 <TextBlock Grid.Row="3" Classes="editor-label" Text="{Binding SelectedCellInfo}" TextWrapping="Wrap"/>
@@ -102,7 +104,7 @@
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel Spacing="8" Margin="0,0,4,0">
                     <TextBlock Classes="editor-heading" Text="{DynamicResource Text.Sprite.FramePreview}"/>
-                    <views:SpriteAtlasPreview x:Name="FramePreview" Height="104" IsFramePreview="True"/>
+                    <viewsSprite:SpriteAtlasPreview x:Name="FramePreview" Height="104" IsFramePreview="True"/>
                     <Expander x:Name="PartProperties" Header="{DynamicResource Text.Sprite.PartProperties}" HorizontalAlignment="Stretch" IsVisible="False">
                     <StackPanel Spacing="6">
                     <TextBox Text="{Binding SelectedPart.Name, UpdateSourceTrigger=PropertyChanged}"/>
@@ -121,10 +123,10 @@
                     </Grid>
                     <Border Classes="editor-toolbar-group" Padding="4,2" HorizontalAlignment="Left">
                         <StackPanel Orientation="Horizontal" Spacing="2">
-                            <views:IconButton Classes="editor-tool" Icon="Add" Click="OnSetKey"
+                            <viewsControls:IconButton Classes="editor-tool" Icon="Add" Click="OnSetKey"
                                               ToolTip.Tip="{DynamicResource Text.Sprite.SetKey}"
                                               AutomationProperties.Name="{DynamicResource Text.Sprite.SetKey}"/>
-                            <views:IconButton Classes="editor-tool" Icon="Delete" Click="OnDeleteKey"
+                            <viewsControls:IconButton Classes="editor-tool" Icon="Delete" Click="OnDeleteKey"
                                               ToolTip.Tip="{DynamicResource Text.Sprite.DeleteKey}"
                                               AutomationProperties.Name="{DynamicResource Text.Sprite.DeleteKey}"/>
                         </StackPanel>
@@ -133,20 +135,20 @@
                     </Expander>
                     <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6">
                         <TextBlock Classes="editor-heading" Text="{DynamicResource Text.Sprite.Cells}" VerticalAlignment="Center"/>
-                        <views:IconButton Grid.Column="1" Classes="editor-tool" Icon="Delete" Click="OnDeleteCell"
+                        <viewsControls:IconButton Grid.Column="1" Classes="editor-tool" Icon="Delete" Click="OnDeleteCell"
                                           ToolTip.Tip="{DynamicResource Text.Sprite.DeleteCell}"
                                           AutomationProperties.Name="{DynamicResource Text.Sprite.DeleteCell}"/>
                         <Border Grid.Column="2" Background="Transparent" Padding="4" VerticalAlignment="Center"
                                 ToolTip.Tip="{DynamicResource Text.Sprite.DrawHint}">
-                            <views:EditorIconView Icon="Info"/>
+                            <viewsControls:EditorIconView Icon="Info"/>
                         </Border>
                     </Grid>
                     <ListBox x:Name="SpriteCells" ItemsSource="{Binding Cells}" SelectedItem="{Binding SelectedCell}"
                              Height="160" DoubleTapped="OnCellDoubleTapped">
                         <ListBox.ItemTemplate>
-                            <DataTemplate x:DataType="services:SpriteAnimationCell">
+                            <DataTemplate x:DataType="servicesSprite:SpriteAnimationCell">
                                 <Grid ColumnDefinitions="56,*" ColumnSpacing="8" Margin="2">
-                                    <views:SpriteCellThumbnail Width="52" Height="40"
+                                    <viewsSprite:SpriteCellThumbnail Width="52" Height="40"
                                         Bitmap="{ReflectionBinding DataContext.TextureBitmap, RelativeSource={RelativeSource AncestorType=Window}}"
                                         Cells="{ReflectionBinding DataContext.Cells, RelativeSource={RelativeSource AncestorType=Window}}"
                                         CellId="{Binding Id}"
@@ -220,7 +222,7 @@
                 <WrapPanel Orientation="Horizontal" ItemSpacing="6" LineSpacing="4">
                     <Button Classes="editor-action" Content="{DynamicResource Text.Sprite.LoadSelected}" Click="OnLoadSelected"
                             ToolTip.Tip="{DynamicResource Text.Sprite.MaterialNotice}"/>
-                    <views:IconButton Classes="editor-tool" Icon="Save" Command="{Binding Catalog.SaveMetadataCommand}"
+                    <viewsControls:IconButton Classes="editor-tool" Icon="Save" Command="{Binding Catalog.SaveMetadataCommand}"
                                       ToolTip.Tip="{DynamicResource Text.Asset.SaveMetadata}"
                                       AutomationProperties.Name="{DynamicResource Text.Asset.SaveMetadata}"/>
                     <Button Classes="editor-action" Content="{DynamicResource Text.Sprite.ApplySelected}" Click="OnApplySelected"
@@ -238,22 +240,22 @@
                     <StackPanel x:Name="PartTimelineControls" Orientation="Horizontal" Spacing="6" IsVisible="False">
                     <ComboBox Width="180" ItemsSource="{Binding Parts}" SelectedItem="{Binding SelectedPart}">
                         <ComboBox.ItemTemplate>
-                            <DataTemplate x:DataType="vm:SpritePartViewModel"><TextBlock Text="{Binding Name}"/></DataTemplate>
+                            <DataTemplate x:DataType="vmPanels:SpritePartViewModel"><TextBlock Text="{Binding Name}"/></DataTemplate>
                         </ComboBox.ItemTemplate>
                     </ComboBox>
                     <Border Classes="editor-toolbar-group" Padding="4,2">
                         <StackPanel Orientation="Horizontal" Spacing="2">
-                            <views:IconButton Classes="editor-tool" Icon="Add" Click="OnAddPart"
+                            <viewsControls:IconButton Classes="editor-tool" Icon="Add" Click="OnAddPart"
                                               ToolTip.Tip="{DynamicResource Text.Sprite.AddPart}"
                                               AutomationProperties.Name="{DynamicResource Text.Sprite.AddPart}"/>
-                            <views:IconButton Classes="editor-tool" Icon="Remove" Click="OnRemovePart"
+                            <viewsControls:IconButton Classes="editor-tool" Icon="Remove" Click="OnRemovePart"
                                               ToolTip.Tip="{DynamicResource Text.Sprite.RemovePart}"
                                               AutomationProperties.Name="{DynamicResource Text.Sprite.RemovePart}"/>
                             <Border Classes="editor-toolbar-divider"/>
-                            <views:IconButton Classes="editor-tool" Icon="Previous" Click="OnPartBackward"
+                            <viewsControls:IconButton Classes="editor-tool" Icon="Previous" Click="OnPartBackward"
                                               ToolTip.Tip="{DynamicResource Text.Sprite.PartBackward}"
                                               AutomationProperties.Name="{DynamicResource Text.Sprite.PartBackward}"/>
-                            <views:IconButton Classes="editor-tool" Icon="Next" Click="OnPartForward"
+                            <viewsControls:IconButton Classes="editor-tool" Icon="Next" Click="OnPartForward"
                                               ToolTip.Tip="{DynamicResource Text.Sprite.PartForward}"
                                               AutomationProperties.Name="{DynamicResource Text.Sprite.PartForward}"/>
                         </StackPanel>
@@ -261,43 +263,43 @@
                     </StackPanel>
                     <Border Background="Transparent" Padding="4" VerticalAlignment="Center"
                             ToolTip.Tip="{DynamicResource Text.Sprite.TimelineHelp}">
-                        <views:EditorIconView Icon="Info"/>
+                        <viewsControls:EditorIconView Icon="Info"/>
                     </Border>
                 </WrapPanel>
                 <ScrollViewer Grid.Row="1" MaxHeight="180" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
-                    <views:SpriteTimeline x:Name="Timeline"/>
+                    <viewsSprite:SpriteTimeline x:Name="Timeline"/>
                 </ScrollViewer>
                 <WrapPanel Grid.Row="2" Orientation="Horizontal" ItemSpacing="6" LineSpacing="4">
                     <Border Classes="editor-toolbar-group" Padding="4,2">
                         <StackPanel Orientation="Horizontal" Spacing="2">
-                            <views:IconButton Classes="editor-tool" Icon="StepBack" Click="OnPreviousFrame"
+                            <viewsControls:IconButton Classes="editor-tool" Icon="StepBack" Click="OnPreviousFrame"
                                               ToolTip.Tip="{DynamicResource Text.Sprite.PreviousFrame}"
                                               AutomationProperties.Name="{DynamicResource Text.Sprite.PreviousFrame}"/>
-                            <views:IconButton Classes="editor-tool transport-primary" Icon="Play" Click="OnTogglePlayback"
+                            <viewsControls:IconButton Classes="editor-tool transport-primary" Icon="Play" Click="OnTogglePlayback"
                                               ToolTip.Tip="{DynamicResource Text.Sprite.PlayStop}"
                                               AutomationProperties.Name="{DynamicResource Text.Sprite.PlayStop}"/>
-                            <views:IconButton Classes="editor-tool" Icon="StepForward" Click="OnNextFrame"
+                            <viewsControls:IconButton Classes="editor-tool" Icon="StepForward" Click="OnNextFrame"
                                               ToolTip.Tip="{DynamicResource Text.Sprite.NextFrame}"
                                               AutomationProperties.Name="{DynamicResource Text.Sprite.NextFrame}"/>
                         </StackPanel>
                     </Border>
                     <Border Classes="editor-toolbar-group" Padding="4,2">
                         <StackPanel Orientation="Horizontal" Spacing="2">
-                            <views:IconButton Classes="editor-tool" Icon="Add" Click="OnAddFrame"
+                            <viewsControls:IconButton Classes="editor-tool" Icon="Add" Click="OnAddFrame"
                                               ToolTip.Tip="{DynamicResource Text.Sprite.AddToTimeline}"
                                               AutomationProperties.Name="{DynamicResource Text.Sprite.AddToTimeline}"/>
                             <Button x:Name="InsertFrameButton" Classes="editor-action" Content="{DynamicResource Text.Sprite.InsertFrame}" Click="OnInsertFrame"/>
-                            <views:IconButton Classes="editor-tool" Icon="Copy" Click="OnDuplicateFrame"
+                            <viewsControls:IconButton Classes="editor-tool" Icon="Copy" Click="OnDuplicateFrame"
                                               ToolTip.Tip="{DynamicResource Text.Sprite.DuplicateFrame}"
                                               AutomationProperties.Name="{DynamicResource Text.Sprite.DuplicateFrame}"/>
-                            <views:IconButton Classes="editor-tool" Icon="Delete" Click="OnDeleteFrame"
+                            <viewsControls:IconButton Classes="editor-tool" Icon="Delete" Click="OnDeleteFrame"
                                               ToolTip.Tip="{DynamicResource Text.Sprite.DeleteFrame}"
                                               AutomationProperties.Name="{DynamicResource Text.Sprite.DeleteFrame}"/>
                             <Border Classes="editor-toolbar-divider"/>
-                            <views:IconButton Classes="editor-tool" Icon="Previous" Click="OnFrameUp"
+                            <viewsControls:IconButton Classes="editor-tool" Icon="Previous" Click="OnFrameUp"
                                               ToolTip.Tip="{DynamicResource Text.Sprite.FrameLeft}"
                                               AutomationProperties.Name="{DynamicResource Text.Sprite.FrameLeft}"/>
-                            <views:IconButton Classes="editor-tool" Icon="Next" Click="OnFrameDown"
+                            <viewsControls:IconButton Classes="editor-tool" Icon="Next" Click="OnFrameDown"
                                               ToolTip.Tip="{DynamicResource Text.Sprite.FrameRight}"
                                               AutomationProperties.Name="{DynamicResource Text.Sprite.FrameRight}"/>
                         </StackPanel>

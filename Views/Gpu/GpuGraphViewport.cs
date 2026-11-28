@@ -3,9 +3,11 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
-using LiberaFx.Services;
+using LiberaFx.Services.Compilation;
+using LiberaFx.Services.Settings;
+using LiberaFx.Views.Graph;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Gpu;
 
 // Uses the normal graph's coordinate system, renderer and configurable input mappings.
 internal sealed class GpuGraphViewport

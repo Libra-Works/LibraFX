@@ -1,7 +1,8 @@
 using System.Security.Cryptography;
 using LiberaFx.Models.Graph;
+using LiberaFx.Services.Gpu;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Assets;
 
 public sealed class GroupCompilationResolver(IReadOnlyList<GroupAssetLibrary> libraries, bool useEmbedded = false)
 {

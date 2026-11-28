@@ -1,7 +1,7 @@
 using System.Text.Json;
 using LiberaFx.Models.Graph;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Samples;
 
 /// <summary>Genre vocabulary mapped to editable ordinary particle/procedural graphs.</summary>
 public static class GameEffectTemplates

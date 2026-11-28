@@ -1,6 +1,7 @@
 using LibraGpu.Core;
+using LiberaFx.Services.Settings;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Gpu;
 
 public enum GpuFlowPortDirection { Input, Output }
 

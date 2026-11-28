@@ -8,10 +8,12 @@ using Avalonia.Interactivity;
 using Avalonia.Threading;
 using LiberaFx.Models.Commands;
 using LiberaFx.Models.Graph;
-using LiberaFx.Services;
+using LiberaFx.Services.Project;
+using LiberaFx.Services.Samples;
+using LiberaFx.Services.Settings;
+using LiberaFx.ViewModels.Graph;
+using LiberaFx.Views.Procedural;
 using LiberaFx.Services.Compilation;
-using LiberaFx.ViewModels;
-using LiberaFx.Views;
 
 namespace LiberaFx.Tests;
 

@@ -4,6 +4,9 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using LiberaFx.Models.Graph;
 using LiberaFx.Models.Resources;
+using LiberaFx.Services.Assets;
+using LiberaFx.Services.Gpu;
+using LiberaFx.Services.Sprite;
 
 namespace LiberaFx.Services.Compilation;
 

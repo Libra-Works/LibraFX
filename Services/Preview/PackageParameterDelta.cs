@@ -3,7 +3,7 @@ using System.Text;
 using System.Text.Json;
 using LiberaFx.Models.Graph;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Preview;
 
 internal sealed record PackageParameterUpdate(
     string ContainerId,

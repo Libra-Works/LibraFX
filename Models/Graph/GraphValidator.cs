@@ -1,3 +1,6 @@
+using LiberaFx.Services.Assets;
+using LiberaFx.Services.Gpu;
+
 namespace LiberaFx.Models.Graph;
 
 public static class GraphValidator
@@ -56,8 +59,8 @@ public static class GraphValidator
                 throw new InvalidDataException("Only a group can have instance values.");
             GroupExposedItems.ValidateOverrides(node.GroupOverrides);
             if (node.KindDomain == "GpuParticle" && node.Parameters?.Any(p =>
-                    p is not null && p.Id == Services.GpuParticleEditorService.ParameterId &&
-                    (p.Type != "gpuState" || !Services.GpuParticleEditorService.IsStateValue(p.Value))) == true)
+                    p is not null && p.Id == Services.Gpu.GpuParticleEditorService.ParameterId &&
+                    (p.Type != "gpuState" || !Services.Gpu.GpuParticleEditorService.IsStateValue(p.Value))) == true)
                 throw new InvalidDataException("The GPU workspace parameter has an invalid type or authoring shape.");
             if (node.Parameters is { } parameters)
             {

@@ -2,10 +2,10 @@ using System.Globalization;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using LiberaFx.Models.Graph;
-using LiberaFx.Services;
-using LiberaFx.ViewModels;
+using LiberaFx.Services.Settings;
+using LiberaFx.ViewModels.Graph;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Windows;
 
 public partial class GroupExposedEditorWindow : Window
 {

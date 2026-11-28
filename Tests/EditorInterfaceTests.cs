@@ -10,9 +10,18 @@ using Avalonia.VisualTree;
 using LiberaFx.Models.Appearance;
 using LiberaFx.Models.Commands;
 using LiberaFx.Models.Graph;
-using LiberaFx.Services;
-using LiberaFx.ViewModels;
-using LiberaFx.Views;
+using LiberaFx.Services.Assets;
+using LiberaFx.Services.Compilation;
+using LiberaFx.Services.Gpu;
+using LiberaFx.Services.Settings;
+using LiberaFx.ViewModels.Graph;
+using LiberaFx.ViewModels.Main;
+using LiberaFx.ViewModels.Panels;
+using LiberaFx.Views.Controls;
+using LiberaFx.Views.Gpu;
+using LiberaFx.Views.Graph;
+using LiberaFx.Views.Panels;
+using LiberaFx.Views.Windows;
 
 internal static class EditorInterfaceTests
 {

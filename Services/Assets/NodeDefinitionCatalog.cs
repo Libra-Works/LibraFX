@@ -1,7 +1,8 @@
 using Avalonia.Threading;
 using LiberaFx.Models.Graph;
+using LiberaFx.Services.Settings;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Assets;
 
 public sealed class NodeDefinitionCatalog : IDisposable
 {

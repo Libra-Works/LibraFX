@@ -1,4 +1,4 @@
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Extensions;
 
 public sealed record AnythingSearchItem(string Id, string Category, string Name, string Detail,
     string Aliases, Func<Task> ExecuteAsync, bool IsFavorite = false);

@@ -2,10 +2,11 @@ using System.Collections.ObjectModel;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using LiberaFx.Services;
+using LiberaFx.Services.Preview;
+using LiberaFx.Services.Settings;
 using LiberaFx.Services.Compilation;
 
-namespace LiberaFx.ViewModels;
+namespace LiberaFx.ViewModels.Panels;
 
 public sealed class LiveGameWindowViewModel : ObservableObject, IDisposable
 {

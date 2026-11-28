@@ -1,7 +1,8 @@
 using Avalonia.Controls;
 using Dock.Model.Mvvm.Controls;
+using LiberaFx.Views.Windows;
 
-namespace LiberaFx.ViewModels;
+namespace LiberaFx.ViewModels.Main;
 
 public sealed class EditorWorkPaneViewModel(Func<Control> createView, bool retainView) : Tool
 {
@@ -11,11 +12,11 @@ public sealed class EditorWorkPaneViewModel(Func<Control> createView, bool retai
 
     public void OnHidden()
     {
-        if (_view is LiberaFx.Views.ChatWindow chat)
+        if (_view is LiberaFx.Views.Windows.ChatWindow chat)
         {
             chat.EndSession();
         }
-        else if (_view is LiberaFx.Views.LiveGameWindow game)
+        else if (_view is LiberaFx.Views.Windows.LiveGameWindow game)
         {
             game.EndSession();
         }

@@ -7,9 +7,11 @@ using Avalonia.VisualTree;
 using LibraGpu.Core;
 using LiberaFx.Models.Commands;
 using LiberaFx.Models.Graph;
-using LiberaFx.Services;
-using LiberaFx.ViewModels;
-using LiberaFx.Views;
+using LiberaFx.Services.Gpu;
+using LiberaFx.Services.Mcp;
+using LiberaFx.Services.Project;
+using LiberaFx.ViewModels.Graph;
+using LiberaFx.Views.Gpu;
 
 namespace LiberaFx.Tests;
 

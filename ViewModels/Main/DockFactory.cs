@@ -2,11 +2,15 @@ using Dock.Model.Controls;
 using Dock.Model.Core;
 using Dock.Model.Mvvm;
 using Dock.Model.Mvvm.Controls;
-using LiberaFx.Services;
-using LiberaFx.Views;
+using LiberaFx.Services.Settings;
+using LiberaFx.ViewModels.Graph;
+using LiberaFx.ViewModels.Panels;
+using LiberaFx.Views.Assets;
+using LiberaFx.Views.Panels;
+using LiberaFx.Views.Windows;
 using Avalonia.Controls;
 
-namespace LiberaFx.ViewModels;
+namespace LiberaFx.ViewModels.Main;
 
 public sealed partial class DockFactory : Factory
 {

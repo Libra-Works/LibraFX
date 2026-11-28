@@ -1,8 +1,8 @@
 <UserControl xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:services="using:LiberaFx.Services"
-        xmlns:views="using:LiberaFx.Views"
-        x:Class="LiberaFx.Views.PreviewConnectionsWindow"
+             xmlns:servicesPreview="using:LiberaFx.Services.Preview"
+             xmlns:viewsControls="using:LiberaFx.Views.Controls"
+        x:Class="LiberaFx.Views.Windows.PreviewConnectionsWindow"
         Background="{DynamicResource EffectWindowBackgroundBrush}">
   <Grid RowDefinitions="Auto,*,Auto" Margin="12" RowSpacing="8">
     <StackPanel Spacing="6">
@@ -12,24 +12,24 @@
                   AutomationProperties.Name="{DynamicResource Text.Connections.AvailableViewers}" />
         <Border Grid.Column="1" Classes="editor-toolbar-group" Padding="4,2">
           <StackPanel Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
-            <views:IconButton x:Name="FindViewersButton" Classes="editor-tool" Icon="Refresh" Click="OnFindViewers"
+            <viewsControls:IconButton x:Name="FindViewersButton" Classes="editor-tool" Icon="Refresh" Click="OnFindViewers"
                               ToolTip.Tip="{DynamicResource Text.Connections.FindViewers}"
                               AutomationProperties.Name="{DynamicResource Text.Connections.FindViewers}" />
-            <views:IconButton x:Name="ConnectViewerButton" Classes="editor-tool transport-primary" Icon="Link" Click="OnConnectViewer" IsEnabled="False"
+            <viewsControls:IconButton x:Name="ConnectViewerButton" Classes="editor-tool transport-primary" Icon="Link" Click="OnConnectViewer" IsEnabled="False"
                               ToolTip.Tip="{DynamicResource Text.Connections.ConnectViewer}"
                               AutomationProperties.Name="{DynamicResource Text.Connections.ConnectViewer}" />
             <Border Classes="editor-toolbar-divider" />
-            <views:IconButton x:Name="CopyConnectionButton" Classes="editor-tool" Icon="Copy" Click="OnCopyConnection"
+            <viewsControls:IconButton x:Name="CopyConnectionButton" Classes="editor-tool" Icon="Copy" Click="OnCopyConnection"
                               ToolTip.Tip="{DynamicResource Text.Connections.CopyConnection}"
                               AutomationProperties.Name="{DynamicResource Text.Connections.CopyConnection}" />
-            <views:IconButton Classes="editor-tool" Icon="Export" Click="OnCopyGodotCertificate"
+            <viewsControls:IconButton Classes="editor-tool" Icon="Export" Click="OnCopyGodotCertificate"
                               ToolTip.Tip="{DynamicResource Text.Connections.CopyGodotCertificate}"
                               AutomationProperties.Name="{DynamicResource Text.Connections.CopyGodotCertificate}" />
           </StackPanel>
         </Border>
         <Border Grid.Column="2" Background="Transparent" Padding="4" VerticalAlignment="Center"
                 ToolTip.Tip="{DynamicResource Text.Connections.Hint}">
-          <views:EditorIconView Icon="Info" />
+          <viewsControls:EditorIconView Icon="Info" />
         </Border>
       </Grid>
       <TextBlock x:Name="DiscoveryStatus" Classes="editor-label" TextWrapping="Wrap" />
@@ -38,7 +38,7 @@
     </StackPanel>
     <ListBox Grid.Row="1" x:Name="Peers" SelectionChanged="OnSelectionChanged">
       <ListBox.ItemTemplate>
-        <DataTemplate x:DataType="services:PreviewPeer">
+        <DataTemplate x:DataType="servicesPreview:PreviewPeer">
           <Grid Margin="8,6" RowDefinitions="Auto,Auto,Auto" ColumnDefinitions="*,Auto">
             <StackPanel Orientation="Horizontal" Spacing="10">
               <TextBlock Classes="editor-title" Text="{Binding Engine}" />
@@ -56,7 +56,7 @@
     </ListBox>
     <Grid Grid.Row="2" ColumnDefinitions="*,Auto" ColumnSpacing="8">
       <TextBlock x:Name="Status" Classes="editor-label" VerticalAlignment="Center" TextWrapping="Wrap" />
-      <views:IconButton Grid.Column="1" x:Name="ReconnectButton" Classes="editor-tool" Icon="Refresh" Click="OnReconnect"
+      <viewsControls:IconButton Grid.Column="1" x:Name="ReconnectButton" Classes="editor-tool" Icon="Refresh" Click="OnReconnect"
                         ToolTip.Tip="{DynamicResource Text.Connections.Reconnect}"
                         AutomationProperties.Name="{DynamicResource Text.Connections.Reconnect}" />
     </Grid>

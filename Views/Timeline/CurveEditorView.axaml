@@ -1,45 +1,46 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vm="using:LiberaFx.ViewModels"
-             xmlns:views="using:LiberaFx.Views"
-             x:Class="LiberaFx.Views.CurveEditorView"
-             x:DataType="vm:CurveEditorViewModel"
+             xmlns:viewsControls="using:LiberaFx.Views.Controls"
+             xmlns:viewsTimeline="using:LiberaFx.Views.Timeline"
+             xmlns:vmPanels="using:LiberaFx.ViewModels.Panels"
+             x:Class="LiberaFx.Views.Timeline.CurveEditorView"
+             x:DataType="vmPanels:CurveEditorViewModel"
              Background="{DynamicResource EffectWindowBackgroundBrush}">
     <Grid RowDefinitions="Auto,Auto,*,Auto">
         <Border Classes="editor-bar" BorderThickness="0,0,0,1">
             <WrapPanel Orientation="Horizontal" ItemSpacing="8" LineSpacing="6">
                 <Border Classes="editor-toolbar-group" Padding="4,2">
                     <StackPanel Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
-                        <views:IconButton x:Name="CurveAddKeyButton" Classes="editor-tool" Icon="Add" Command="{Binding AddKeyCommand}"
+                        <viewsControls:IconButton x:Name="CurveAddKeyButton" Classes="editor-tool" Icon="Add" Command="{Binding AddKeyCommand}"
                                           ToolTip.Tip="{DynamicResource Text.Panels.AddKey}"
                                           AutomationProperties.Name="{DynamicResource Text.Panels.AddKey}" />
-                        <views:IconButton Classes="editor-tool" Icon="Delete" Command="{Binding DeleteKeyCommand}"
+                        <viewsControls:IconButton Classes="editor-tool" Icon="Delete" Command="{Binding DeleteKeyCommand}"
                                           ToolTip.Tip="{DynamicResource Text.Panels.DeleteKey}"
                                           AutomationProperties.Name="{DynamicResource Text.Panels.DeleteKey}" />
                         <Border Classes="editor-toolbar-divider" />
-                        <views:IconButton x:Name="CurveFrameAllButton" Classes="editor-tool" Icon="Frame" Click="OnFrameAllClick"
+                        <viewsControls:IconButton x:Name="CurveFrameAllButton" Classes="editor-tool" Icon="Frame" Click="OnFrameAllClick"
                                           ToolTip.Tip="{DynamicResource Text.Panels.FrameAll}"
                                           AutomationProperties.Name="{DynamicResource Text.Panels.FrameAll}" />
-                        <views:IconButton Classes="editor-tool" Icon="Frame" Click="OnFrameSelectedClick" IsEnabled="{Binding HasSelectedKeys}"
+                        <viewsControls:IconButton Classes="editor-tool" Icon="Frame" Click="OnFrameSelectedClick" IsEnabled="{Binding HasSelectedKeys}"
                                           ToolTip.Tip="{DynamicResource Text.Panels.FrameSelected}"
                                           AutomationProperties.Name="{DynamicResource Text.Panels.FrameSelected}" />
-                        <views:IconButton Classes="editor-tool" Icon="ZoomOut" Click="OnZoomOutClick"
+                        <viewsControls:IconButton Classes="editor-tool" Icon="ZoomOut" Click="OnZoomOutClick"
                                           ToolTip.Tip="{DynamicResource Text.Panels.ZoomOut}"
                                           AutomationProperties.Name="{DynamicResource Text.Panels.ZoomOut}" />
-                        <views:IconButton Classes="editor-tool" Icon="ZoomIn" Click="OnZoomInClick"
+                        <viewsControls:IconButton Classes="editor-tool" Icon="ZoomIn" Click="OnZoomInClick"
                                           ToolTip.Tip="{DynamicResource Text.Panels.ZoomIn}"
                                           AutomationProperties.Name="{DynamicResource Text.Panels.ZoomIn}" />
                         <Border Classes="editor-toolbar-divider" />
                         <ToggleButton Classes="editor-tool" IsChecked="{Binding SnapToFrames}"
                                       ToolTip.Tip="{DynamicResource Text.Panels.SnapFrames}"
                                       AutomationProperties.Name="{DynamicResource Text.Panels.SnapFrames}">
-                            <views:EditorIconView Icon="Pin" />
+                            <viewsControls:EditorIconView Icon="Pin" />
                         </ToggleButton>
                         <ToggleButton x:Name="CurveTimeUnitToggle" Classes="editor-tool" IsChecked="{Binding Playback.ShowSeconds}"
                                       IsEnabled="{Binding !!Playback}"
                                       ToolTip.Tip="{DynamicResource Text.Timeline.UseSeconds}"
                                       AutomationProperties.Name="{DynamicResource Text.Timeline.UseSeconds}">
-                            <views:EditorIconView Icon="Clock" />
+                            <viewsControls:EditorIconView Icon="Clock" />
                         </ToggleButton>
                     </StackPanel>
                 </Border>
@@ -62,11 +63,11 @@
                     <ScrollViewer Grid.Row="1">
                         <ItemsControl ItemsSource="{Binding FilteredChannelGroups}">
                             <ItemsControl.ItemTemplate>
-                                <DataTemplate DataType="vm:CurveChannelGroupViewModel">
+                                <DataTemplate DataType="vmPanels:CurveChannelGroupViewModel">
                                     <Expander Header="{Binding Name}" IsExpanded="True" Margin="0,2">
                                         <ItemsControl ItemsSource="{Binding Channels}" Margin="16,0,0,0">
                                             <ItemsControl.ItemTemplate>
-                                                <DataTemplate DataType="vm:CurveChannelViewModel">
+                                                <DataTemplate DataType="vmPanels:CurveChannelViewModel">
                                                     <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,1">
                                                         <CheckBox IsChecked="{Binding IsVisible}"
                                                                   ToolTip.Tip="{DynamicResource Text.Panels.ShowHideCurve}"
@@ -74,7 +75,7 @@
                                                         <Button Foreground="{Binding Brush}" Tag="{Binding}" Click="OnChannelClick" Padding="4,1"
                                                                 AutomationProperties.Name="{Binding Label}">
                                                             <StackPanel Orientation="Horizontal" Spacing="6">
-                                                                <views:EditorIconView Icon="Frame" Stroke="{Binding Brush}" />
+                                                                <viewsControls:EditorIconView Icon="Frame" Stroke="{Binding Brush}" />
                                                                 <TextBlock Text="{Binding Label}" />
                                                             </StackPanel>
                                                         </Button>
@@ -89,7 +90,7 @@
                     </ScrollViewer>
                 </Grid>
             </Border>
-            <views:FCurveCanvas Grid.Column="1" x:Name="CurveCanvas" MinHeight="130" />
+            <viewsTimeline:FCurveCanvas Grid.Column="1" x:Name="CurveCanvas" MinHeight="130" />
         </Grid>
         <Border Grid.Row="1" Classes="editor-bar" BorderThickness="0,0,0,1">
             <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
@@ -106,7 +107,7 @@
                     <ComboBox ItemsSource="{Binding Interpolations}"
                               SelectedItem="{Binding SelectedInterpolation, Mode=TwoWay}">
                         <ComboBox.ItemTemplate>
-                            <DataTemplate><views:LocalizedOptionText Value="{ReflectionBinding}" /></DataTemplate>
+                            <DataTemplate><viewsControls:LocalizedOptionText Value="{ReflectionBinding}" /></DataTemplate>
                         </ComboBox.ItemTemplate>
                     </ComboBox>
                     <Grid ColumnDefinitions="Auto,82" ColumnSpacing="6">

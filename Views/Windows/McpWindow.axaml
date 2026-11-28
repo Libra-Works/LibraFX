@@ -1,9 +1,9 @@
 <UserControl xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:vm="using:LiberaFx.ViewModels"
-        xmlns:views="using:LiberaFx.Views"
-        x:Class="LiberaFx.Views.McpWindow"
-        x:DataType="vm:MainViewModel"
+             xmlns:viewsControls="using:LiberaFx.Views.Controls"
+             xmlns:vmMain="using:LiberaFx.ViewModels.Main"
+        x:Class="LiberaFx.Views.Windows.McpWindow"
+        x:DataType="vmMain:MainViewModel"
         Background="{DynamicResource EffectWindowBackgroundBrush}">
     <ScrollViewer>
         <StackPanel Margin="12" Spacing="10">
@@ -13,7 +13,7 @@
                         <TextBlock Classes="editor-title" Text="{DynamicResource Text.Panels.McpConnection}" />
                         <Border Grid.Column="1" Background="Transparent" Padding="2"
                                 ToolTip.Tip="{DynamicResource Text.Panels.McpSecurityNotice}">
-                            <views:EditorIconView Icon="Info" />
+                            <viewsControls:EditorIconView Icon="Info" />
                         </Border>
                     </Grid>
                     <TextBlock Classes="editor-label" Text="{Binding McpStatus}" TextWrapping="Wrap" />
@@ -26,7 +26,7 @@
                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
                         <TextBox x:Name="TokenBox" Text="{Binding McpAccessToken}"
                                  IsReadOnly="True" PasswordChar="●" />
-                        <views:IconButton Grid.Column="1" Classes="editor-tool" Icon="Copy" Click="OnCopyTokenClick"
+                        <viewsControls:IconButton Grid.Column="1" Classes="editor-tool" Icon="Copy" Click="OnCopyTokenClick"
                                           ToolTip.Tip="{DynamicResource Text.Panels.CopyAccessToken}"
                                           AutomationProperties.Name="{DynamicResource Text.Panels.CopyAccessToken}" />
                     </Grid>
@@ -38,14 +38,14 @@
                         <TextBlock Classes="editor-title" Text="{DynamicResource Text.OperatorSkill.Title}" />
                         <Border Grid.Column="1" Background="Transparent" Padding="2"
                                 ToolTip.Tip="{DynamicResource Text.OperatorSkill.Help}">
-                            <views:EditorIconView Icon="Info" />
+                            <viewsControls:EditorIconView Icon="Info" />
                         </Border>
                     </Grid>
                     <TextBlock Classes="editor-label" Text="{DynamicResource Text.OperatorSkill.BundledPath}" />
                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
                         <TextBox x:Name="OperatorSkillPathBox" IsReadOnly="True"
                                  AutomationProperties.Name="{DynamicResource Text.OperatorSkill.BundledPath}" />
-                        <views:IconButton x:Name="CopyOperatorSkillPathButton" Grid.Column="1" Classes="editor-tool" Icon="Copy"
+                        <viewsControls:IconButton x:Name="CopyOperatorSkillPathButton" Grid.Column="1" Classes="editor-tool" Icon="Copy"
                                           Click="OnCopyOperatorSkillPathClick"
                                           ToolTip.Tip="{DynamicResource Text.OperatorSkill.CopyPath}"
                                           AutomationProperties.Name="{DynamicResource Text.OperatorSkill.CopyPath}" />

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using LiberaFx.Services.Gpu;
 
 namespace LiberaFx.Models.Graph;
 
@@ -20,7 +21,7 @@ public static class NodeParameter
 {
     public static bool IsValidValue(string type, JsonElement value)
     {
-        if (type == "gpuState") return Services.GpuParticleEditorService.IsStateValue(value);
+        if (type == "gpuState") return Services.Gpu.GpuParticleEditorService.IsStateValue(value);
         if (type == "proceduralState") return value.ValueKind == JsonValueKind.String &&
             value.GetString()!.Length <= ProceduralResourceSchema.MaximumRecipeCharacters;
         if (type == "commentImage")

@@ -13,10 +13,13 @@ using System.Globalization;
 using LiberaFx.Models.Graph;
 using LiberaFx.Models.Appearance;
 using Avalonia.Markup.Xaml.MarkupExtensions;
-using LiberaFx.Services;
-using LiberaFx.ViewModels;
+using LiberaFx.Services.Compilation;
+using LiberaFx.Services.Extensions;
+using LiberaFx.Services.Settings;
+using LiberaFx.ViewModels.Graph;
+using LiberaFx.Views.Windows;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Controls;
 
 public sealed class ParameterEditorHost : ContentControl
 {

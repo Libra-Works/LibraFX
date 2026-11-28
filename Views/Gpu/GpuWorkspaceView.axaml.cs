@@ -9,10 +9,13 @@ using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using LibraGpu.Core;
-using LiberaFx.Services;
-using LiberaFx.ViewModels;
+using LiberaFx.Services.Compilation;
+using LiberaFx.Services.Settings;
+using LiberaFx.ViewModels.Graph;
+using LiberaFx.ViewModels.Panels;
+using LiberaFx.Views.Graph;
 
-namespace LiberaFx.Views;
+namespace LiberaFx.Views.Gpu;
 
 public partial class GpuWorkspaceView : UserControl
 {

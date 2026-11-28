@@ -3,8 +3,9 @@ using System.Text.Json.Serialization;
 using LiberaFx.Models.Graph;
 using LiberaFx.Models.Resources;
 using LiberaFx.Services.Compilation;
+using LiberaFx.Services.Gpu;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Assets;
 
 public sealed record EmbeddedResourceUse(string Location, Guid ResourceId);
 public sealed record EmbeddedParameterUse(string PinId, Guid ResourceId, Guid ParameterId);

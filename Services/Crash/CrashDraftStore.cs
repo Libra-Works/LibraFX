@@ -2,8 +2,9 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using LiberaFx.Extensions.Abstractions;
+using LiberaFx.Services.Settings;
 
-namespace LiberaFx.Services;
+namespace LiberaFx.Services.Crash;
 
 public sealed record CrashDraft(int Version, Guid Id, string Kind, string Title, string Body,
     string Diagnostics, string Delivery = "Unsent");
