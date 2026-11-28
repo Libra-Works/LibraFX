@@ -94,6 +94,7 @@ public sealed class CurveEditorViewModel : Tool, IDisposable
     public bool SnapToFrames { get => _snapToFrames; set => SetProperty(ref _snapToFrames, value); }
     public string TimeUnitLabel => Playback?.TimeUnitLabel ?? LocalizationService.Shared.Get("Timeline.Seconds");
     public IRelayCommand AddKeyCommand { get; }
+    public IRelayCommand SplitKeyCommand { get; }
     public IRelayCommand DeleteKeyCommand { get; }
 
     public string FrameText
@@ -139,6 +140,7 @@ public sealed class CurveEditorViewModel : Tool, IDisposable
         _graph.PropertyChanged += OnGraphChanged;
         _graph.Nodes.CollectionChanged += OnNodesChanged;
         AddKeyCommand = new RelayCommand(AddKeyAtEnd, () => HasCurve);
+        SplitKeyCommand = new RelayCommand(SplitSelectedKey, () => SelectedKeys.Count == 1);
         DeleteKeyCommand = new RelayCommand(DeleteSelectedKeys, () => HasSelectedKeys);
         SynchronizeChannels();
         RefreshNode();
@@ -289,6 +291,26 @@ public sealed class CurveEditorViewModel : Tool, IDisposable
     {
         _preview = null;
         _previewRevision = null;
+        NotifyCurve();
+    }
+
+    public void SplitSelectedKey()
+    {
+        if (_node?.Curve is not { } curve || SelectedKeys.Count != 1 || SelectedKey is not { } key) return;
+        const double step = 1e-4;
+        var splitTime = key.TimeSeconds + step;
+        while (curve.Keys.Any(existing => Math.Abs(existing.TimeSeconds - splitTime) < 1e-7))
+            splitTime += step;
+        var split = new FCurveKey(Guid.NewGuid(), splitTime, key.Value, 0, 0, key.Interpolation);
+        try
+        {
+            var updated = new FCurveSnapshot(curve.Keys.Append(split).OrderBy(item => item.TimeSeconds).ToArray());
+            SetCurve(_node, updated, LocalizationService.Shared.Get("Timeline.CurveSplit"));
+            _selectedKeyIds.Clear();
+            _selectedKeyIds.Add(split.Id);
+            Status = "Messages.CurveKeyAdded";
+        }
+        catch (InvalidDataException ex) { Status = ex.Message; }
         NotifyCurve();
     }
 
@@ -524,6 +546,7 @@ public sealed class CurveEditorViewModel : Tool, IDisposable
         OnPropertyChanged(nameof(OutSlopeText));
         OnPropertyChanged(nameof(SelectedInterpolation));
         AddKeyCommand.NotifyCanExecuteChanged();
+        SplitKeyCommand.NotifyCanExecuteChanged();
         DeleteKeyCommand.NotifyCanExecuteChanged();
     }
 

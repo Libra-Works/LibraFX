@@ -39,5 +39,8 @@
   "Timeline.AddSignalHistory": "Add Signal timeline key",
   "Timeline.MoveSignalHistory": "Move Signal timeline key",
   "Timeline.DeleteSignalHistory": "Delete Signal timeline key",
-  "Timeline.InvalidSignalTime": "Signal keys require finite seconds between 0 and 1,000,000."
+  "Timeline.InvalidSignalTime": "Signal keys require finite seconds between 0 and 1,000,000.",
+  "Timeline.CurveAdd": "Add key",
+  "Timeline.CurveSplit": "Split key",
+  "Timeline.CurveDelete": "Delete key"
 }

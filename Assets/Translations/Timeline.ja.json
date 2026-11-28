@@ -39,5 +39,8 @@
   "Timeline.AddSignalHistory": "Signalタイムラインキーを追加",
   "Timeline.MoveSignalHistory": "Signalタイムラインキーを移動",
   "Timeline.DeleteSignalHistory": "Signalタイムラインキーを削除",
-  "Timeline.InvalidSignalTime": "Signalキーの時刻は0～1,000,000秒の有限値にしてください。"
+  "Timeline.InvalidSignalTime": "Signalキーの時刻は0～1,000,000秒の有限値にしてください。",
+  "Timeline.CurveAdd": "キーを追加",
+  "Timeline.CurveSplit": "キーを分割",
+  "Timeline.CurveDelete": "キーを削除"
 }

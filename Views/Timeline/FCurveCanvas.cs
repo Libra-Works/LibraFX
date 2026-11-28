@@ -334,10 +334,14 @@ public sealed class FCurveCanvas : Control
         {
             if (_dragMode == DragMode.Key)
             {
-                var displayTime = DisplayTime(key.TimeSeconds) + (point.X - _pointerStart.X) / _scaleX;
-                displayTime = _model.SnapDisplayTime(displayTime);
-                _model.PreviewKeys(_dragKeys, TimeSeconds(displayTime) - key.TimeSeconds,
-                    -(point.Y - _pointerStart.Y) / _scaleY);
+                var timeDelta = 0.0;
+                if (Math.Abs(point.X - _pointerStart.X) >= 4)
+                {
+                    var displayTime = DisplayTime(key.TimeSeconds) + (point.X - _pointerStart.X) / _scaleX;
+                    displayTime = _model.SnapDisplayTime(displayTime);
+                    timeDelta = TimeSeconds(displayTime) - key.TimeSeconds;
+                }
+                _model.PreviewKeys(_dragKeys, timeDelta, -(point.Y - _pointerStart.Y) / _scaleY);
             }
             else
             {
@@ -354,11 +358,22 @@ public sealed class FCurveCanvas : Control
     protected override void OnPointerReleased(PointerReleasedEventArgs e)
     {
         base.OnPointerReleased(e);
-        if (_dragMode == DragMode.None) return;
+        if (_dragMode == DragMode.None)
+        {
+            if (e.InitialPressMouseButton == MouseButton.Right)
+            {
+                OpenContextMenu(e.GetPosition(this));
+                e.Handled = true;
+            }
+            return;
+        }
         var mode = _dragMode;
+        var pos = e.GetPosition(this);
+        var openMenu = mode == DragMode.Pan && e.InitialPressMouseButton == MouseButton.Right &&
+            Math.Abs(pos.X - _pointerStart.X) < 4 && Math.Abs(pos.Y - _pointerStart.Y) < 4;
         if (mode == DragMode.Select && _model?.Curve is { } curve)
         {
-            var rect = SelectionRect(_pointerStart, e.GetPosition(this)).Inflate(2);
+            var rect = SelectionRect(_pointerStart, pos).Inflate(2);
             _model.SelectKeys(curve.Keys.Where(key => rect.Contains(ToPoint(DisplayTime(key.TimeSeconds), key.Value)))
                 .Select(key => key.Id), _selectionAdditive);
         }
@@ -369,6 +384,38 @@ public sealed class FCurveCanvas : Control
         if (mode is DragMode.Key or DragMode.InSlope or DragMode.OutSlope) _model?.CommitPreview();
         InvalidateVisual();
         e.Handled = true;
+        if (openMenu) OpenContextMenu(pos);
+    }
+
+    private void OpenContextMenu(Point point)
+    {
+        if (_model?.Curve is not { } curve || !_model.VisibleCurves.Any(item => ReferenceEquals(item.Node, _model.Node))) return;
+        var hitKey = curve.Keys.Reverse().FirstOrDefault(key => Near(point, ToPoint(DisplayTime(key.TimeSeconds), key.Value)));
+        if (hitKey is not null && !_model.IsKeySelected(hitKey.Id))
+            _model.SelectKey(hitKey.Id, toggle: false, preserveSelection: false);
+        var addItem = new MenuItem { Header = LocalizationService.Shared.Get("Timeline.CurveAdd") };
+        addItem.Click += (_, _) =>
+        {
+            var displayTime = _model.SnapDisplayTime((point.X - _origin.X) / _scaleX);
+            _model.AddKey(TimeSeconds(displayTime), (_origin.Y - point.Y) / _scaleY);
+        };
+        var splitItem = new MenuItem
+        {
+            Header = LocalizationService.Shared.Get("Timeline.CurveSplit"),
+            IsEnabled = _model.SelectedKeys.Count == 1
+        };
+        splitItem.Click += (_, _) => _model.SplitSelectedKey();
+        var deleteItem = new MenuItem
+        {
+            Header = LocalizationService.Shared.Get("Timeline.CurveDelete"),
+            IsEnabled = _model.SelectedKeys.Count > 0
+        };
+        deleteItem.Click += (_, _) =>
+        {
+            if (_model.DeleteKeyCommand.CanExecute(null)) _model.DeleteKeyCommand.Execute(null);
+        };
+        ContextMenu = new ContextMenu { ItemsSource = new Control[] { addItem, splitItem, deleteItem } };
+        ContextMenu.Open(this);
     }
 
     protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e)
