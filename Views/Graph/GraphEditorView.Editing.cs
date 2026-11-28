@@ -36,8 +36,7 @@ public partial class GraphEditorView : UserControl
         {
             return;
         }
-        if (shortcuts.Matches("graph.search", e) && e.Source is Visual source &&
-            source.GetSelfAndVisualAncestors().OfType<TextBox>().Any())
+        if (e.Source is Visual source && source.GetSelfAndVisualAncestors().OfType<TextBox>().Any())
         {
             return;
         }
@@ -125,6 +124,7 @@ public partial class GraphEditorView : UserControl
             RefreshNodeSearch();
         else
             NodeSearchBox.Text = string.Empty;
+        NodeSearchPopup.Placement = _lastGraphPointer.HasValue ? PlacementMode.Pointer : PlacementMode.Center;
         NodeSearchPopup.IsOpen = true;
         Dispatcher.UIThread.Post(() => NodeSearchBox.Focus());
     }

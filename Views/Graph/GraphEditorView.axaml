@@ -276,7 +276,7 @@
         <ContentControl x:Name="SpecializedWorkspace" Grid.Row="1" Grid.RowSpan="2" IsVisible="False"
                         Background="{DynamicResource EffectWindowBackgroundBrush}" />
         <Popup x:Name="NodeSearchPopup" Grid.Row="2" PlacementTarget="{Binding #GraphScrollViewer}"
-               Placement="Center" IsLightDismissEnabled="True">
+               Placement="Pointer" IsLightDismissEnabled="True">
             <Border Width="340" MaxHeight="400" Padding="8" BorderThickness="1"
                     BorderBrush="{DynamicResource EffectBorderBrush}"
                     Background="{DynamicResource EffectSurfaceBrush}">

@@ -28,7 +28,14 @@ public sealed class GraphSceneLayer : Control
     private static readonly Pen SelectedConnectionPen = new(ThemeSettingsService.EditorBrush("SelectionBorder"), 5);
 
     private readonly HashSet<GraphConnectionViewModel> _observedConnections = [];
+    private HashSet<GraphConnectionViewModel>? _hiddenConnections;
     private GraphWorkspaceViewModel? _workspace;
+
+    internal void SetHiddenConnections(IEnumerable<GraphConnectionViewModel>? connections)
+    {
+        _hiddenConnections = connections is null ? null : new HashSet<GraphConnectionViewModel>(connections);
+        InvalidateVisual();
+    }
     private Vector _graphOrigin;
     private Rect _visibleArea;
     public bool GridOnly { get; set; }
@@ -102,6 +109,7 @@ public sealed class GraphSceneLayer : Control
 
         foreach (var connection in _workspace.Connections)
         {
+            if (_hiddenConnections?.Contains(connection) == true) continue;
             DrawConnection(context, connection);
         }
         foreach (var connection in _workspace.Connections.Where(item => item.SignalOrder > 0))
@@ -278,9 +286,9 @@ public sealed class GraphSceneLayer : Control
     }
 
     internal static void DrawConnection(DrawingContext context, Point start, Point end, Models.Graph.GraphPortCategory category,
-        bool debugFlow = false, bool selected = false)
+        bool debugFlow = false, bool selected = false, double zoom = 1)
     {
-        var controlOffset = Math.Max(48, Math.Abs(end.X - start.X) * 0.5);
+        var controlOffset = Math.Max(48 * zoom, Math.Abs(end.X - start.X) * 0.5);
         var geometry = new StreamGeometry();
         using (var geometryContext = geometry.Open())
         {

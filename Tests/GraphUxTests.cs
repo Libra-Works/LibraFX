@@ -23,8 +23,35 @@ internal static class GraphUxTests
         ZoomHitTesting();
         BreadcrumbHistory();
         NestedOverlay();
+        InlineRightClickOpensInnerContextMenu();
         WorkspaceNavigationTests.Run();
         Console.WriteLine("Graph wire selection, history, breadcrumbs and nested overlay passed.");
+    }
+
+    private static void InlineRightClickOpensInnerContextMenu()
+    {
+        var graph = new GraphWorkspaceViewModel(new UndoRedoManager());
+        var group = graph.CreateNode(GraphNodeKind.SpawnableGroup, 80, 80);
+        graph.SetInlinePresentation(group, true, 640, 380);
+        var outerView = new GraphEditorView { DataContext = graph };
+        var window = new Window { Width = 1200, Height = 750, Content = outerView };
+        window.Show();
+        try
+        {
+            window.UpdateLayout(); Dispatcher.UIThread.RunJobs();
+            var innerView = outerView.GetVisualDescendants().OfType<GraphEditorView>().First(v => !ReferenceEquals(v, outerView));
+            var innerCanvas = innerView.FindControl<Grid>("GraphCanvas")!;
+            var innerBg = innerView.FindControl<Border>("GraphBackground")!;
+            var pt = innerBg.TranslatePoint(new Point(200, 200), window) ?? new Point(300, 300);
+            var ptr = new Pointer(901, PointerType.Mouse, true);
+            innerBg.RaiseEvent(new PointerPressedEventArgs(innerBg, ptr, window, pt, 0,
+                new(RawInputModifiers.RightMouseButton, PointerUpdateKind.RightButtonPressed), KeyModifiers.None, 1));
+            innerBg.RaiseEvent(new PointerReleasedEventArgs(innerBg, ptr, window, pt, 1,
+                new(RawInputModifiers.None, PointerUpdateKind.RightButtonReleased), KeyModifiers.None, MouseButton.Right));
+            Dispatcher.UIThread.RunJobs();
+            Require(innerCanvas.ContextMenu!.IsOpen, $"Inner GraphCanvas.ContextMenu did not open! IsOpen={innerCanvas.ContextMenu.IsOpen}, AddItems={innerView.FindControl<MenuItem>("AddNodeMenu")!.Items.Count}");
+        }
+        finally { window.Close(); }
     }
 
     private static void SelectionAndUndo()

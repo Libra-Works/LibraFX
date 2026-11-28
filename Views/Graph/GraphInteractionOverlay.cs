@@ -56,7 +56,8 @@ public sealed class GraphInteractionOverlay : Control
                 editor.GraphPointToOverlay(connection.EndPoint, this) is { } end)
             {
                 GraphSceneLayer.DrawConnection(context, start, end,
-                    connection.Source.Definition.GetOutputPortCategory(connection.SourcePortId), selected: connection.IsSelected);
+                    connection.Source.Definition.GetOutputPortCategory(connection.SourcePortId),
+                    selected: connection.IsSelected, zoom: editor.DebugZoom);
             }
         }
         if (_pending && graph.PendingOutputNode is { } source && graph.ConnectionPreviewPoint is { } endPoint)
@@ -67,7 +68,7 @@ public sealed class GraphInteractionOverlay : Control
                 editor.GraphPointToOverlay(endPoint, this) is { } end)
             {
                 GraphSceneLayer.DrawConnection(context, start, end,
-                    source.Definition.GetOutputPortCategory(graph.PendingOutputPortId));
+                    source.Definition.GetOutputPortCategory(graph.PendingOutputPortId), zoom: editor.DebugZoom);
             }
         }
     }

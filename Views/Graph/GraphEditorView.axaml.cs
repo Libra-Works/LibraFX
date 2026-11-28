@@ -168,12 +168,15 @@ public partial class GraphEditorView : UserControl
     internal void ShowInteractionWires(GraphWorkspaceViewModel graph,
         IEnumerable<GraphConnectionViewModel> connections, bool pending = false)
     {
+        var list = connections as GraphConnectionViewModel[] ?? connections.ToArray();
+        ConnectionLayer.SetHiddenConnections(list);
         var root = this.GetSelfAndVisualAncestors().OfType<GraphEditorView>().Last();
-        root.InteractionOverlay.Show(this, graph, connections, pending);
+        root.InteractionOverlay.Show(this, graph, list, pending);
     }
 
     internal void ClearInteractionWires()
     {
+        ConnectionLayer.SetHiddenConnections(null);
         var root = this.GetSelfAndVisualAncestors().OfType<GraphEditorView>().LastOrDefault();
         root?.InteractionOverlay.Clear(this);
     }
