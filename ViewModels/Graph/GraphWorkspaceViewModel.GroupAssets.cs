@@ -116,6 +116,20 @@ public sealed partial class GraphWorkspaceViewModel
         SetConnectionStatus(asset.Locked ? "Messages.GroupNowLocked" : "Messages.GroupNowUnlocked", asset.Name);
     }
 
+    public void UnlinkSelectedGroupAsset()
+    {
+        Avalonia.Threading.Dispatcher.UIThread.VerifyAccess();
+        _document.CreateSnapshot();
+        EnsurePathEditable();
+        if (SelectedNode is not { IsGraphGroup: true, GroupAsset: { } reference } node)
+        {
+            throw new InvalidOperationException("Select a linked Graph Group to unlink.");
+        }
+
+        ExecuteEdit(new SetGroupAssetCommand(node, reference, null));
+        SetConnectionStatus("Messages.GroupUnlinked", node.Name);
+    }
+
     public IReadOnlyList<GroupUpdateCandidate> FindGroupUpdates()
     {
         var catalog = GroupAssets;

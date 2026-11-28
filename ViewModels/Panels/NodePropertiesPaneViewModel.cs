@@ -63,6 +63,7 @@ public sealed class NodePropertiesPaneViewModel : Tool, IDisposable
     public IRelayCommand SaveGroupCommand { get; }
     public IRelayCommand ToggleGroupLockCommand { get; }
     public IRelayCommand CloneGroupCommand { get; }
+    public IRelayCommand UnlinkGroupCommand { get; }
     public IRelayCommand PublishCurvesCommand { get; }
     public bool CanPublishCurves => !IsPinned && _graph.CanPublishGroupCurves();
     public bool CanEditGroupCurves => HasExposedCurves && !IsPinned;
@@ -131,6 +132,8 @@ public sealed class NodePropertiesPaneViewModel : Tool, IDisposable
                   CurrentAsset is { Origin: GroupAssetOrigin.Project });
         CloneGroupCommand = new RelayCommand(() => RunGroupAction(() => _graph.CloneSelectedStandardGroupToProject()),
             () => CanCloneGroup);
+        UnlinkGroupCommand = new RelayCommand(() => RunGroupAction(_graph.UnlinkSelectedGroupAsset),
+            () => CanManageGroup && IsLinkedGroup);
         PublishCurvesCommand = new RelayCommand(() => RunGroupAction(() => _graph.PublishGroupCurves()),
             () => CanPublishCurves);
         ToggleNodeLockCommand = new RelayCommand(() =>
@@ -296,6 +299,7 @@ public sealed class NodePropertiesPaneViewModel : Tool, IDisposable
         SaveGroupCommand.NotifyCanExecuteChanged();
         ToggleGroupLockCommand.NotifyCanExecuteChanged();
         CloneGroupCommand.NotifyCanExecuteChanged();
+        UnlinkGroupCommand.NotifyCanExecuteChanged();
         PublishCurvesCommand.NotifyCanExecuteChanged();
     }
 

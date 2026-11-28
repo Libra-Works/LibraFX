@@ -106,7 +106,7 @@
             </Border>
             <Border Classes="editor-toolbar-group" IsVisible="{Binding CanManageGroup}" Padding="6,4"
                     ToolTip.Tip="{Binding GroupStatus}">
-                <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="4">
+                <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="4">
                     <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                         <TextBlock Classes="editor-heading" Text="{DynamicResource Text.Editor.GroupAsset}"
                                    VerticalAlignment="Center" />
@@ -121,7 +121,11 @@
                     <viewsControls:IconButton x:Name="GroupLockButton" Classes="editor-tool" Grid.Column="2" Icon="{Binding GroupLockIcon}"
                                       IsVisible="{Binding IsProjectLinkedGroup}" Command="{Binding ToggleGroupLockCommand}"
                                       ToolTip.Tip="{Binding GroupLockHint}" AutomationProperties.Name="{Binding GroupLockHint}" />
-                    <Button Grid.Column="3" Classes="editor-action" Content="{DynamicResource Text.Modules.CloneToProject}"
+                    <viewsControls:IconButton x:Name="UnlinkGroupButton" Classes="editor-tool" Grid.Column="3" Icon="Disconnect"
+                                      IsVisible="{Binding IsLinkedGroup}" Command="{Binding UnlinkGroupCommand}"
+                                      ToolTip.Tip="{DynamicResource Text.Editor.UnlinkGroupTip}"
+                                      AutomationProperties.Name="{DynamicResource Text.Editor.UnlinkGroup}" />
+                    <Button Grid.Column="4" Classes="editor-action" Content="{DynamicResource Text.Modules.CloneToProject}"
                             IsVisible="{Binding IsStandardGroup}"
                             IsEnabled="{Binding CanCloneGroup}"
                             Command="{Binding CloneGroupCommand}"

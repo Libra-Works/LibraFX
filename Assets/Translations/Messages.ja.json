@@ -45,6 +45,7 @@
   "Messages.EditingNestedGraph": "入れ子のグラフを編集中です。",
   "Messages.GroupAdded": "グループ {0}（バージョン {1}）を追加しました。",
   "Messages.GroupSaved": "グループ {0}（バージョン {1}）を保存しました。",
+  "Messages.GroupUnlinked": "'{0}' を共有グループから切り離しました。",
   "Messages.GroupNowLocked": "グループ {0} をロックしました。",
   "Messages.GroupNowUnlocked": "グループ {0} のロックを解除しました。",
   "Messages.LinkedGroupsUpdated": "{0} 個のリンクされたグループを更新しました。",

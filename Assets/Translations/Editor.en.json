@@ -200,6 +200,8 @@
   "Editor.LockGroup": "Lock group asset editing",
   "Editor.UnlockGroup": "Unlock group asset editing",
   "Editor.GroupUnlinked": "Not yet saved to the project library. Saving creates a reusable asset.",
+  "Editor.UnlinkGroup": "Make Unique",
+  "Editor.UnlinkGroupTip": "Detach from the shared group asset so edits only affect this node",
   "Editor.GroupRevision": "Embedded version: {0}",
   "Editor.GroupLocked": "Locked. Instances cannot be edited or saved over this asset.",
   "Editor.GroupUnlocked": "Unlocked. Instance edits are saved to the library only with Save group.",

@@ -200,6 +200,8 @@
   "Editor.LockGroup": "グループ資産の編集をロック",
   "Editor.UnlockGroup": "グループ資産の編集ロックを解除",
   "Editor.GroupUnlinked": "ライブラリに未保存です。保存すると再利用できる資産を作成します。",
+  "Editor.UnlinkGroup": "独立化（共有解除）",
+  "Editor.UnlinkGroupTip": "共有グループから切り離し、このノードだけのオリジナルとして編集できるようにします",
   "Editor.GroupRevision": "埋め込みバージョン: {0}",
   "Editor.GroupLocked": "ロック中です。この資産のインスタンス編集と上書き保存はできません。",
   "Editor.GroupUnlocked": "ロック解除済みです。編集内容は保存操作を行うまでライブラリに反映されません。",

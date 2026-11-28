@@ -45,6 +45,7 @@
   "Messages.EditingNestedGraph": "Editing nested graph.",
   "Messages.GroupAdded": "Added group {0} (version {1}).",
   "Messages.GroupSaved": "Saved group {0} (version {1}).",
+  "Messages.GroupUnlinked": "Detached '{0}' from the shared group asset.",
   "Messages.GroupNowLocked": "Locked group {0}.",
   "Messages.GroupNowUnlocked": "Unlocked group {0}.",
   "Messages.LinkedGroupsUpdated": "Updated {0} linked group(s).",
