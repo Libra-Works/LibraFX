@@ -77,15 +77,17 @@ public partial class GraphEditorView : UserControl
         ConnectionLayer.GraphOrigin = _graphOrigin;
         GraphScrollViewer.AddHandler(InputElement.PointerWheelChangedEvent, OnViewportPointerWheelChanged,
             RoutingStrategies.Tunnel);
+        GraphScrollViewer.AddHandler(InputElement.PointerReleasedEvent, OnViewportPointerReleased,
+            RoutingStrategies.Tunnel);
         GraphScrollViewer.AddHandler(Control.RequestBringIntoViewEvent, (_, e) => e.Handled = true,
             RoutingStrategies.Tunnel);
-        GraphCanvas.ContextRequested += (_, e) =>
+        GraphCanvas.AddHandler(Control.ContextRequestedEvent, (_, e) =>
         {
-            if (GraphCanvas.ContextMenu?.IsOpen == true)
+            if (e.Source is not Visual visual || !visual.GetSelfAndVisualAncestors().OfType<TextBox>().Any())
             {
                 e.Handled = true;
             }
-        };
+        }, RoutingStrategies.Tunnel);
         AddHandler(InputElement.PointerPressedEvent, (_, e) =>
         {
             if (OwnsInput(e.Source) && DataContext is GraphWorkspaceViewModel graph)
@@ -176,14 +178,14 @@ public partial class GraphEditorView : UserControl
         IEnumerable<GraphConnectionViewModel> connections, bool pending = false)
     {
         var list = connections as GraphConnectionViewModel[] ?? connections.ToArray();
-        ConnectionLayer.SetHiddenConnections(list);
+        ConnectionLayer.SetHiddenConnections(list, pending);
         var root = this.GetSelfAndVisualAncestors().OfType<GraphEditorView>().Last();
         root.InteractionOverlay.Show(this, graph, list, pending);
     }
 
     internal void ClearInteractionWires()
     {
-        ConnectionLayer.SetHiddenConnections(null);
+        ConnectionLayer.SetHiddenConnections(null, false);
         var root = this.GetSelfAndVisualAncestors().OfType<GraphEditorView>().LastOrDefault();
         root?.InteractionOverlay.Clear(this);
     }

@@ -29,11 +29,13 @@ public sealed class GraphSceneLayer : Control
 
     private readonly HashSet<GraphConnectionViewModel> _observedConnections = [];
     private HashSet<GraphConnectionViewModel>? _hiddenConnections;
+    private bool _hidePending;
     private GraphWorkspaceViewModel? _workspace;
 
-    internal void SetHiddenConnections(IEnumerable<GraphConnectionViewModel>? connections)
+    internal void SetHiddenConnections(IEnumerable<GraphConnectionViewModel>? connections, bool hidePending = false)
     {
         _hiddenConnections = connections is null ? null : new HashSet<GraphConnectionViewModel>(connections);
+        _hidePending = hidePending;
         InvalidateVisual();
     }
     private Vector _graphOrigin;
@@ -127,7 +129,7 @@ public sealed class GraphSceneLayer : Control
                 context.DrawEllipse(DebugBrush, null, corner + new Vector(-8, 8), 5, 5);
         }
 
-        if (_workspace.PendingOutputNode is { } source && _workspace.ConnectionPreviewPoint is { } end)
+        if (!_hidePending && _workspace.PendingOutputNode is { } source && _workspace.ConnectionPreviewPoint is { } end)
         {
             var start = new Point(
                 source.DisplayX + source.OutputAnchor(_workspace.PendingOutputPortId).X + _graphOrigin.X,

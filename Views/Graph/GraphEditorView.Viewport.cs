@@ -44,6 +44,10 @@ public partial class GraphEditorView : UserControl
         var middle = properties.IsMiddleButtonPressed && panButton is "Middle" or "Right + Middle";
         if (!right && !middle)
         {
+            if (properties.IsRightButtonPressed)
+            {
+                e.Handled = true;
+            }
             return;
         }
 
@@ -152,7 +156,7 @@ public partial class GraphEditorView : UserControl
             _isPanning = false;
             e.Pointer.Capture(null);
             e.Handled = true;
-            if (openMenu)
+            if (openMenu && DataContext is GraphWorkspaceViewModel { IsReadOnly: false })
             {
                 GraphCanvas.ContextMenu?.Open(GraphCanvas);
             }
@@ -162,7 +166,10 @@ public partial class GraphEditorView : UserControl
         if (e.InitialPressMouseButton == MouseButton.Right && OwnsInput(e.Source))
         {
             e.Handled = true;
-            GraphCanvas.ContextMenu?.Open(GraphCanvas);
+            if (DataContext is GraphWorkspaceViewModel { IsReadOnly: false })
+            {
+                GraphCanvas.ContextMenu?.Open(GraphCanvas);
+            }
         }
     }
 
