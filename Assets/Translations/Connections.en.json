@@ -17,6 +17,7 @@
   "Connections.CopyGodotCertificate": "Copy public TLS certificate for Godot",
   "Connections.GodotCertificateCopied": "Copied the public certificate for this editor session.",
   "Connections.Disconnected": "No preview viewer connected",
+  "Connections.Syncing": "Syncing...",
   "Connections.GpuPending": "GPU: waiting for execution feedback.",
   "Connections.GpuExecuted": "GPU execution confirmed (not pixel/readback verification).",
   "Connections.GpuErrors": "GPU preview could not apply the effect:\n{0}",

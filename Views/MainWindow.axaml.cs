@@ -111,7 +111,8 @@ public partial class MainWindow : Window
             ("file.saveAs", model.SaveProjectAsCommand),
             ("file.export", model.ExportVfxCommand),
             ("undo", model.UndoCommand),
-            ("redo", model.RedoCommand)
+            ("redo", model.RedoCommand),
+            ("preview.refresh", model.ForceRefreshPreviewCommand)
         ];
         foreach (var (id, command) in commands)
         {

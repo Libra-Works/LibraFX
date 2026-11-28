@@ -182,6 +182,8 @@
   "Editor.Paste": "貼り付け(_P)",
   "Editor.SearchNodes": "ノードを検索",
   "Editor.Refresh": "再読み込み",
+  "Editor.RefreshPreview": "全体更新プレビュー",
+  "Editor.RefreshPreviewTip": "接続中のランタイムへ全データを強制再送信します (F5)",
   "Editor.CoreNodes": "Core",
   "Editor.NodeDirectory": "プロジェクト専用ノード定義のディレクトリ",
   "Editor.NodeNotInProject": "現在のプロジェクトでは、このノードは追加できません。",

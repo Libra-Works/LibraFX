@@ -182,6 +182,8 @@
   "Editor.Paste": "_Paste",
   "Editor.SearchNodes": "Search nodes",
   "Editor.Refresh": "Refresh",
+  "Editor.RefreshPreview": "Refresh Preview",
+  "Editor.RefreshPreviewTip": "Force-resend the full effect package to connected runtimes (F5)",
   "Editor.CoreNodes": "Core",
   "Editor.NodeDirectory": "Project node definitions directory",
   "Editor.NodeNotInProject": "This node type is not available in the active project.",

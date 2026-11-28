@@ -115,6 +115,7 @@ public sealed class PreviewHost : IDisposable
         {
             _graph.History.StateChanged -= OnHistoryChanged;
             _graph.PreviewSignalRequested -= OnPreviewSignalRequested;
+            _graph.PreviewRefreshRequested -= OnPreviewRefreshRequested;
         }
         lock (_sync)
         {
@@ -124,6 +125,7 @@ public sealed class PreviewHost : IDisposable
         _graph = graph;
         graph.History.StateChanged += OnHistoryChanged;
         graph.PreviewSignalRequested += OnPreviewSignalRequested;
+        graph.PreviewRefreshRequested += OnPreviewRefreshRequested;
     }
 
     private void DetachGraph()
@@ -135,6 +137,7 @@ public sealed class PreviewHost : IDisposable
         {
             _graph.History.StateChanged -= OnHistoryChanged;
             _graph.PreviewSignalRequested -= OnPreviewSignalRequested;
+            _graph.PreviewRefreshRequested -= OnPreviewRefreshRequested;
         }
 
         lock (_sync)
@@ -163,6 +166,22 @@ public sealed class PreviewHost : IDisposable
     private void OnPlaybackChanged(object? sender, EventArgs e)
     {
         try { Publish(reuseGraph: true); }
+        catch (Exception ex)
+        {
+            if (_model is not null) _model.PreviewStatus = $"Snapshot error: {ex.Message}";
+        }
+    }
+
+    private void OnPreviewRefreshRequested(object? sender, EventArgs e)
+    {
+        lock (_sync)
+        {
+            foreach (var client in _clients.Values)
+            {
+                Interlocked.Exchange(ref client.ForceSnapshot, 1);
+            }
+        }
+        try { Publish(); }
         catch (Exception ex)
         {
             if (_model is not null) _model.PreviewStatus = $"Snapshot error: {ex.Message}";
@@ -386,6 +405,7 @@ public sealed class PreviewHost : IDisposable
                 if (message.Kind == CompiledPreviewKind.Program)
                 {
                     _telemetry?.ExpectProgramAcknowledgement(id, publication.Sequence);
+                    Dispatcher.UIThread.Post(() => _model?.RefreshPreviewConnections());
                 }
                 await SendSerializedAsync(socket, client, message.Bytes, WebSocketMessageType.Binary, cancellation);
                 if (unityPreview)

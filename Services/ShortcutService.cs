@@ -73,6 +73,7 @@ public sealed class ShortcutService : ObservableObject
         new("undo", "Undo", "Global", Key.Z, KeyModifiers.Control),
         new("redo", "Redo", "Global", Key.Y, KeyModifiers.Control),
         new("search.anything", "Search anything", "Global", Key.P, KeyModifiers.Control),
+        new("preview.refresh", "Refresh full preview", "Global", Key.F5, KeyModifiers.None),
         new("graph.copy", "Copy nodes", "Graph", Key.C, KeyModifiers.Control),
         new("graph.cut", "Cut nodes", "Graph", Key.X, KeyModifiers.Control),
         new("graph.paste", "Paste nodes", "Graph", Key.V, KeyModifiers.Control),

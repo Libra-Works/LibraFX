@@ -17,6 +17,7 @@
   "Connections.CopyGodotCertificate": "Godot 用の公開 TLS 証明書をコピー",
   "Connections.GodotCertificateCopied": "このエディターセッションの公開証明書をコピーしました。",
   "Connections.Disconnected": "プレビュービューワー未接続",
+  "Connections.Syncing": "転送中...",
   "Connections.GpuPending": "GPU：実行結果を待っています。",
   "Connections.GpuExecuted": "GPU実行を確認しました（描画ピクセルの検証とは別です）。",
   "Connections.GpuErrors": "GPUプレビューにエフェクトを適用できませんでした：\n{0}",

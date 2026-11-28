@@ -138,7 +138,15 @@
 
         <Border Grid.Row="2" Classes="editor-bar" BorderThickness="0,1,0,0">
             <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
-                <views:PlaybackTransport ShowFrameTools="True" DataContext="{Binding Playback}" />
+                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                    <views:PlaybackTransport ShowFrameTools="True" DataContext="{Binding Playback}" />
+                    <Border Classes="editor-toolbar-group" Padding="4,2">
+                        <views:IconButton Classes="editor-tool" Icon="Reset"
+                                          Command="{Binding ForceRefreshPreviewCommand}"
+                                          ToolTip.Tip="{DynamicResource Text.Editor.RefreshPreviewTip}"
+                                          AutomationProperties.Name="{DynamicResource Text.Editor.RefreshPreview}" />
+                    </Border>
+                </StackPanel>
                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
                     <TextBlock Classes="editor-label" Text="{Binding FileStatus}" TextTrimming="CharacterEllipsis" />
                     <TextBlock Classes="editor-label" Text="{Binding WindowLayouts.Status}" TextTrimming="CharacterEllipsis" />

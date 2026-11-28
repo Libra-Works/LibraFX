@@ -45,8 +45,13 @@ public partial class MainViewModel : ViewModelBase
         get
         {
             var peers = PreviewTelemetry.Clients();
-            return peers.Count == 0 ? LocalizationService.Shared.Get("Connections.Disconnected") :
-                string.Join(" | ", peers.Select(peer => $"{peer.Engine ?? "?"} / {peer.Role ?? "?"} / {peer.ViewerName ?? peer.ClientId.ToString("D")[..8]}"));
+            if (peers.Count == 0) return LocalizationService.Shared.Get("Connections.Disconnected");
+            var syncing = LocalizationService.Shared.Get("Connections.Syncing");
+            return string.Join(" | ", peers.Select(peer =>
+            {
+                var label = $"{peer.Engine ?? "?"} / {peer.Role ?? "?"} / {peer.ViewerName ?? peer.ClientId.ToString("D")[..8]}";
+                return peer.AwaitingProgramAcknowledgement ? $"{label} ({syncing})" : label;
+            }));
         }
     }
     public void RefreshPreviewConnections() => OnPropertyChanged(nameof(PreviewConnectionSummary));
@@ -176,6 +181,7 @@ public partial class MainViewModel : ViewModelBase
     public ActiveGraphProvider ActiveGraphProvider { get; }
 
     public IRelayCommand NewDocumentCommand { get; }
+    public IRelayCommand ForceRefreshPreviewCommand { get; }
 
     public IRelayCommand UndoCommand { get; }
 
@@ -252,6 +258,7 @@ public partial class MainViewModel : ViewModelBase
         SetActiveDocument(initialDocument);
 
         NewDocumentCommand = new RelayCommand(CreateDocument);
+        ForceRefreshPreviewCommand = new RelayCommand(RequestForcePreviewRefresh, () => ActiveDocument is not null);
         UndoCommand = new RelayCommand(
             () => ActiveDocument?.Workspace.History.Undo(),
             () => ActiveDocument?.Workspace.History.CanUndo == true);
@@ -625,6 +632,14 @@ public partial class MainViewModel : ViewModelBase
         SaveProjectCommand?.NotifyCanExecuteChanged();
         SaveProjectAsCommand?.NotifyCanExecuteChanged();
         ExportVfxCommand?.NotifyCanExecuteChanged();
+        ForceRefreshPreviewCommand?.NotifyCanExecuteChanged();
+    }
+
+    public void RequestForcePreviewRefresh()
+    {
+        if (ActiveDocument is not { } document) return;
+        document.Workspace.RequestPreviewRefresh();
+        PreviewStatus = LocalizationService.Shared.Get("Procedural.RefreshPreviewRequested");
     }
 
     private GraphWorkspaceViewModel CreateWorkspace(bool initializeNew = false)

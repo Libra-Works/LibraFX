@@ -18,6 +18,9 @@ public sealed partial class GraphWorkspaceViewModel : ObservableObject
     public event EventHandler<Guid>? GpuProgramChanged;
     // Transient preview intent only: never a graph edit or an undoable command.
     public event EventHandler<Guid>? PreviewSignalRequested;
+    public event EventHandler? PreviewRefreshRequested;
+
+    public void RequestPreviewRefresh() => _document.PreviewRefreshRequested?.Invoke(this, EventArgs.Empty);
 
     public bool CanSendPreviewSignal(GraphNodeViewModel node) =>
         Nodes.Contains(node) && SignalTimeline.Supports(node.BaseDefinition.Kind) &&
