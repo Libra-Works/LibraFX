@@ -10,6 +10,10 @@ namespace LiberaFx.Views;
 // Lazy creation is essential: a collapsed group must not recursively construct its descendants.
 public sealed class InlineGraphHost : ContentControl
 {
+    public InlineGraphHost()
+    {
+        ContextRequested += (_, e) => e.Handled = true;
+    }
     private GraphNodeViewModel? _node;
     private GraphEditorView? _editor;
     private GpuWorkspaceView? _gpu;

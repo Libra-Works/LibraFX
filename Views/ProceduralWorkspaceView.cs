@@ -40,6 +40,7 @@ public sealed partial class ProceduralWorkspaceView : UserControl
     {
         IsVisible = false;
         Focusable = true;
+        ContextRequested += (_, e) => e.Handled = true;
         var grid = new Grid { RowDefinitions = new RowDefinitions("Auto,*,Auto") };
         _toolbar.Children.Add(_breadcrumb);
         var header = new Border { Child = _toolbar, BorderThickness = new Thickness(0, 0, 0, 1) };
