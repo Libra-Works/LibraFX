@@ -241,6 +241,7 @@ public partial class GpuWorkspaceView : UserControl
             }
             CapacityLabel.Text = LocalizationService.Shared.Get(fluid ? "Fluid.CellCount" : "Gpu.Capacity");
             Capacity.IsEnabled = ApplyCapacityButton.IsEnabled = !fluid;
+            PaletteBorder.IsVisible = fluid || vm.Kernel is null;
             TypeChoiceLabel.IsVisible = TypeChoice.IsVisible = !fluid && vm.Kernel is not null;
             FutureTextureButton.IsVisible = !fluid;
             BackButton.Content = LocalizationService.Shared.Get(vm.Kernel is null ? "Gpu.Close" : "Gpu.FlowBack");

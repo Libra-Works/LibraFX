@@ -88,32 +88,46 @@
                 </StackPanel>
             </Border>
             <Border Classes="editor-toolbar-group" IsVisible="{Binding InspectorNode.HasDynamicPins, FallbackValue=False}" Padding="6,4">
-                <WrapPanel Orientation="Horizontal" ItemSpacing="10" LineSpacing="4" VerticalAlignment="Center">
-                    <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center"
-                                IsVisible="{Binding InspectorNode.HasDynamicInputs, FallbackValue=False}">
-                        <TextBlock Classes="editor-label" Text="{DynamicResource Text.Editor.DynamicPins.Inputs}" />
-                        <viewsControls:IconButton Classes="editor-tool" Icon="Add"
-                                          Command="{Binding InspectorNode.AddDynamicInputCommand}"
-                                          ToolTip.Tip="{DynamicResource Text.Editor.DynamicPins.AddInput}"
-                                          AutomationProperties.Name="{DynamicResource Text.Editor.DynamicPins.AddInput}" />
-                        <viewsControls:IconButton Classes="editor-tool" Icon="Remove"
-                                          Command="{Binding InspectorNode.RemoveDynamicInputCommand}"
-                                          ToolTip.Tip="{DynamicResource Text.Editor.DynamicPins.RemoveInput}"
-                                          AutomationProperties.Name="{DynamicResource Text.Editor.DynamicPins.RemoveInput}" />
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center"
-                                IsVisible="{Binding InspectorNode.HasDynamicOutputs, FallbackValue=False}">
-                        <TextBlock Classes="editor-label" Text="{DynamicResource Text.Editor.DynamicPins.Outputs}" />
-                        <viewsControls:IconButton Classes="editor-tool" Icon="Add"
-                                          Command="{Binding InspectorNode.AddDynamicOutputCommand}"
-                                          ToolTip.Tip="{DynamicResource Text.Editor.DynamicPins.AddOutput}"
-                                          AutomationProperties.Name="{DynamicResource Text.Editor.DynamicPins.AddOutput}" />
-                        <viewsControls:IconButton Classes="editor-tool" Icon="Remove"
-                                          Command="{Binding InspectorNode.RemoveDynamicOutputCommand}"
-                                          ToolTip.Tip="{DynamicResource Text.Editor.DynamicPins.RemoveOutput}"
-                                          AutomationProperties.Name="{DynamicResource Text.Editor.DynamicPins.RemoveOutput}" />
-                    </StackPanel>
-                </WrapPanel>
+                <StackPanel Spacing="6">
+                    <WrapPanel Orientation="Horizontal" ItemSpacing="10" LineSpacing="4" VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center"
+                                    IsVisible="{Binding InspectorNode.HasDynamicInputs, FallbackValue=False}">
+                            <TextBlock Classes="editor-label" Text="{DynamicResource Text.Editor.DynamicPins.Inputs}" />
+                            <viewsControls:IconButton Classes="editor-tool" Icon="Add"
+                                              Command="{Binding InspectorNode.AddDynamicInputCommand}"
+                                              ToolTip.Tip="{DynamicResource Text.Editor.DynamicPins.AddInput}"
+                                              AutomationProperties.Name="{DynamicResource Text.Editor.DynamicPins.AddInput}" />
+                            <viewsControls:IconButton Classes="editor-tool" Icon="Remove"
+                                              Command="{Binding InspectorNode.RemoveDynamicInputCommand}"
+                                              ToolTip.Tip="{DynamicResource Text.Editor.DynamicPins.RemoveInput}"
+                                              AutomationProperties.Name="{DynamicResource Text.Editor.DynamicPins.RemoveInput}" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center"
+                                    IsVisible="{Binding InspectorNode.HasDynamicOutputs, FallbackValue=False}">
+                            <TextBlock Classes="editor-label" Text="{DynamicResource Text.Editor.DynamicPins.Outputs}" />
+                            <viewsControls:IconButton Classes="editor-tool" Icon="Add"
+                                              Command="{Binding InspectorNode.AddDynamicOutputCommand}"
+                                              ToolTip.Tip="{DynamicResource Text.Editor.DynamicPins.AddOutput}"
+                                              AutomationProperties.Name="{DynamicResource Text.Editor.DynamicPins.AddOutput}" />
+                            <viewsControls:IconButton Classes="editor-tool" Icon="Remove"
+                                              Command="{Binding InspectorNode.RemoveDynamicOutputCommand}"
+                                              ToolTip.Tip="{DynamicResource Text.Editor.DynamicPins.RemoveOutput}"
+                                              AutomationProperties.Name="{DynamicResource Text.Editor.DynamicPins.RemoveOutput}" />
+                        </StackPanel>
+                    </WrapPanel>
+                    <ItemsControl ItemsSource="{Binding InspectorNode.CpuCustomPinNames}"
+                                  IsVisible="{Binding InspectorNode.IsCpuParticleAttributeStage, FallbackValue=False}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vmGraph:GraphNodeViewModel+CpuCustomPinNameEntry">
+                                <Grid ColumnDefinitions="76,*" ColumnSpacing="6" Margin="0,2,0,0">
+                                    <TextBlock Classes="editor-label" Text="{Binding DefaultName}" VerticalAlignment="Center" />
+                                    <TextBox Grid.Column="1" Text="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                             PlaceholderText="{Binding DefaultName}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
             </Border>
             <Border Classes="editor-toolbar-group" IsVisible="{Binding CanManageGroup}" Padding="6,4"
                     ToolTip.Tip="{Binding GroupStatus}">

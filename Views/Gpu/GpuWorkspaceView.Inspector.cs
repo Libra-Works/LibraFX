@@ -400,6 +400,33 @@ public partial class GpuWorkspaceView : UserControl
             vm.Edit(new() { Action = "spawn-rate", SpawnRate = (double)(spawnRate.Value ?? 0) }));
         applySpawnRate.IsEnabled = !vm.Graph.IsReadOnly;
         BindingsPanel.Children.Add(applySpawnRate);
+
+        BindingsPanel.Children.Add(new TextBlock { Text = LocalizationService.Shared.GetOrDefault("Cpu.Parameter.Burst", "Initial burst") });
+        var initialBurst = new NumericUpDown
+        {
+            Name = "GpuInitialBurst",
+            Minimum = 0,
+            Maximum = vm.State.Program.Capacity,
+            Value = vm.State.Program.InitialBurst ?? 0,
+            IsEnabled = !vm.Graph.IsReadOnly
+        };
+        initialBurst.ValueChanged += (_, _) => Run(() =>
+            vm.Edit(new() { Action = "initial-burst", InitialBurst = (uint)(initialBurst.Value ?? 0) }));
+        BindingsPanel.Children.Add(initialBurst);
+
+        BindingsPanel.Children.Add(new TextBlock { Text = LocalizationService.Shared.GetOrDefault("Cpu.Parameter.WarmupTime", "Warmup time (s)") });
+        var warmupTime = new NumericUpDown
+        {
+            Name = "GpuWarmupTime",
+            Minimum = 0,
+            Maximum = 600,
+            Increment = 0.1m,
+            Value = (decimal)(vm.State.Program.WarmupTime ?? 0),
+            IsEnabled = !vm.Graph.IsReadOnly
+        };
+        warmupTime.ValueChanged += (_, _) => Run(() =>
+            vm.Edit(new() { Action = "warmup-time", WarmupTime = (double)(warmupTime.Value ?? 0) }));
+        BindingsPanel.Children.Add(warmupTime);
         BindingsPanel.Children.Add(Button(LocalizationService.Shared.Get("Gpu.AddFlowMap"), () =>
         {
             var resource = new ResourceDeclaration
@@ -595,7 +622,7 @@ public partial class GpuWorkspaceView : UserControl
                 _selectedNodes.UnionWith(_nodeVisuals.Keys); _selection = _selectedNodes.LastOrDefault();
                 UpdateSelectionStyles(); BuildInspector();
             }
-            else if (shortcuts.Matches("graph.search", e)) OpenGraphContext(_viewport.LastPointer ?? _pastePosition);
+            else if (shortcuts.Matches("graph.search", e)) OpenQuickSearch(_viewport.LastPointer ?? _pastePosition);
             else if (shortcuts.Matches("graph.frame", e)) OnFrame(sender, new());
             else if (shortcuts.Matches("graph.zoomIn", e)) OnZoomIn(sender, new());
             else if (shortcuts.Matches("graph.zoomOut", e)) OnZoomOut(sender, new());

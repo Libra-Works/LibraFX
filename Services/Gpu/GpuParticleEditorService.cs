@@ -54,6 +54,8 @@ public sealed record GpuEdit
     public KernelGraph? Kernel { get; init; }
     public string? Text { get; init; }
     public uint? Capacity { get; init; }
+    public uint? InitialBurst { get; init; }
+    public double? WarmupTime { get; init; }
     public double? SpawnRate { get; init; }
     public ResourceDeclaration? Resource { get; init; }
     public string? AssetPath { get; init; }
@@ -325,6 +327,18 @@ public static class GpuParticleEditorService
             if (edit.SpawnRate is not { } rate || !double.IsFinite(rate) || rate < 0 || rate > 1_000_000)
                 throw new ArgumentException("Spawn rate must be between 0 and 1000000.");
             return state with { Program = state.Program with { SpawnRate = rate } };
+        }
+        if (edit.Action == "initial-burst")
+        {
+            if (edit.InitialBurst is not { } burst || burst > state.Program.Capacity)
+                throw new ArgumentException("Initial burst must be between 0 and particle capacity.");
+            return state with { Program = state.Program with { InitialBurst = burst } };
+        }
+        if (edit.Action == "warmup-time")
+        {
+            if (edit.WarmupTime is not { } warmup || !double.IsFinite(warmup) || warmup < 0 || warmup > 600)
+                throw new ArgumentException("Warmup time must be between 0 and 600 seconds.");
+            return state with { Program = state.Program with { WarmupTime = warmup } };
         }
         if (edit.Action == "resource-plan")
             return state with { ResourcePlanDraft = GpuResourcePlanCompiler.Parse(edit.Text ?? throw new ArgumentException("Resource plan JSON required.")) };

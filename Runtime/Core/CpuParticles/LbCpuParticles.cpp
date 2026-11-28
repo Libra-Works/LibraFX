@@ -132,6 +132,27 @@ auto CpuParticleWorld::advance(Instance& root, double time, bool emitting, const
     }
     for (auto& system : impl_->systems)
     {
+        if (emitting && system->warmupRemaining > 0)
+        {
+            constexpr double kWarmupStep = 1.0 / 60.0;
+            double simTime = 0;
+            while (system->warmupRemaining > 0)
+            {
+                const double dt = std::min(kWarmupStep, system->warmupRemaining);
+                simTime += dt;
+                system->warmupRemaining -= dt;
+                system->frameDelta = dt;
+                system->realTime = simTime;
+                system->realDelta = dt;
+                auto warmupResult = system->tick(root, simTime, true, quality);
+                if (warmupResult != Result::Ok)
+                {
+                    system->failure = warmupResult;
+                    return warmupResult;
+                }
+            }
+            system->lastTime = 0;
+        }
         system->frameDelta = frameDelta;
         system->realTime = root.realEffectTime();
         system->realDelta = root.realFrameDelta();
@@ -302,6 +323,7 @@ void CpuParticleWorld::clear() noexcept
             system->particleData.active[index] = false;
         }
         system->live = 0;
+        system->warmupRemaining = system->warmupTime;
         system->incomingCount = 0;
         system->pendingCount = 0;
         system->deliveryCount = 0;

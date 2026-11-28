@@ -137,7 +137,9 @@ public partial class GpuWorkspaceView : UserControl
         if (Workspace is not { Kernel: not null } vm) return;
         Focus(); _pastePosition = position;
         var add = new MenuItem { Header = LocalizationService.Shared.Get("Gpu.AddNode") };
-        add.ItemsSource = vm.Palette.Select(op =>
+        add.ItemsSource = vm.Palette
+            .Where(op => op.Op is not (GpuOp.ReadAttribute or GpuOp.ReadUniform))
+            .Select(op =>
         {
             var item = new MenuItem { Header = op.DisplayName };
             ToolTip.SetTip(item, OpDescription(op.Op));
@@ -145,6 +147,8 @@ public partial class GpuWorkspaceView : UserControl
                 TypeChoice.SelectedItem is GpuType type ? type : GpuType.Float, new(position.X, position.Y)).Id));
             return item;
         }).ToArray();
+        var quickAdd = new MenuItem { Header = LocalizationService.Shared.Get("Gpu.AddNode") + " (Search…)" };
+        quickAdd.Click += (_, _) => OpenQuickSearch(position);
         var remove = new MenuItem { Header = LocalizationService.Shared.Get("Gpu.Delete"), IsEnabled = _selectedNodes.Count > 0 };
         remove.Click += (_, _) => DeleteSelection();
         var copy = new MenuItem { Header = LocalizationService.Shared.Get("Gpu.Copy"), IsEnabled = _selectedNodes.Count > 0 };
@@ -153,8 +157,79 @@ public partial class GpuWorkspaceView : UserControl
         cut.Click += async (_, _) => await CopySelectionAsync(true);
         var paste = new MenuItem { Header = LocalizationService.Shared.Get("Gpu.Paste") };
         paste.Click += async (_, _) => await PasteAsync();
-        NodeCanvas.ContextMenu = new ContextMenu { ItemsSource = new Control[] { add, new Separator(), copy, cut, paste, remove } };
+        NodeCanvas.ContextMenu = new ContextMenu { ItemsSource = new Control[] { quickAdd, add, new Separator(), copy, cut, paste, remove } };
         NodeCanvas.ContextMenu.Open(NodeCanvas);
+    }
+
+    private void OpenQuickSearch(Point position)
+    {
+        if (Workspace is not { Kernel: not null } vm) return;
+        var items = vm.Palette
+            .Where(op => op.Op is not (GpuOp.ReadAttribute or GpuOp.ReadUniform))
+            .ToArray();
+        var search = new TextBox { PlaceholderText = "Search GPU node…" };
+        var list = new ListBox
+        {
+            MaxHeight = 240,
+            ItemsSource = items.Select(op => op.DisplayName).ToArray()
+        };
+        if (list.ItemCount > 0) list.SelectedIndex = 0;
+        var filtered = items;
+        search.TextChanged += (_, _) =>
+        {
+            var q = search.Text?.Trim() ?? "";
+            filtered = string.IsNullOrEmpty(q)
+                ? items
+                : items.Where(op => op.DisplayName.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                                    op.Op.ToString().Contains(q, StringComparison.OrdinalIgnoreCase)).ToArray();
+            list.ItemsSource = filtered.Select(op => op.DisplayName).ToArray();
+            if (filtered.Length > 0) list.SelectedIndex = 0;
+        };
+        var popup = new Avalonia.Controls.Primitives.Popup
+        {
+            PlacementTarget = NodeCanvas,
+            Placement = PlacementMode.Pointer,
+            IsLightDismissEnabled = true
+        };
+        void CommitSelection()
+        {
+            var idx = list.SelectedIndex;
+            if (idx >= 0 && idx < filtered.Length)
+            {
+                var op = filtered[idx].Op;
+                popup.IsOpen = false;
+                Run(() => SelectVisualNode(vm.Add(op,
+                    TypeChoice.SelectedItem is GpuType type ? type : GpuType.Float, new(position.X, position.Y)).Id));
+            }
+        }
+        search.KeyDown += (_, e) =>
+        {
+            if (e.Key == Key.Enter) { CommitSelection(); e.Handled = true; }
+            else if (e.Key == Key.Escape) { popup.IsOpen = false; e.Handled = true; }
+            else if (e.Key == Key.Down && filtered.Length > 0)
+            {
+                list.SelectedIndex = Math.Min(filtered.Length - 1, Math.Max(0, list.SelectedIndex + 1));
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Up && filtered.Length > 0)
+            {
+                list.SelectedIndex = Math.Max(0, list.SelectedIndex - 1);
+                e.Handled = true;
+            }
+        };
+        list.DoubleTapped += (_, _) => CommitSelection();
+        popup.Child = new Border
+        {
+            Width = 240,
+            Padding = new Thickness(6),
+            CornerRadius = new CornerRadius(6),
+            Background = this.FindResource("EffectSurfaceBrush") as IBrush ?? Brushes.DimGray,
+            BorderBrush = this.FindResource("EffectBorderBrush") as IBrush ?? Brushes.Gray,
+            BorderThickness = new Thickness(1),
+            Child = new StackPanel { Spacing = 4, Children = { search, list } }
+        };
+        popup.Opened += (_, _) => search.Focus();
+        popup.IsOpen = true;
     }
     private void DeleteSelection()
     {

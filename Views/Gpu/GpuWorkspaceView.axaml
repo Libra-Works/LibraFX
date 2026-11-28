@@ -28,8 +28,8 @@
         </Border>
       </Grid>
     </Border>
-    <Grid Grid.Row="1" ColumnDefinitions="190,*">
-      <Border BorderThickness="0,0,1,0" BorderBrush="{DynamicResource EffectBorderBrush}" Padding="8">
+    <Grid Grid.Row="1" ColumnDefinitions="Auto,*">
+      <Border x:Name="PaletteBorder" Width="190" BorderThickness="0,0,1,0" BorderBrush="{DynamicResource EffectBorderBrush}" Padding="8">
         <ScrollViewer><StackPanel Spacing="6">
           <TextBlock Classes="editor-heading" Text="{DynamicResource Text.Gpu.Palette}" />
           <TextBlock x:Name="TypeChoiceLabel" Classes="editor-label" Text="{DynamicResource Text.Gpu.NewNodeType}" />

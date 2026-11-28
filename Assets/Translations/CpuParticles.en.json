@@ -59,6 +59,7 @@
   "Cpu.Parameter.Seed":"Seed (UInt32)",
   "Cpu.Parameter.Rate":"Default particles / second",
   "Cpu.Parameter.Burst":"Initial burst",
+  "Cpu.Parameter.WarmupTime":"Warmup time (s)",
   "Cpu.Parameter.Queue":"Bounded queue capacity",
   "Cpu.Parameter.Reduction":"Output reduction (None / LastById)",
   "Cpu.Help.Container":"Simulates a bounded CPU particle pool. Open Spawn and Update child graphs; ordinary CPU values and Signals run separately for each particle. Requires the matching updated SDK.",

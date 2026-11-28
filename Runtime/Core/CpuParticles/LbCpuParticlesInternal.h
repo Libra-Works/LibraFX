@@ -95,7 +95,7 @@ struct ParticleStorage final {
     std::array<std::vector<double>, 3> position, velocity;
     std::array<std::vector<double>, 4> color;
     std::array<std::vector<double>, 2> size;
-    std::array<std::vector<double>, 4> custom;
+    std::array<std::vector<double>, 64> custom;
     std::vector<double> age, life, realStart;
     std::vector<std::uint64_t> id;
     std::vector<std::uint8_t> active;
@@ -167,7 +167,7 @@ struct System final {
     Result refreshEmitter(double time);
     Id id{}, emissionSource{};
     std::uint32_t capacity = 0, seed = 0, queueCapacity = 0, burst = 0, emissionComponent = 0;
-    double rate = 0, remainder = 0, lastTotal = 0, lastTime = -1, stepDelta = 0;
+    double rate = 0, warmupTime = 0, warmupRemaining = 0, remainder = 0, lastTotal = 0, lastTime = -1, stepDelta = 0;
     double frameDelta = 0;
     double realTime = 0, realDelta = 0;
     std::uint32_t initialBurst = 0;

@@ -92,6 +92,7 @@ auto parse(const std::uint8_t* bytes, std::size_t count,
             !system->queueCapacity || system->queueCapacity > 1000000 ||
             !reader.number(system->rate) || system->rate < 0 ||
             !reader.u32(system->burst) || system->burst > system->capacity ||
+            !reader.number(system->warmupTime) || system->warmupTime < 0 || system->warmupTime > 600 ||
             !reader.id(system->emissionSource) || !reader.u32(system->emissionComponent) ||
             system->emissionComponent > 3)
         {
@@ -137,6 +138,7 @@ auto parse(const std::uint8_t* bytes, std::size_t count,
 auto System::initialize(const CustomNodeDescriptor* registry, std::size_t registryCount, bool enableBatching) -> Result
 {
     initialBurst=burst;
+    warmupRemaining=warmupTime;
     if (!emitterDefinitionBytes.empty()) {
         auto status = procedural_adapter::decode(emitterDefinitionBytes.data(), emitterDefinitionBytes.size(), emitterDefinition);
         if (status != LIBRA_OK || emitterDefinition.kind != 0) return Result::InvalidBinary;

@@ -47,7 +47,7 @@ public static class CpuParticleBinaryOptimizer
         writer.Write(version); writer.Write(count);
         for (var system = 0; system < count; system++)
         {
-            writer.Write(Read(60)); // ID, capacity, seed, queue, rate, burst, emitter source/component.
+            writer.Write(Read(68)); // ID, capacity, seed, queue, rate, burst, warmupTime, emitter source/component.
             for (var stage = 0; stage < 2; stage++)
             {
                 writer.Write(Read(16)); // Entry UUID remains stable.

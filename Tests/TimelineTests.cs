@@ -270,6 +270,7 @@ internal static class TimelineTests
         var customConst = spawnGraph.CreateNode(GraphNodeKind.Float, 0, 180);
         spawnGraph.SetParameter(customConst, "value", JsonSerializer.SerializeToElement(0.5));
         var spawnOut = spawnGraph.CreateNode(new GraphNodeKind("CpuParticleAttributesOutput"), 220, 40);
+        spawnGraph.SetParameter(spawnOut, "customCount", JsonSerializer.SerializeToElement(1));
         string? e2 = null, e3 = null;
         if (!spawnGraph.TryConnectNodes(spawnEvent, spawnOut, out var e1, "signal", "then") ||
             !spawnGraph.TryConnectNodes(lifeConst, spawnOut, out e2, "life") ||
@@ -282,6 +283,7 @@ internal static class TimelineTests
         foreach (var existing in updateGraph.Connections.Where(c => c.Source == updateEvent).ToArray())
             updateGraph.DisconnectConnection(existing);
         var updateIn = updateGraph.CreateNode(new GraphNodeKind("CpuParticleAttributesInput"), 0, 40);
+        updateGraph.SetParameter(updateIn, "customCount", JsonSerializer.SerializeToElement(1));
         var addAge = updateGraph.CreateNode(GraphNodeKind.Add, 220, 40);
         var mulDt = updateGraph.CreateNode(GraphNodeKind.Multiply, 140, 120);
         var updateOut = updateGraph.CreateNode(new GraphNodeKind("CpuParticleAttributesOutput"), 380, 40);

@@ -32,6 +32,10 @@ public sealed record GpuProgram
     public bool TransformEmitterShape { get; init; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public double? SpawnRate { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public uint? InitialBurst { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public double? WarmupTime { get; init; }
     public string Id { get; init; } = "emitter";
     public uint Capacity { get; init; } = 4096;
     public List<AttributeDeclaration> Attributes { get; init; } = ParticleAbi.Attributes.ToList();

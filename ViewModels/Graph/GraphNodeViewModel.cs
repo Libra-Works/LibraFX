@@ -108,11 +108,83 @@ public sealed class GraphNodeViewModel : ObservableObject
     public bool HasLegacyInput => HasPorts && Definition.InputPorts is null &&
         BaseDefinition.Kind.Value is not ("Float" or "FloatX2" or "FloatX3" or "FloatX4" or "Int32" or "Bool" or "Signal");
     public bool HasCustomInputs => HasPorts && Definition.InputPorts is { Count: > 0 };
+    public bool IsCpuParticleAttributeStage =>
+        BaseDefinition.Kind.Value is "CpuParticleAttributesInput" or "CpuParticleAttributesOutput";
+    public bool ShowInlineDynamicInputs => HasDynamicInputs && !IsCpuParticleAttributeStage;
+    public bool ShowInlineDynamicOutputs => HasDynamicOutputs && !IsCpuParticleAttributeStage;
+
+    public sealed class CpuCustomPinNameEntry(GraphNodeViewModel node, string portId, string defaultName)
+    {
+        private readonly string _portId = portId;
+        public string PortId => _portId;
+        public string DefaultName { get; } = defaultName;
+        public string Name
+        {
+            get => node.GetCpuCustomPinName(_portId) ?? string.Empty;
+            set => node.SetCpuCustomPinName(_portId, value);
+        }
+    }
+
+    private Dictionary<string, string> ReadCpuCustomPinNames()
+    {
+        var raw = Parameters?.FirstOrDefault(p => p.Id == "customNames")?.Value;
+        if (raw is { ValueKind: JsonValueKind.String } el && el.GetString() is { Length: > 0 } json)
+        {
+            try
+            {
+                return JsonSerializer.Deserialize<Dictionary<string, string>>(json) ?? [];
+            }
+            catch (JsonException) { }
+        }
+        return [];
+    }
+
+    public string? GetCpuCustomPinName(string portId) =>
+        ReadCpuCustomPinNames().TryGetValue(portId, out var custom) && !string.IsNullOrWhiteSpace(custom)
+            ? custom
+            : null;
+
+    public void SetCpuCustomPinName(string portId, string? name)
+    {
+        var map = ReadCpuCustomPinNames();
+        var trimmed = name?.Trim() ?? string.Empty;
+        if (string.IsNullOrEmpty(trimmed)) map.Remove(portId);
+        else map[portId] = trimmed;
+        _workspace.SetParameter(this, "customNames", JsonSerializer.SerializeToElement(JsonSerializer.Serialize(map)));
+        OnPropertyChanged(nameof(InputPorts));
+        OnPropertyChanged(nameof(OutputPorts));
+        OnPropertyChanged(nameof(CpuCustomPinNames));
+    }
+
+    public IReadOnlyList<CpuCustomPinNameEntry> CpuCustomPinNames
+    {
+        get
+        {
+            if (!IsCpuParticleAttributeStage) return [];
+            var group = DynamicInputGroup ?? DynamicOutputGroup;
+            if (group is null) return [];
+            var count = DynamicPinSchema.Count(group, Parameters);
+            return Enumerable.Range(0, count)
+                .Select(i => new CpuCustomPinNameEntry(this, DynamicPinSchema.PinId(group, i), DynamicPinSchema.PinName(group, i)))
+                .ToArray();
+        }
+    }
+
     public IReadOnlyList<GraphInputPortDefinition> InputPorts
     {
         get
         {
             var ports = Definition.InputPorts ?? [];
+            if (IsCpuParticleAttributeStage && ports.Count > 0)
+            {
+                var namesMap = ReadCpuCustomPinNames();
+                if (namesMap.Count > 0)
+                {
+                    return ports.Select(port => namesMap.TryGetValue(port.Id, out var custom) && !string.IsNullOrWhiteSpace(custom)
+                        ? port with { Name = custom }
+                        : port).ToArray();
+                }
+            }
             if (Definition.Kind.Value == "Transform")
             {
                 return ports.Select(port => port.Id == "parent" ? port with
@@ -144,10 +216,27 @@ public sealed class GraphNodeViewModel : ObservableObject
     }
     public bool HasLegacyOutput => HasPorts && Definition.OutputPorts is null;
     public bool HasCustomOutputs => HasPorts && Definition.OutputPorts is { Count: > 0 };
-    public IReadOnlyList<GraphOutputPortDefinition> OutputPorts => BaseDefinition.Kind.Value is "EffectAge" or "InstanceAge"
-        ? (Definition.OutputPorts ?? []).Select(port => port with { Name = LocalizationService.Shared.Get(
-            port.Id == "real" ? "Editor.Time.Real" : "Editor.Time.Scaled") }).ToArray()
-        : Definition.OutputPorts ?? [];
+    public IReadOnlyList<GraphOutputPortDefinition> OutputPorts
+    {
+        get
+        {
+            var ports = Definition.OutputPorts ?? [];
+            if (BaseDefinition.Kind.Value is "EffectAge" or "InstanceAge")
+                return ports.Select(port => port with { Name = LocalizationService.Shared.Get(
+                    port.Id == "real" ? "Editor.Time.Real" : "Editor.Time.Scaled") }).ToArray();
+            if (IsCpuParticleAttributeStage && ports.Count > 0)
+            {
+                var namesMap = ReadCpuCustomPinNames();
+                if (namesMap.Count > 0)
+                {
+                    return ports.Select(port => namesMap.TryGetValue(port.Id, out var custom) && !string.IsNullOrWhiteSpace(custom)
+                        ? port with { Name = custom }
+                        : port).ToArray();
+                }
+            }
+            return ports;
+        }
+    }
     public double OutputPortOffset(string? portId)
     {
         for (var index = 0; index < OutputPorts.Count; index++)

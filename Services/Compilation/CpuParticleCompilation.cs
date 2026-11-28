@@ -103,6 +103,14 @@ public static class CpuParticleCompilation
             }
             writer.Write(rate);
             writer.Write(Integer(system, "burst", 0, capacity));
+            var warmupTime = system.Parameters?.Any(parameter => parameter.Id == "warmupTime") == true
+                ? Number(system, "warmupTime")
+                : 0d;
+            if (!double.IsFinite(warmupTime) || warmupTime < 0 || warmupTime > 600)
+            {
+                throw new InvalidDataException("CPU Particle warmup time must be between 0 and 600 seconds.");
+            }
+            writer.Write(warmupTime);
             var emission = graph.Connections.SingleOrDefault(edge => edge.TargetNodeId == system.Id && edge.TargetPortId == "emitted");
             GuidId(writer, emission?.SourceNodeId ?? Guid.Empty);
             writer.Write(emission is null ? 0 : Component(graph, emission));
@@ -261,10 +269,10 @@ public static class CpuParticleCompilation
                         "stepDelta" => ("CpuParticleStepDelta", -1),
                         "id" => ("CpuParticleId", -1),
                         "seed" => ("CpuParticleSeed", -1),
-                        "custom0" => ("CpuParticleCustomRead", 0),
-                        "custom1" => ("CpuParticleCustomRead", 1),
-                        "custom2" => ("CpuParticleCustomRead", 2),
-                        "custom3" => ("CpuParticleCustomRead", 3),
+                        _ when portId.StartsWith("custom", StringComparison.Ordinal) &&
+                               int.TryParse(portId.AsSpan(6), out var customSlotIndex) &&
+                               customSlotIndex is >= 0 and < 64
+                            => ("CpuParticleCustomRead", customSlotIndex),
                         _ => throw new InvalidDataException($"Unknown CPU particle input attribute '{portId}'.")
                     };
                     var def = GraphNodeDefinition.Find(new(kindName))!;
@@ -285,12 +293,8 @@ public static class CpuParticleCompilation
             ("color", "CpuParticleSetColor", -1),
             ("size", "CpuParticleSetSize", -1),
             ("life", "CpuParticleSetLife", -1),
-            ("age", "CpuParticleSetAge", -1),
-            ("custom0", "CpuParticleCustomWrite", 0),
-            ("custom1", "CpuParticleCustomWrite", 1),
-            ("custom2", "CpuParticleCustomWrite", 2),
-            ("custom3", "CpuParticleCustomWrite", 3)
-        };
+            ("age", "CpuParticleSetAge", -1)
+        }.Concat(Enumerable.Range(0, 64).Select(i => ($"custom{i}", "CpuParticleCustomWrite", i))).ToArray();
 
         foreach (var (nodeId, outputNode) in outputStageNodes)
         {

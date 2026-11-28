@@ -209,7 +209,7 @@
                 <TextBlock Text="◢" Foreground="{DynamicResource EffectMutedForegroundBrush}" />
             </Border>
             <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Left"
-                        Margin="8,2,8,6" Spacing="4" IsVisible="{Binding HasDynamicInputs}">
+                        Margin="8,2,8,6" Spacing="4" IsVisible="{Binding ShowInlineDynamicInputs}">
                 <viewsControls:IconButton x:Name="DynamicAddInputButton" Icon="Add"
                                   Command="{Binding AddDynamicInputCommand}"
                                   ToolTip.Tip="{DynamicResource Text.Editor.DynamicPins.AddInput}"
@@ -220,7 +220,7 @@
                                   AutomationProperties.Name="{DynamicResource Text.Editor.DynamicPins.RemoveInput}" />
             </StackPanel>
             <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right"
-                        Margin="8,2,8,6" Spacing="4" IsVisible="{Binding HasDynamicOutputs}">
+                        Margin="8,2,8,6" Spacing="4" IsVisible="{Binding ShowInlineDynamicOutputs}">
                 <viewsControls:IconButton x:Name="SequenceAddOutputButton" Icon="Add"
                                   Command="{Binding AddDynamicOutputCommand}"
                                   ToolTip.Tip="{DynamicResource Text.Editor.DynamicPins.AddOutput}"

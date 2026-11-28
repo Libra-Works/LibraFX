@@ -119,6 +119,10 @@ public static class GpuCompiler
         if (p.Version != 1) Add("Version", "Only IR version 1 is supported.");
         if (p.SpawnRate is { } rate && (!double.IsFinite(rate) || rate < 0 || rate > 1_000_000))
             Add("SpawnRate", "Spawn rate must be finite and between 0 and 1000000 particles per second.");
+        if (p.InitialBurst is { } burst && burst > p.Capacity)
+            Add("InitialBurst", "Initial burst must not exceed particle capacity.");
+        if (p.WarmupTime is { } warmup && (!double.IsFinite(warmup) || warmup < 0 || warmup > 600))
+            Add("WarmupTime", "Warmup time must be finite and between 0 and 600 seconds.");
         if (!ValidId(p.Id)) Add("Id", "Program ID must contain 1–128 non-control characters.");
         if (p.Capacity == 0 || (ulong)p.Capacity * ParticleAbi.Stride > limits.MaxParticleBytes ||
             (ulong)p.Capacity * ParticleAbi.Stride > uint.MaxValue)

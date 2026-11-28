@@ -59,6 +59,7 @@
   "Cpu.Parameter.Seed":"Seed（UInt32）",
   "Cpu.Parameter.Rate":"既定の毎秒放出数",
   "Cpu.Parameter.Burst":"開始時の放出数",
+  "Cpu.Parameter.WarmupTime":"ウォームアップ時間 (秒)",
   "Cpu.Parameter.Queue":"有界キューの容量",
   "Cpu.Parameter.Reduction":"出力の集約方法（None / LastById）",
   "Cpu.Help.Container":"有界プールで CPU 粒子を実行します。Spawn・Update の子グラフを開いて編集し、通常の CPU 値と Signal を粒子ごとのスコープで実行します。対応する更新版 SDK が必要です。",
