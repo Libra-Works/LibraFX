@@ -157,9 +157,6 @@ public partial class GraphNodeView : UserControl
         {
             item.Node.PreviewMoveTo(item.X + dx, item.Y + dy);
         }
-        var dragged = _dragNodes.Select(item => item.Node).ToHashSet();
-        _dragEditor.ShowInteractionWires(_dragNode.Workspace,
-            _dragNode.Workspace.Connections.Where(edge => dragged.Contains(edge.Source) || dragged.Contains(edge.Target)));
         e.Handled = true;
     }
 

@@ -77,6 +77,8 @@ public partial class GraphEditorView : UserControl
         ConnectionLayer.GraphOrigin = _graphOrigin;
         GraphScrollViewer.AddHandler(InputElement.PointerWheelChangedEvent, OnViewportPointerWheelChanged,
             RoutingStrategies.Tunnel);
+        GraphScrollViewer.AddHandler(Control.RequestBringIntoViewEvent, (_, e) => e.Handled = true,
+            RoutingStrategies.Tunnel);
         AddHandler(InputElement.PointerPressedEvent, (_, e) =>
         {
             if (OwnsInput(e.Source) && DataContext is GraphWorkspaceViewModel graph)
