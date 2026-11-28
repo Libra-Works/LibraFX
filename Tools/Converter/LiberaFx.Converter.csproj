@@ -11,8 +11,8 @@
     <ProjectReference Include="..\..\Gpu\LibraGpu.Core\LibraGpu.Core.csproj" />
     <Compile Include="..\..\Models\Commands\UndoHistoryArchive.cs" Link="Models\Commands\UndoHistoryArchive.cs" />
     <Compile Include="..\..\Models\Commands\UndoRedoManager.Archives.cs" Link="Models\Commands\UndoRedoManager.Archives.cs" />
-    <Compile Include="..\..\Services\GpuParticleEditorService.cs" Link="Services\GpuParticleEditorService.cs" />
-    <Compile Include="..\..\Services\GpuProgramDelivery.cs" Link="Services\GpuProgramDelivery.cs" />
+    <Compile Include="..\..\Services\Gpu\GpuParticleEditorService.cs" Link="Services\GpuParticleEditorService.cs" />
+    <Compile Include="..\..\Services\Gpu\GpuProgramDelivery.cs" Link="Services\GpuProgramDelivery.cs" />
     <Compile Include="..\..\Services\Compilation\CpuEmitterMatrixLowering.cs" Link="Services\CpuEmitterMatrixLowering.cs" />
     <Compile Include="..\..\Services\Compilation\TimeOutputLowering.cs" Link="Services\TimeOutputLowering.cs" />
     <Compile Include="..\..\Models\Graph\BuiltInAssets.cs" Link="Models\BuiltInAssets.cs" />
@@ -48,11 +48,11 @@
     <Compile Include="..\..\Models\Commands\IUndoableCommand.cs" Link="Models\IUndoableCommand.cs" />
     <Compile Include="..\..\Models\Commands\UndoRedoManager.cs" Link="Models\UndoRedoManager.cs" />
     <Compile Include="..\..\Models\Project\LiberaFxProjectDocument.cs" Link="Models\LiberaFxProjectDocument.cs" />
-    <Compile Include="..\..\Services\ProjectDocumentReader.cs" Link="Services\ProjectDocumentReader.cs" />
-    <Compile Include="..\..\Services\GroupAssetLibrary.cs" Link="Services\GroupAssetLibrary.cs" />
-    <Compile Include="..\..\Services\StandardGroupAssetLibrary.cs" Link="Services\StandardGroupAssetLibrary.cs" />
-    <Compile Include="..\..\Services\BillboardGraphLibrary.cs" Link="Services\BillboardGraphLibrary.cs" />
-    <Compile Include="..\..\Services\GroupCompilationResolver.cs" Link="Services\GroupCompilationResolver.cs" />
+    <Compile Include="..\..\Services\Project\ProjectDocumentReader.cs" Link="Services\ProjectDocumentReader.cs" />
+    <Compile Include="..\..\Services\Assets\GroupAssetLibrary.cs" Link="Services\GroupAssetLibrary.cs" />
+    <Compile Include="..\..\Services\Assets\StandardGroupAssetLibrary.cs" Link="Services\StandardGroupAssetLibrary.cs" />
+    <Compile Include="..\..\Services\Assets\BillboardGraphLibrary.cs" Link="Services\BillboardGraphLibrary.cs" />
+    <Compile Include="..\..\Services\Assets\GroupCompilationResolver.cs" Link="Services\GroupCompilationResolver.cs" />
     <Compile Include="..\..\Services\Compilation\VfxProgram*.cs" Link="Services\%(Filename)%(Extension)" />
     <Compile Include="..\..\Services\Compilation\SpawnableGroupPackage.cs" Link="Services\SpawnableGroupPackage.cs" />
     <Compile Include="..\..\Services\Compilation\SpawnableGroupPackageBinary.cs" Link="Services\SpawnableGroupPackageBinary.cs" />
@@ -63,19 +63,20 @@
     <Compile Include="..\..\Services\Compilation\FlexiblePlaneDrawSchema.cs" Link="Services\FlexiblePlaneDrawSchema.cs" />
     <Compile Include="..\..\Models\Graph\ProceduralResourceSchema.cs" Link="Models\ProceduralResourceSchema.cs" />
     <Compile Include="..\..\Services\Compilation\ProceduralProgramBindings.cs" Link="Services\ProceduralProgramBindings.cs" />
+    <Compile Include="..\..\Services\Compilation\ProceduralLowering.cs" Link="Services\ProceduralLowering.cs" />
     <Compile Include="..\..\Services\Compilation\ProceduralDefinitionWriter.cs" Link="Services\ProceduralDefinitionWriter.cs" />
     <Compile Include="..\..\Services\Compilation\ProceduralPixelCompilation.cs" Link="Services\ProceduralPixelCompilation.cs" />
     <Compile Include="..\..\Services\Compilation\PreviewDebugDraw.cs" Link="Services\PreviewDebugDraw.cs" />
-    <Compile Include="..\..\Services\SpriteAnimationData.cs" Link="Services\SpriteAnimationData.cs" />
-    <Compile Include="..\..\Services\ParticleSpriteAnimation.cs" Link="Services\ParticleSpriteAnimation.cs" />
-    <Compile Include="..\..\Services\SpriteCompositionData.cs" Link="Services\SpriteCompositionData.cs" />
+    <Compile Include="..\..\Services\Sprite\SpriteAnimationData.cs" Link="Services\SpriteAnimationData.cs" />
+    <Compile Include="..\..\Services\Sprite\ParticleSpriteAnimation.cs" Link="Services\ParticleSpriteAnimation.cs" />
+    <Compile Include="..\..\Services\Sprite\SpriteCompositionData.cs" Link="Services\SpriteCompositionData.cs" />
     <Compile Include="..\..\Models\Resources\ResourceIdentity.cs" Link="Models\Resources\ResourceIdentity.cs" />
     <Compile Include="..\..\Models\Graph\GraphValueType.cs" Link="Models\Graph\GraphValueType.cs" />
-    <Compile Include="..\..\Services\ResourceIdentityResolver.cs" Link="Services\ResourceIdentityResolver.cs" />
-    <Compile Include="..\..\Services\ResourceIdentitySnapshot.cs" Link="Services\ResourceIdentitySnapshot.cs" />
-    <Compile Include="..\..\Services\ResourceIdentityExport.cs" Link="Services\ResourceIdentityExport.cs" />
-    <Compile Include="..\..\Services\EngineAsset.cs" Link="Services\EngineAsset.cs" />
-    <Compile Include="..\..\Services\EngineAssetPath.cs" Link="Services\EngineAssetPath.cs" />
+    <Compile Include="..\..\Services\Assets\ResourceIdentityResolver.cs" Link="Services\ResourceIdentityResolver.cs" />
+    <Compile Include="..\..\Services\Assets\ResourceIdentitySnapshot.cs" Link="Services\ResourceIdentitySnapshot.cs" />
+    <Compile Include="..\..\Services\Assets\ResourceIdentityExport.cs" Link="Services\ResourceIdentityExport.cs" />
+    <Compile Include="..\..\Services\Assets\EngineAsset.cs" Link="Services\EngineAsset.cs" />
+    <Compile Include="..\..\Services\Assets\EngineAssetPath.cs" Link="Services\EngineAssetPath.cs" />
     <EmbeddedResource Include="..\..\Assets\Nodes\*.json" LogicalName="LiberaFx.Assets.Nodes.%(Filename)%(Extension)" />
     <EmbeddedResource Include="..\..\Assets\Enums\*.json" LogicalName="LiberaFx.Assets.Enums.%(Filename)%(Extension)" />
     <EmbeddedResource Include="..\..\Assets\Polymorphism\*.json" LogicalName="LiberaFx.Assets.Polymorphism.%(Filename)%(Extension)" />
