@@ -26,6 +26,7 @@ internal static class TimelineTests
         ]);
         graph.SetCurve(node, original, "Test curve");
         VerifyCurveCompilation(graph);
+        VerifySplitKeyMoveAndWeightedCubic();
         if (Environment.GetEnvironmentVariable("LIBERAFX_UNREAL_FCURVE_FIXTURE") is { Length: > 0 } fixtureDirectory)
             ExportUnrealCurveRenderFixture(fixtureDirectory);
         VerifyLegacyFrameCurveMigration();
@@ -204,5 +205,50 @@ internal static class TimelineTests
             !saved.Contains("TimeSeconds", StringComparison.Ordinal) ||
             saved.Contains("\"Frame\"", StringComparison.Ordinal))
             throw new InvalidOperationException("Legacy frame-based F-Curve keys did not migrate to seconds.");
+    }
+
+    private static void VerifySplitKeyMoveAndWeightedCubic()
+    {
+        var graph = new GraphWorkspaceViewModel(new UndoRedoManager());
+        var node = graph.CreateNode(GraphNodeKind.FloatFCurve);
+        var editor = new CurveEditorViewModel(new ActiveGraphProvider(graph));
+        graph.SelectNode(node);
+        editor.AddKey(0.5, 0.2);
+        editor.SplitSelectedKey();
+        if (node.Curve!.Keys.Count != 4)
+            throw new InvalidOperationException("SplitSelectedKey did not add a split key.");
+        var splitRight = editor.SelectedKey!;
+        var splitLeft = node.Curve.Keys.Single(k => k.Id != splitRight.Id && Math.Abs(k.TimeSeconds - splitRight.TimeSeconds) <= FCurve.SplitPairToleranceSeconds);
+        editor.PreviewKeys([splitRight], 0.25, 0.6);
+        editor.CommitPreview();
+        var movedRight = node.Curve.Keys.Single(k => k.Id == splitRight.Id);
+        var movedLeft = node.Curve.Keys.Single(k => k.Id == splitLeft.Id);
+        if (Math.Abs(movedRight.TimeSeconds - (splitRight.TimeSeconds + 0.25)) > 1e-6 ||
+            Math.Abs(movedLeft.TimeSeconds - (splitLeft.TimeSeconds + 0.25)) > 1e-6 ||
+            Math.Abs(movedRight.Value - 0.8) > 1e-6 ||
+            Math.Abs(movedLeft.Value - 0.2) > 1e-6)
+        {
+            throw new InvalidOperationException("Horizontal move of a split key did not preserve split pair separation and independent values.");
+        }
+
+        var weighted = new FCurveSnapshot([
+            new(Guid.NewGuid(), 0, 0, 0, 0, CurveInterpolation.Cubic, FCurve.DefaultTangentWeight, 0.8),
+            new(Guid.NewGuid(), 1, 1, 0, 0, CurveInterpolation.Cubic, 0.1, FCurve.DefaultTangentWeight)
+        ]);
+        FCurve.Validate(weighted);
+        var atQuarter = FCurve.Evaluate(weighted, 0.25);
+        var unweighted = new FCurveSnapshot([
+            new(Guid.NewGuid(), 0, 0, 0, 0, CurveInterpolation.Cubic),
+            new(Guid.NewGuid(), 1, 1, 0, 0, CurveInterpolation.Cubic)
+        ]);
+        if (Math.Abs(atQuarter - FCurve.Evaluate(unweighted, 0.25)) < 0.02)
+            throw new InvalidOperationException("Weighted cubic tangents did not affect curve evaluation.");
+        var expanded = FCurve.ExpandWeightedCurves(weighted.Keys);
+        if (expanded.Count <= weighted.Keys.Count)
+            throw new InvalidOperationException("ExpandWeightedCurves did not subdivide weighted cubic segments.");
+        var expandedCurve = new FCurveSnapshot(expanded);
+        FCurve.Validate(expandedCurve);
+        if (Math.Abs(FCurve.Evaluate(expandedCurve, 0.25) - atQuarter) > 0.01)
+            throw new InvalidOperationException("Expanded weighted curve evaluation drifted from exact weighted cubic.");
     }
 }

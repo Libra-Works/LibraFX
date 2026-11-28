@@ -39,17 +39,44 @@ internal static class GraphUxTests
         try
         {
             window.UpdateLayout(); Dispatcher.UIThread.RunJobs();
+            var arrived = false;
+            window.RequestAnimationFrame(_ => arrived = true);
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            while (!arrived && sw.Elapsed < TimeSpan.FromSeconds(3))
+            {
+                Dispatcher.UIThread.RunJobs();
+                Thread.Sleep(2);
+            }
+            Dispatcher.UIThread.RunJobs();
             var innerView = outerView.GetVisualDescendants().OfType<GraphEditorView>().First(v => !ReferenceEquals(v, outerView));
             var innerCanvas = innerView.FindControl<Grid>("GraphCanvas")!;
             var innerBg = innerView.FindControl<Border>("GraphBackground")!;
-            var pt = innerBg.TranslatePoint(new Point(200, 200), window) ?? new Point(300, 300);
-            var ptr = new Pointer(901, PointerType.Mouse, true);
-            innerBg.RaiseEvent(new PointerPressedEventArgs(innerBg, ptr, window, pt, 0,
-                new(RawInputModifiers.RightMouseButton, PointerUpdateKind.RightButtonPressed), KeyModifiers.None, 1));
-            innerBg.RaiseEvent(new PointerReleasedEventArgs(innerBg, ptr, window, pt, 1,
-                new(RawInputModifiers.None, PointerUpdateKind.RightButtonReleased), KeyModifiers.None, MouseButton.Right));
-            Dispatcher.UIThread.RunJobs();
-            Require(innerCanvas.ContextMenu!.IsOpen, $"Inner GraphCanvas.ContextMenu did not open! IsOpen={innerCanvas.ContextMenu.IsOpen}, AddItems={innerView.FindControl<MenuItem>("AddNodeMenu")!.Items.Count}");
+            var pt = innerView.TranslatePoint(new Point(200, 150), window)!.Value;
+            var hit = window.InputHitTest(pt);
+            Require(hit is Visual v && v.GetSelfAndVisualAncestors().Any(a => ReferenceEquals(a, innerCanvas)),
+                $"InputHitTest at {pt} hit {hit?.GetType().Name ?? "null"} instead of inner GraphCanvas!");
+            var originalPan = ShortcutService.Shared.GraphPanButton;
+            try
+            {
+                foreach (var panMode in new[] { "Right + Middle", "Middle" })
+                {
+                    ShortcutService.Shared.GraphPanButton = panMode;
+                    var ptr = new Pointer(901, PointerType.Mouse, true);
+                    innerBg.RaiseEvent(new PointerPressedEventArgs(innerBg, ptr, window, pt, 0,
+                        new(RawInputModifiers.RightMouseButton, PointerUpdateKind.RightButtonPressed), KeyModifiers.None, 1));
+                    innerBg.RaiseEvent(new PointerReleasedEventArgs(innerBg, ptr, window, pt, 1,
+                        new(RawInputModifiers.None, PointerUpdateKind.RightButtonReleased), KeyModifiers.None, MouseButton.Right));
+                    Dispatcher.UIThread.RunJobs();
+                    Require(innerCanvas.ContextMenu!.IsOpen,
+                        $"Inner GraphCanvas.ContextMenu did not open in panMode={panMode}!");
+                    innerCanvas.ContextMenu.Close();
+                    Dispatcher.UIThread.RunJobs();
+                }
+            }
+            finally
+            {
+                ShortcutService.Shared.GraphPanButton = originalPan;
+            }
         }
         finally { window.Close(); }
     }

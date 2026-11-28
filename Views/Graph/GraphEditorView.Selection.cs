@@ -175,7 +175,16 @@ public partial class GraphEditorView : UserControl
 
     private void OnGraphCanvasPointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        if (!OwnsInput(e.Source)) return;
+        if (!OwnsInput(e.Source))
+        {
+            return;
+        }
+
+        PrepareContextMenuForRightClick(e);
+    }
+
+    private void PrepareContextMenuForRightClick(PointerPressedEventArgs e)
+    {
         if (!e.GetCurrentPoint(GraphCanvas).Properties.IsRightButtonPressed ||
             DataContext is not GraphWorkspaceViewModel graph)
         {

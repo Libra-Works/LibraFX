@@ -33,6 +33,12 @@ public partial class GraphEditorView : UserControl
             e.Handled = true;
             return;
         }
+        if (properties.IsRightButtonPressed &&
+            (e.Source is not Visual sourceVisual ||
+             !sourceVisual.GetSelfAndVisualAncestors().Any(ancestor => ReferenceEquals(ancestor, GraphCanvas))))
+        {
+            PrepareContextMenuForRightClick(e);
+        }
         var panButton = ShortcutService.Shared.GraphPanButton;
         var right = properties.IsRightButtonPressed && panButton is "Right" or "Right + Middle";
         var middle = properties.IsMiddleButtonPressed && panButton is "Middle" or "Right + Middle";
@@ -146,7 +152,17 @@ public partial class GraphEditorView : UserControl
             _isPanning = false;
             e.Pointer.Capture(null);
             e.Handled = true;
-            if (openMenu) GraphCanvas.ContextMenu?.Open(GraphCanvas);
+            if (openMenu)
+            {
+                GraphCanvas.ContextMenu?.Open(GraphCanvas);
+            }
+            return;
+        }
+
+        if (e.InitialPressMouseButton == MouseButton.Right && OwnsInput(e.Source))
+        {
+            e.Handled = true;
+            GraphCanvas.ContextMenu?.Open(GraphCanvas);
         }
     }
 

@@ -262,8 +262,33 @@ public sealed class CurveEditorViewModel : Tool, IDisposable
     public void PreviewKeys(IReadOnlyList<FCurveKey> selected, double timeDeltaSeconds, double valueDelta)
     {
         if (_node?.Curve is not { } curve || selected.Count == 0) return;
+        var selectedIds = selected.Select(key => key.Id).ToHashSet();
+        var horizontalPartnerIds = new HashSet<Guid>();
+        if (Math.Abs(timeDeltaSeconds) > 0)
+        {
+            var keys = curve.Keys;
+            for (var i = 0; i < keys.Count; i++)
+            {
+                if (!selectedIds.Contains(keys[i].Id)) continue;
+                for (var left = i - 1; left >= 0 && keys[left + 1].TimeSeconds - keys[left].TimeSeconds <= FCurve.SplitPairToleranceSeconds; left--)
+                {
+                    if (!selectedIds.Contains(keys[left].Id)) horizontalPartnerIds.Add(keys[left].Id);
+                }
+                for (var right = i + 1; right < keys.Count && keys[right].TimeSeconds - keys[right - 1].TimeSeconds <= FCurve.SplitPairToleranceSeconds; right++)
+                {
+                    if (!selectedIds.Contains(keys[right].Id)) horizontalPartnerIds.Add(keys[right].Id);
+                }
+            }
+        }
         var changed = selected.ToDictionary(key => key.Id,
             key => key with { TimeSeconds = key.TimeSeconds + timeDeltaSeconds, Value = key.Value + valueDelta });
+        foreach (var key in curve.Keys)
+        {
+            if (horizontalPartnerIds.Contains(key.Id))
+            {
+                changed[key.Id] = key with { TimeSeconds = key.TimeSeconds + timeDeltaSeconds };
+            }
+        }
         try
         {
             var preview = new FCurveSnapshot(curve.Keys.Select(key => changed.GetValueOrDefault(key.Id, key))

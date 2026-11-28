@@ -132,7 +132,7 @@ internal static class PackageParameterDelta
                 kind = "fcurve",
                 containerId,
                 nodeId = node.Id.ToString("D"),
-                keys = change.Curve.Keys.Select(key => new
+                keys = FCurve.ExpandWeightedCurves(change.Curve.Keys).Select(key => new
                 {
                     time = key.TimeSeconds,
                     value = key.Value,

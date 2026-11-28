@@ -629,7 +629,7 @@ public sealed partial class VfxProgram
             else if (opcode == VfxOpcode.FCurve)
             {
                 if (node.Curve is null) throw new InvalidDataException($"Node '{node.Name}' has no F-Curve data.");
-                curveCode.Add(new VfxCurveInstruction(node.Id, node.Curve.Keys.ToArray()));
+                curveCode.Add(new VfxCurveInstruction(node.Id, FCurve.ExpandWeightedCurves(node.Curve.Keys).ToArray()));
             }
             else if (opcode is VfxOpcode.Scalar or VfxOpcode.Vector2 or VfxOpcode.Vector3 or VfxOpcode.Vector4 or VfxOpcode.Color)
             {

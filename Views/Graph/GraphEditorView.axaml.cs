@@ -79,6 +79,13 @@ public partial class GraphEditorView : UserControl
             RoutingStrategies.Tunnel);
         GraphScrollViewer.AddHandler(Control.RequestBringIntoViewEvent, (_, e) => e.Handled = true,
             RoutingStrategies.Tunnel);
+        GraphCanvas.ContextRequested += (_, e) =>
+        {
+            if (GraphCanvas.ContextMenu?.IsOpen == true)
+            {
+                e.Handled = true;
+            }
+        };
         AddHandler(InputElement.PointerPressedEvent, (_, e) =>
         {
             if (OwnsInput(e.Source) && DataContext is GraphWorkspaceViewModel graph)

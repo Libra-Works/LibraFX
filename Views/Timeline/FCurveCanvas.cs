@@ -214,20 +214,46 @@ public sealed class FCurveCanvas : Control
     {
         var keyBrush = ThemeSettingsService.EditorRenderBrush("CurveKey");
         var handlePen = new Pen(ThemeSettingsService.EditorRenderBrush("CurveHandle"));
-        foreach (var key in curve.Keys)
+        var keys = curve.Keys;
+        for (var index = 0; index < keys.Count; index++)
         {
+            var key = keys[index];
             var point = ToPoint(DisplayTime(key.TimeSeconds), key.Value);
             if (point.X < -150 || point.X > Bounds.Width + 150) continue;
             if (_model?.SelectedKey?.Id == key.Id)
             {
-                var index = curve.Keys.ToList().FindIndex(item => item.Id == key.Id);
-                if (index > 0 && curve.Keys[index - 1].Interpolation == CurveInterpolation.Cubic)
-                    DrawHandle(context, point, HandlePoint(key, incoming: true), handlePen, selected);
-                if (index < curve.Keys.Count - 1 && key.Interpolation == CurveInterpolation.Cubic)
-                    DrawHandle(context, point, HandlePoint(key, incoming: false), handlePen, selected);
+                if (index > 0 && keys[index - 1].Interpolation == CurveInterpolation.Cubic)
+                    DrawHandle(context, point, HandlePoint(keys, index, incoming: true), handlePen, selected);
+                if (index < keys.Count - 1 && key.Interpolation == CurveInterpolation.Cubic)
+                    DrawHandle(context, point, HandlePoint(keys, index, incoming: false), handlePen, selected);
             }
-            context.DrawEllipse(_model?.IsKeySelected(key.Id) == true ? selected : keyBrush, null, point, 5, 5);
+            var brush = _model?.IsKeySelected(key.Id) == true ? selected : keyBrush;
+            var hasLeftPartner = index > 0 && key.TimeSeconds - keys[index - 1].TimeSeconds <= FCurve.SplitPairToleranceSeconds;
+            var hasRightPartner = index < keys.Count - 1 && keys[index + 1].TimeSeconds - key.TimeSeconds <= FCurve.SplitPairToleranceSeconds;
+            if (hasRightPartner && !hasLeftPartner && Math.Abs(keys[index + 1].Value - key.Value) > 1e-6)
+                DrawHalfCircle(context, brush, point, 5.5, leftHalf: true);
+            else if (hasLeftPartner && !hasRightPartner && Math.Abs(key.Value - keys[index - 1].Value) > 1e-6)
+                DrawHalfCircle(context, brush, point, 5.5, leftHalf: false);
+            else
+                context.DrawEllipse(brush, null, point, 5, 5);
         }
+    }
+
+    private static void DrawHalfCircle(DrawingContext context, IBrush brush, Point center, double radius, bool leftHalf)
+    {
+        var geometry = new StreamGeometry();
+        using (var ctx = geometry.Open())
+        {
+            ctx.BeginFigure(new Point(center.X, center.Y - radius), isFilled: true);
+            ctx.ArcTo(
+                new Point(center.X, center.Y + radius),
+                new Size(radius, radius),
+                0,
+                false,
+                leftHalf ? SweepDirection.CounterClockwise : SweepDirection.Clockwise);
+            ctx.EndFigure(true);
+        }
+        context.DrawGeometry(brush, null, geometry);
     }
 
     private static void DrawHandle(DrawingContext context, Point key, Point handle, Pen handlePen, IBrush selected)
@@ -240,12 +266,24 @@ public sealed class FCurveCanvas : Control
         new(Math.Clamp(_origin.X + displayTime * _scaleX, -1_000_000, 1_000_000),
             Math.Clamp(_origin.Y - value * _scaleY, -1_000_000, 1_000_000));
 
-    private Point HandlePoint(FCurveKey key, bool incoming)
+    private Point HandlePoint(IReadOnlyList<FCurveKey> keys, int index, bool incoming)
     {
+        var key = keys[index];
+        var adjacent = incoming
+            ? (index > 0 ? keys[index - 1] : null)
+            : (index < keys.Count - 1 ? keys[index + 1] : null);
+        var span = adjacent is not null ? Math.Abs(adjacent.TimeSeconds - key.TimeSeconds) : 0;
+        if (span > FCurve.SplitPairToleranceSeconds)
+        {
+            var weight = Math.Clamp(incoming ? key.InWeight : key.OutWeight, 0.02, 0.98);
+            var deltaTime = (incoming ? -1 : 1) * span * weight;
+            var slope = incoming ? key.InSlope : key.OutSlope;
+            return ToPoint(DisplayTime(key.TimeSeconds + deltaTime), key.Value + deltaTime * slope);
+        }
         var delta = (incoming ? -40 : 40) / _scaleX;
-        var slope = incoming ? key.InSlope : key.OutSlope;
+        var fallbackSlope = incoming ? key.InSlope : key.OutSlope;
         return ToPoint(DisplayTime(key.TimeSeconds) + delta,
-            key.Value + delta * (_model?.Playback?.DisplaySlope(slope) ?? slope));
+            key.Value + delta * (_model?.Playback?.DisplaySlope(fallbackSlope) ?? fallbackSlope));
     }
 
     protected override void OnPointerPressed(PointerPressedEventArgs e)
@@ -281,10 +319,10 @@ public sealed class FCurveCanvas : Control
         {
             var index = curve.Keys.ToList().FindIndex(key => key.Id == selected.Id);
             if (index > 0 && curve.Keys[index - 1].Interpolation == CurveInterpolation.Cubic &&
-                Near(point, HandlePoint(selected, true)))
+                Near(point, HandlePoint(curve.Keys, index, true)))
                 _dragMode = DragMode.InSlope;
             else if (index >= 0 && index < curve.Keys.Count - 1 &&
-                     selected.Interpolation == CurveInterpolation.Cubic && Near(point, HandlePoint(selected, false)))
+                     selected.Interpolation == CurveInterpolation.Cubic && Near(point, HandlePoint(curve.Keys, index, false)))
                 _dragMode = DragMode.OutSlope;
             if (_dragMode != DragMode.None) _dragKey = selected;
         }
@@ -343,13 +381,37 @@ public sealed class FCurveCanvas : Control
                 }
                 _model.PreviewKeys(_dragKeys, timeDelta, -(point.Y - _pointerStart.Y) / _scaleY);
             }
-            else
+            else if (_model.Curve is { } curve)
             {
-                var origin = ToPoint(DisplayTime(key.TimeSeconds), key.Value);
-                var delta = (_dragMode == DragMode.InSlope ? -40 : 40) / _scaleX;
-                var slope = Math.Clamp((origin.Y - point.Y) / _scaleY / delta, -1_000_000, 1_000_000);
-                slope = _model.Playback?.SlopePerSecond(slope) ?? slope;
-                _model.PreviewKey(_dragMode == DragMode.InSlope ? key with { InSlope = slope } : key with { OutSlope = slope });
+                var keys = curve.Keys;
+                var index = -1;
+                for (var i = 0; i < keys.Count; i++)
+                {
+                    if (keys[i].Id == key.Id) { index = i; break; }
+                }
+                var isIncoming = _dragMode == DragMode.InSlope;
+                var adjacent = isIncoming
+                    ? (index > 0 ? keys[index - 1] : null)
+                    : (index >= 0 && index < keys.Count - 1 ? keys[index + 1] : null);
+                var span = adjacent is not null ? Math.Abs(adjacent.TimeSeconds - key.TimeSeconds) : 0;
+                if (span > FCurve.SplitPairToleranceSeconds)
+                {
+                    var dt = TimeSeconds((point.X - _origin.X) / _scaleX) - key.TimeSeconds;
+                    var weight = Math.Clamp((isIncoming ? -dt : dt) / span, 0.02, 0.98);
+                    var valueAtPointer = (_origin.Y - point.Y) / _scaleY;
+                    var slope = Math.Clamp((valueAtPointer - key.Value) / ((isIncoming ? -weight : weight) * span), -1_000_000, 1_000_000);
+                    _model.PreviewKey(isIncoming
+                        ? key with { InSlope = slope, InWeight = weight }
+                        : key with { OutSlope = slope, OutWeight = weight });
+                }
+                else
+                {
+                    var origin = ToPoint(DisplayTime(key.TimeSeconds), key.Value);
+                    var delta = (isIncoming ? -40 : 40) / _scaleX;
+                    var slope = Math.Clamp((origin.Y - point.Y) / _scaleY / delta, -1_000_000, 1_000_000);
+                    slope = _model.Playback?.SlopePerSecond(slope) ?? slope;
+                    _model.PreviewKey(isIncoming ? key with { InSlope = slope } : key with { OutSlope = slope });
+                }
             }
         }
         if (_dragMode != DragMode.None) e.Handled = true;
