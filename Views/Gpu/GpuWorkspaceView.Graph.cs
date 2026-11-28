@@ -336,6 +336,16 @@ public partial class GpuWorkspaceView : UserControl
                     : connection.Latest;
             connection.Preview.SetEndpoints(connection.Source.CanvasPosition + (Vector)connection.Source.OutputAnchor, end);
         }
+        if (_stageInputDrag is { } inputDrag && _stageInput is not null &&
+            _stageInput.Anchors.TryGetValue(inputDrag.Key, out var startAnchor))
+        {
+            var target = FindStageInputConnectionTarget(inputDrag.Type, inputDrag.Latest);
+            _connectionFeedback.Show(target?.Node.Inputs[target.Value.Input]);
+            var end = target is { } snap
+                ? snap.Node.CanvasPosition + (Vector)snap.Node.InputAnchors[snap.Input]
+                : inputDrag.Latest;
+            inputDrag.Preview.SetEndpoints(_stageInput.CanvasPosition + (Vector)startAnchor, end);
+        }
     }
     private void UpdatePortAnchors()
     {

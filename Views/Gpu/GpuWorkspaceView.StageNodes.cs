@@ -1,7 +1,9 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Media;
+using Avalonia.VisualTree;
 using LibraGpu.Core;
 using LiberaFx.Services.Gpu;
 using LiberaFx.Services.Settings;
@@ -12,15 +14,16 @@ namespace LiberaFx.Views.Gpu;
 
 public partial class GpuWorkspaceView
 {
-    private sealed class StageOutputVisual(Border border, Dictionary<string, (Button Pin, GpuType Type)> pins, Point position)
+    private sealed class StageCardVisual(Border border, Dictionary<string, (Button Pin, GpuType Type)> pins, Point position)
     {
         public readonly Border Border = border;
         public readonly Dictionary<string, (Button Pin, GpuType Type)> Pins = pins;
         public readonly Dictionary<string, Point> Anchors = [];
         public readonly TranslateTransform Translation = new();
         public Point Position = position;
+        public Vector PreviewOffset;
         public Vector CanvasOrigin;
-        public Point CanvasPosition => Position + CanvasOrigin;
+        public Point CanvasPosition => Position + PreviewOffset + CanvasOrigin;
 
         public void SyncTransform()
         {
@@ -37,17 +40,29 @@ public partial class GpuWorkspaceView
         public readonly GpuConnectionCurve Curve = curve;
     }
 
-    private StageOutputVisual? _stageOutput;
+    private StageCardVisual? _stageOutput;
+    private StageCardVisual? _stageInput;
+    private readonly Dictionary<string, Point> _stageOutputPositions = [];
+    private readonly Dictionary<string, Point> _stageInputPositions = [];
+    private (StageCardVisual Card, Dictionary<string, Point> Store, IPointer Pointer, Point Start, Point Original)? _stageCardDrag;
+    private (string Key, bool IsUniform, GpuType Type, Button Pin, IPointer Pointer, GpuConnectionCurve Preview, Point Start, Point Latest)? _stageInputDrag;
     private readonly List<OutputWireVisual> _outputWires = [];
     private readonly HashSet<string> _visibleOutputAttributes =
         ["Position", "Velocity", "Color", "Size", "Rotation", "Age", "Lifetime"];
 
     private void ClearStageOutput()
     {
+        CancelStageInputDrag();
+        _stageCardDrag = null;
         if (_stageOutput is not null)
         {
             NodeCanvas.Children.Remove(_stageOutput.Border);
             _stageOutput = null;
+        }
+        if (_stageInput is not null)
+        {
+            NodeCanvas.Children.Remove(_stageInput.Border);
+            _stageInput = null;
         }
         foreach (var wire in _outputWires)
         {
@@ -56,9 +71,53 @@ public partial class GpuWorkspaceView
         _outputWires.Clear();
     }
 
+    private void AttachStageCardDrag(StageCardVisual card, Dictionary<string, Point> store, string kernelId)
+    {
+        card.Border.Cursor = new Cursor(StandardCursorType.SizeAll);
+        card.Border.PointerPressed += (_, e) =>
+        {
+            if (!e.GetCurrentPoint(card.Border).Properties.IsLeftButtonPressed) return;
+            if (e.Source is Visual v && v.GetSelfAndVisualAncestors().OfType<Button>().Any()) return;
+            FinishDrag(commit: false);
+            _stageCardDrag = (card, store, e.Pointer, _viewport.ToGraphPoint(e.GetPosition(NodeCanvas)), card.Position);
+            e.Pointer.Capture(card.Border);
+            e.Handled = true;
+        };
+        card.Border.PointerMoved += (_, e) =>
+        {
+            if (_stageCardDrag is not { } drag || drag.Card != card || drag.Pointer != e.Pointer) return;
+            var latest = _viewport.ToGraphPoint(e.GetPosition(NodeCanvas));
+            card.PreviewOffset = (Vector)(latest - drag.Start);
+            card.SyncTransform();
+            UpdateOutputWireGeometry();
+            e.Handled = true;
+        };
+        card.Border.PointerReleased += (_, e) =>
+        {
+            if (_stageCardDrag is not { } drag || drag.Card != card || drag.Pointer != e.Pointer) return;
+            card.Position = drag.Original + card.PreviewOffset;
+            card.PreviewOffset = default;
+            card.SyncTransform();
+            store[kernelId] = card.Position;
+            _stageCardDrag = null;
+            drag.Pointer.Capture(null);
+            UpdateOutputWireGeometry();
+            e.Handled = true;
+        };
+        card.Border.PointerCaptureLost += (_, _) =>
+        {
+            if (_stageCardDrag is not { } drag || drag.Card != card) return;
+            card.PreviewOffset = default;
+            card.SyncTransform();
+            _stageCardDrag = null;
+            UpdateOutputWireGeometry();
+        };
+    }
+
     private void RebuildStageOutput(GpuWorkspaceViewModel vm, KernelGraph k)
     {
         ClearStageOutput();
+        RebuildStageInput(vm, k);
         var activeAttrs = ParticleAbi.Attributes
             .Where(a => a.Id != "Seed" && (_visibleOutputAttributes.Contains(a.Id) || k.Writes.Any(w => w.Attribute == a.Id)))
             .ToArray();
@@ -124,7 +183,7 @@ public partial class GpuWorkspaceView
 
         var maxX = _nodeVisuals.Values.Select(v => v.Position.X).DefaultIfEmpty(60).Max();
         var minY = _nodeVisuals.Values.Select(v => v.Position.Y).DefaultIfEmpty(40).Min();
-        var pos = new Point(maxX + 300, minY);
+        var pos = _stageOutputPositions.TryGetValue(k.Id, out var savedPos) ? savedPos : new Point(maxX + 300, minY);
         var border = new Border
         {
             Width = 245,
@@ -136,9 +195,10 @@ public partial class GpuWorkspaceView
             BorderThickness = new Thickness(1.5),
             Tag = "gpu-stage-output"
         };
-        _stageOutput = new StageOutputVisual(border, pins, pos) { CanvasOrigin = _viewport.Origin };
+        _stageOutput = new StageCardVisual(border, pins, pos) { CanvasOrigin = _viewport.Origin };
         border.RenderTransform = _stageOutput.Translation;
         _stageOutput.SyncTransform();
+        AttachStageCardDrag(_stageOutput, _stageOutputPositions, k.Id);
         border.SizeChanged += (_, _) => { _anchorsDirty = true; ScheduleFrame(); };
         NodeCanvas.Children.Add(border);
 
@@ -158,15 +218,207 @@ public partial class GpuWorkspaceView
         }
     }
 
+    private void RebuildStageInput(GpuWorkspaceViewModel vm, KernelGraph k)
+    {
+        var panel = new StackPanel { Spacing = 4 };
+        panel.Children.Add(new TextBlock
+        {
+            Text = LocalizationService.Shared.Get("Gpu.StageInput"),
+            FontWeight = FontWeight.SemiBold,
+            Margin = new Thickness(4, 2)
+        });
+        var pins = new Dictionary<string, (Button Pin, GpuType Type)>();
+        var items = new List<(string Key, string Label, GpuType Type, bool IsUniform)>();
+        foreach (var attr in ParticleAbi.Attributes)
+        {
+            if (attr.Id is "Alive" or "Custom0" or "Custom1" or "Custom2" &&
+                !_visibleOutputAttributes.Contains(attr.Id) &&
+                !k.Nodes.Any(n => n.Op == GpuOp.ReadAttribute && n.Attribute == attr.Id) &&
+                !k.Writes.Any(w => w.Attribute == attr.Id))
+            {
+                continue;
+            }
+            items.Add((attr.Id, LocalizationService.Shared.GetOrDefault("Gpu.Attribute." + attr.Id, attr.Id), attr.Type, false));
+        }
+        items.Add(("deltaTime", "DeltaTime", GpuType.Float, true));
+        items.Add(("time", "Time", GpuType.Float, true));
+        items.Add(("emitterPosition", "Emitter Position", GpuType.Float3, true));
+
+        foreach (var (key, labelText, type, isUniform) in items)
+        {
+            var pin = PortButton("gpu-stage-input-" + key);
+            pin.Background = TypeBrush(type);
+            var capturedKey = key;
+            var capturedType = type;
+            var capturedUniform = isUniform;
+            pin.AddHandler(InputElement.PointerPressedEvent, (_, e) =>
+            {
+                if (!e.GetCurrentPoint(pin).Properties.IsLeftButtonPressed) return;
+                FinishDrag(commit: false);
+                CancelConnectionDrag();
+                CancelStageInputDrag();
+                var start = e.GetPosition(NodeCanvas);
+                var preview = new GpuConnectionCurve
+                {
+                    Width = NodeCanvas.Width,
+                    Height = NodeCanvas.Height,
+                    Stroke = TypeBrush(capturedType),
+                    StrokeThickness = 2,
+                    StrokeDashArray = new Avalonia.Collections.AvaloniaList<double> { 4, 4 },
+                    IsHitTestVisible = false
+                };
+                _stageInputDrag = (capturedKey, capturedUniform, capturedType, pin, e.Pointer, preview, start, start);
+                NodeCanvas.Children.Insert(1, preview);
+                e.Pointer.Capture(pin);
+                ScheduleFrame();
+                e.Handled = true;
+            }, RoutingStrategies.Tunnel);
+            pin.AddHandler(InputElement.PointerMovedEvent, (_, e) =>
+            {
+                if (_stageInputDrag is not { } drag || drag.Pin != pin || drag.Pointer != e.Pointer) return;
+                drag.Latest = e.GetPosition(NodeCanvas);
+                _stageInputDrag = drag;
+                ScheduleFrame();
+                e.Handled = true;
+            }, RoutingStrategies.Tunnel);
+            pin.AddHandler(InputElement.PointerReleasedEvent, (_, e) =>
+            {
+                if (_stageInputDrag is not { } drag || drag.Pin != pin || drag.Pointer != e.Pointer) return;
+                var point = e.GetPosition(NodeCanvas);
+                var target = FindStageInputConnectionTarget(drag.Type, point);
+                var clicked = Math.Abs(point.X - drag.Start.X) < 4 && Math.Abs(point.Y - drag.Start.Y) < 4;
+                CancelStageInputDrag();
+                if (target is { } snap && Workspace?.KernelId is { } kernelId)
+                {
+                    var sourceId = EnsureStageInputNode(vm, k, drag.Key, drag.IsUniform, drag.Type);
+                    Run(() => vm.Edit(new GpuEdit
+                    {
+                        Action = "connect",
+                        KernelId = kernelId,
+                        NodeId = snap.Node.Model.Id,
+                        SourceId = sourceId,
+                        Input = snap.Input
+                    }));
+                    _wireSource = null;
+                }
+                else if (clicked)
+                {
+                    _wireSource = EnsureStageInputNode(vm, k, drag.Key, drag.IsUniform, drag.Type);
+                    Status.Text = LocalizationService.Shared.Get("Gpu.SelectTargetInput");
+                }
+                e.Handled = true;
+            }, RoutingStrategies.Tunnel);
+            pin.PointerCaptureLost += (_, _) =>
+            {
+                if (_stageInputDrag?.Pin == pin) CancelStageInputDrag();
+            };
+
+            var label = PortLabel();
+            label.Text = $"{labelText} ({type})";
+            label.Margin = new Thickness(4, 0, 6, 0);
+            var row = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
+            row.Children.Add(label);
+            Grid.SetColumn(pin, 1);
+            row.Children.Add(pin);
+            panel.Children.Add(row);
+            pins[key] = (pin, type);
+        }
+
+        var minX = _nodeVisuals.Values.Select(v => v.Position.X).DefaultIfEmpty(300).Min();
+        var minY = _nodeVisuals.Values.Select(v => v.Position.Y).DefaultIfEmpty(40).Min();
+        var pos = _stageInputPositions.TryGetValue(k.Id, out var savedPos) ? savedPos : new Point(minX - 270, minY);
+        var border = new Border
+        {
+            Width = 225,
+            Child = panel,
+            Padding = new Thickness(8),
+            CornerRadius = new CornerRadius(6),
+            Background = this.FindResource("EffectSurfaceBrush") as IBrush ?? Brushes.DimGray,
+            BorderBrush = this.FindResource("EffectBorderBrush") as IBrush ?? Brushes.Gray,
+            BorderThickness = new Thickness(1.5),
+            Tag = "gpu-stage-input"
+        };
+        _stageInput = new StageCardVisual(border, pins, pos) { CanvasOrigin = _viewport.Origin };
+        border.RenderTransform = _stageInput.Translation;
+        _stageInput.SyncTransform();
+        AttachStageCardDrag(_stageInput, _stageInputPositions, k.Id);
+        border.SizeChanged += (_, _) => { _anchorsDirty = true; ScheduleFrame(); };
+        NodeCanvas.Children.Add(border);
+    }
+
+    private string EnsureStageInputNode(GpuWorkspaceViewModel vm, KernelGraph k, string key, bool isUniform, GpuType type)
+    {
+        var existing = k.Nodes.FirstOrDefault(n =>
+            isUniform ? n.Op == GpuOp.ReadUniform && n.Uniform == key : n.Op == GpuOp.ReadAttribute && n.Attribute == key);
+        if (existing is not null) return existing.Id;
+        var id = "n_" + Guid.NewGuid().ToString("N");
+        var pos = _stageInput is not null
+            ? new GpuPosition(_stageInput.Position.X + 240, _stageInput.Position.Y + (k.Nodes.Count % 6) * 45)
+            : new GpuPosition(80, 80);
+        vm.Edit(new GpuEdit
+        {
+            Action = "add",
+            KernelId = k.Id,
+            Position = pos,
+            Node = new GpuNode
+            {
+                Id = id,
+                Op = isUniform ? GpuOp.ReadUniform : GpuOp.ReadAttribute,
+                Type = type,
+                Attribute = isUniform ? null : key,
+                Uniform = isUniform ? key : null
+            }
+        });
+        return id;
+    }
+
+    private void CancelStageInputDrag()
+    {
+        _connectionFeedback.Dispose();
+        if (_stageInputDrag is not { } drag) return;
+        _stageInputDrag = null;
+        NodeCanvas.Children.Remove(drag.Preview);
+        drag.Pointer.Capture(null);
+    }
+
+    private (NodeVisual Node, int Input)? FindStageInputConnectionTarget(GpuType sourceType, Point point)
+    {
+        if (Workspace?.Kernel is not { } k) return null;
+        var root = TopLevel.GetTopLevel(this);
+        if (root is null || NodeCanvas.TranslatePoint(point, root) is not { } pointer) return null;
+        (NodeVisual Node, int Input)? best = null;
+        var distance = PortSnapFeedback.AcquireRadius;
+        foreach (var node in k.Nodes)
+        {
+            if (!_nodeVisuals.TryGetValue(node.Id, out var visual)) continue;
+            var op = GpuOperationRegistry.Operations[node.Op];
+            for (var input = 0; input < visual.Inputs.Length && input < op.MaxInputs; input++)
+            {
+                var pin = visual.Inputs[input];
+                if (!pin.IsEffectivelyVisible || pin.TranslatePoint(new Point(pin.Bounds.Width / 2, pin.Bounds.Height / 2), root) is not { } center) continue;
+                var next = ((Vector)(center - pointer)).Length;
+                if (next <= distance || best is null && ReferenceEquals(pin, _connectionFeedback.Pin) && next <= PortSnapFeedback.ReleaseRadius)
+                {
+                    best = (visual, input);
+                    distance = next;
+                }
+            }
+        }
+        return best;
+    }
+
     private void UpdateStageOutputAnchors()
     {
-        if (_stageOutput is not { } stage) return;
-        stage.CanvasOrigin = _viewport.Origin;
-        stage.SyncTransform();
-        foreach (var (attrId, (pin, _)) in stage.Pins)
+        foreach (var card in new[] { _stageOutput, _stageInput })
         {
-            stage.Anchors[attrId] = pin.TranslatePoint(
-                new Point(pin.Bounds.Width / 2, pin.Bounds.Height / 2), stage.Border) ?? new(0, 40);
+            if (card is null) continue;
+            card.CanvasOrigin = _viewport.Origin;
+            card.SyncTransform();
+            foreach (var (attrId, (pin, _)) in card.Pins)
+            {
+                card.Anchors[attrId] = pin.TranslatePoint(
+                    new Point(pin.Bounds.Width / 2, pin.Bounds.Height / 2), card.Border) ?? new(0, 40);
+            }
         }
         UpdateOutputWireGeometry();
     }

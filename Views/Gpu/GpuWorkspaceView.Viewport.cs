@@ -35,6 +35,8 @@ public partial class GpuWorkspaceView : UserControl
         foreach (var wire in _wireVisuals) { wire.Curve.Width = NodeCanvas.Width; wire.Curve.Height = NodeCanvas.Height; }
         if (_connectionDrag is { } connection)
         { connection.Preview.Width = NodeCanvas.Width; connection.Preview.Height = NodeCanvas.Height; }
+        if (_stageInputDrag is { } inputDrag)
+        { inputDrag.Preview.Width = NodeCanvas.Width; inputDrag.Preview.Height = NodeCanvas.Height; }
         UpdateWireGeometry(_wireVisuals);
         UpdateStageOutputAnchors();
         ZoomLabel.Content = $"{_viewport.Zoom:P0}";
