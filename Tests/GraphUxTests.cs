@@ -47,15 +47,22 @@ internal static class GraphUxTests
                 Dispatcher.UIThread.RunJobs();
                 Thread.Sleep(2);
             }
-            window.UpdateLayout();
-            Dispatcher.UIThread.RunJobs();
+            for (var i = 0; i < 4; i++)
+            {
+                Dispatcher.UIThread.RunJobs();
+                window.UpdateLayout();
+            }
             var innerView = outerView.GetVisualDescendants().OfType<GraphEditorView>().First(v => !ReferenceEquals(v, outerView));
             var innerCanvas = innerView.FindControl<Grid>("GraphCanvas")!;
             var innerBg = innerView.FindControl<Border>("GraphBackground")!;
             var pt = innerView.TranslatePoint(new Point(200, 150), window)!.Value;
             var hit = window.InputHitTest(pt);
-            Require(hit is Visual v && v.GetSelfAndVisualAncestors().Any(a => ReferenceEquals(a, innerCanvas)),
-                $"InputHitTest at {pt} hit {hit?.GetType().Name ?? "null"} instead of inner GraphCanvas!");
+            if (hit is not Visual hv || !hv.GetSelfAndVisualAncestors().Any(a => ReferenceEquals(a, innerCanvas)))
+            {
+                var hitChain = hit is Visual v1 ? string.Join(" > ", v1.GetSelfAndVisualAncestors().Select(a => $"{a.GetType().Name}({(a as Control)?.Name})@{a.Bounds}")) : "null";
+                var innerChain = string.Join(" > ", innerCanvas.GetSelfAndVisualAncestors().Select(a => $"{a.GetType().Name}({(a as Control)?.Name})@{a.Bounds}[hit={(a as InputElement)?.IsHitTestVisible},vis={a.IsEffectivelyVisible},clip={a.ClipToBounds}]"));
+                Require(false, $"InputHitTest at {pt} hit [{hitChain}] instead of inner GraphCanvas! innerChain=[{innerChain}]");
+            }
             var originalPan = ShortcutService.Shared.GraphPanButton;
             try
             {
