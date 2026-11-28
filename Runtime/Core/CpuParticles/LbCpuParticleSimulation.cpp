@@ -159,7 +159,10 @@ auto System::tick(Instance& root, double time, bool emitting, const HostQualityS
         {
             continue;
         }
-        particleData.age[slot] += stepDelta;
+        if (!customUpdateAge)
+        {
+            particleData.age[slot] += stepDelta;
+        }
         if (particleData.age[slot] >= particleData.life[slot])
         {
             particleData.active[slot] = false;

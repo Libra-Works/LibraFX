@@ -184,6 +184,7 @@ auto System::initialize(const CustomNodeDescriptor* registry, std::size_t regist
     add(0x23, 0, true, {2}, false);
     add(0x24, 0, true, {1}, false);
     add(0x25, 0, true, {3}, false);
+    add(0x26, 0, true, {1}, false);
     add(0x42, 3, false, {3, 3}, false);
     add(0x43, 3, false, {3, 1}, false);
     add(0x44, 3, false, {3, 1}, false);
@@ -209,8 +210,10 @@ auto System::initialize(const CustomNodeDescriptor* registry, std::size_t regist
         descriptors.push_back(registry[index]);
     }
     auto totalMemory = (std::size_t{(15 * sizeof(double) + sizeof(std::uint64_t) + sizeof(std::uint8_t))} + sizeof(ParticleVM)) * capacity;
-    for (auto& stage : stages)
+    customUpdateAge = false;
+    for (auto stageIndex = 0u; stageIndex < 2; ++stageIndex)
     {
+        auto& stage = stages[stageIndex];
         if (stage.bytes.size() < 16 || std::memcmp(stage.bytes.data(), "LFXB", 4) != 0 ||
             stage.bytes[4] != 11 || stage.bytes[5] != 0)
         {
@@ -231,6 +234,21 @@ auto System::initialize(const CustomNodeDescriptor* registry, std::size_t regist
         if (result != Result::Ok)
         {
             return result;
+        }
+        if (stageIndex == 1)
+        {
+            for (const auto& binding : stage.bindings)
+            {
+                if (binding.descriptor && binding.descriptor->function == System::invoke && binding.descriptor->context)
+                {
+                    const auto* callback = static_cast<const Callback*>(binding.descriptor->context);
+                    if (callback->system == this && callback->operation == 0x26)
+                    {
+                        customUpdateAge = true;
+                        break;
+                    }
+                }
+            }
         }
         auto alignment = stage.program.workAlignment();
         stage.workStride = std::max(alignment, (stage.program.workBytes() + alignment - 1) & ~(alignment - 1));

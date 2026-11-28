@@ -64,7 +64,7 @@ struct BatchInput final {
     std::array<double,4> constants{};
 };
 enum class BatchOp : std::uint8_t { Copy, Add, Subtract, Multiply, Divide, Broadcast, Clamp, Compose, Sphere, LifetimeColor,
-    Position, Velocity, Color, Size, Life, Age, Id, Seed, Delta, SetPosition, SetVelocity, SetColor, SetSize, SetLife, Move };
+    Position, Velocity, Color, Size, Life, Age, Id, Seed, Delta, SetPosition, SetVelocity, SetColor, SetSize, SetLife, Move, SetAge };
 struct DecodedBatchInstruction final {
     Id sourceNode{};
     BatchOp op{};
@@ -168,6 +168,7 @@ struct System final {
     double frameDelta = 0;
     double realTime = 0, realDelta = 0;
     std::uint32_t initialBurst = 0;
+    bool customUpdateAge = false;
     std::uint64_t nextId = 1;
     std::size_t live = 0;
     Stage stages[2];

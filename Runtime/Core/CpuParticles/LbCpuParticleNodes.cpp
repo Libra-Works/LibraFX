@@ -70,7 +70,7 @@ auto System::invoke(CustomNodeInvocation& call) noexcept -> Result
         }
         return Result::Ok;
     }
-    if (operation >= 0x20 && operation <= 0x25)
+    if (operation >= 0x20 && operation <= 0x26)
     {
         if (operation == 0x20)
         {
@@ -99,6 +99,14 @@ auto System::invoke(CustomNodeInvocation& call) noexcept -> Result
                 return Result::InvalidArgument;
             }
             particleData.life[particle] = call.inputs[0];
+        }
+        else if (operation == 0x26)
+        {
+            if (!std::isfinite(call.inputs[0]) || call.inputs[0] < 0)
+            {
+                return Result::InvalidArgument;
+            }
+            particleData.age[particle] = call.inputs[0];
         }
         else
         {

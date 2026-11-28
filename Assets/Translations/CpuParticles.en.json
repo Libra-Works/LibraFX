@@ -36,6 +36,7 @@
   "Editor.Node.CpuParticleSetColor":"Set Particle Color",
   "Editor.Node.CpuParticleSetSize":"Set Particle Size",
   "Editor.Node.CpuParticleSetLife":"Set Particle Life",
+  "Editor.Node.CpuParticleSetAge":"Set Particle Age",
   "Editor.Node.CpuParticleMove":"Move Particle",
   "Editor.Node.CpuParticleInputFloat":"Particle Input Float",
   "Editor.Node.CpuParticleOutputFloat":"Particle Output Float",

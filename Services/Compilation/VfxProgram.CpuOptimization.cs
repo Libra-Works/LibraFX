@@ -124,7 +124,7 @@ public sealed partial class VfxProgram
         // callbacks can observe evaluation order, so they are explicit barriers.
         if (_version != 3 || _curveInstructions.Length != 0 || _gameIoPorts.Length != 0) return this;
         var knownCpu = new[] { 5, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18,
-            0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x42, 0x43, 0x44 }.Select(CpuType).ToHashSet();
+            0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x42, 0x43, 0x44 }.Select(CpuType).ToHashSet();
         if (_customInstructions.Any(node => !knownCpu.Contains(node.TypeId) &&
                 node.TypeId != MathType(20) && node.TypeId != MathType(47))) return this;
         var indices = _typedInstructions.Select((node, index) => (node.NodeId, index))

@@ -79,7 +79,7 @@ void System::buildBatch(std::uint32_t stageIndex)
                 if (!context || context->system != this) return;
                 const auto operation = context->operation;
                 if (opcode == customSignalOpcode) {
-                    if (bytes[19] != 1 || (operation != 5 && (operation < 0x20 || operation > 0x25))) return;
+                    if (bytes[19] != 1 || (operation != 5 && (operation < 0x20 || operation > 0x26))) return;
                     if (operation == 5) {
                         if (decoded.sourceNode != stage.entry) return;
                         entry = index;
@@ -230,7 +230,7 @@ auto System::updateBatches(double time, const HostQualitySnapshot& quality) noex
         while (cursor < capacity && size < lanes) {
             const auto slot = cursor++;
             if (!particleData.active[slot]) continue;
-            particleData.age[slot] += stepDelta;
+            if (!customUpdateAge) particleData.age[slot] += stepDelta;
             if (particleData.age[slot] >= particleData.life[slot]) { particleData.active[slot] = false; --live; }
             else particles[size++] = slot;
         }
@@ -248,7 +248,7 @@ auto System::updateBatches(double time, const HostQualitySnapshot& quality) noex
             for (;cursor<capacity;++cursor) {
                 const auto slot=cursor;
                 if (!particleData.active[slot]) continue;
-                particleData.age[slot]+=stepDelta;
+                if (!customUpdateAge) particleData.age[slot]+=stepDelta;
                 if (particleData.age[slot]>=particleData.life[slot]) { particleData.active[slot]=false; --live; continue; }
                 const auto status=run(slot,1,time,quality);
                 if (status!=Result::Ok) return status;
@@ -354,8 +354,8 @@ auto System::evaluateBatch(const ParticleBatchPlan& plan, const std::uint32_t* p
                     if (!std::isfinite(particleData.velocity[lane][slot]) || !std::isfinite(particleData.position[lane][slot])) return Result::InvalidArgument;
                 }
             } else {
-                const auto width = op.op==BatchOp::SetColor ? 4u : op.op==BatchOp::SetSize ? 2u : op.op==BatchOp::SetLife ? 1u : 3u;
-                if ((op.op==BatchOp::SetLife || op.op==BatchOp::SetSize) &&
+                const auto width = op.op==BatchOp::SetColor ? 4u : op.op==BatchOp::SetSize ? 2u : (op.op==BatchOp::SetLife || op.op==BatchOp::SetAge) ? 1u : 3u;
+                if ((op.op==BatchOp::SetLife || op.op==BatchOp::SetAge || op.op==BatchOp::SetSize) &&
                     (input(op.inputs[0],0,p)<0 || (width==2 && input(op.inputs[0],1,p)<0))) return Result::InvalidArgument;
                 for (auto lane=0u;lane<width;++lane) {
                     const auto value=input(op.inputs[0],lane,p);
@@ -363,6 +363,7 @@ auto System::evaluateBatch(const ParticleBatchPlan& plan, const std::uint32_t* p
                     else if (op.op==BatchOp::SetVelocity) particleData.velocity[lane][slot]=value;
                     else if (op.op==BatchOp::SetColor) particleData.color[lane][slot]=value;
                     else if (op.op==BatchOp::SetSize) particleData.size[lane][slot]=value;
+                    else if (op.op==BatchOp::SetAge) particleData.age[slot]=value;
                     else particleData.life[slot]=value;
                 }
             }

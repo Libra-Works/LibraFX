@@ -161,6 +161,32 @@ public partial class GpuWorkspaceView : UserControl
         WritesPanel.Children.Clear();
         var vm = Workspace!;
         if (vm.Kernel is not { } k) return;
+        if (k.Stage == KernelStage.Update)
+        {
+            var customAge = k.Writes.Any(w => w.Attribute == "Age");
+            WritesPanel.Children.Add(new TextBlock
+            {
+                Text = LocalizationService.Shared.Get(customAge ? "Gpu.AgeMode.Custom" : "Gpu.AgeMode.Auto"),
+                TextWrapping = TextWrapping.Wrap
+            });
+            if (!customAge)
+            {
+                var customize = Button(LocalizationService.Shared.Get("Gpu.CustomizeAgeUpdate"), () =>
+                {
+                    var ageId = "n_" + Guid.NewGuid().ToString("N");
+                    var dtId = "n_" + Guid.NewGuid().ToString("N");
+                    var addId = "n_" + Guid.NewGuid().ToString("N");
+                    vm.Edit(
+                        new GpuEdit { Action = "add", KernelId = k.Id, Position = new(60, 40), Node = new() { Id = ageId, Op = GpuOp.ReadAttribute, Type = GpuType.Float, Attribute = "Age" } },
+                        new GpuEdit { Action = "add", KernelId = k.Id, Position = new(60, 120), Node = new() { Id = dtId, Op = GpuOp.ReadUniform, Type = GpuType.Float, Uniform = "deltaTime" } },
+                        new GpuEdit { Action = "add", KernelId = k.Id, Position = new(280, 80), Node = new() { Id = addId, Op = GpuOp.Add, Type = GpuType.Float, Inputs = [ageId, dtId] } },
+                        new GpuEdit { Action = "write", KernelId = k.Id, Write = new("w_" + Guid.NewGuid().ToString("N"), "Age", addId) }
+                    );
+                });
+                customize.IsEnabled = !vm.Graph.IsReadOnly;
+                WritesPanel.Children.Add(customize);
+            }
+        }
         foreach (var write in k.Writes)
         {
             var attribute = ParticleAbi.Attributes.SingleOrDefault(a => a.Id == write.Attribute);

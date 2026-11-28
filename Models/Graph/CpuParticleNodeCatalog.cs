@@ -14,7 +14,7 @@ public static class CpuParticleNodeCatalog
             ("018", "CpuParticleStepDelta"),
             ("020", "CpuParticleSetPosition"), ("021", "CpuParticleSetVelocity"),
             ("022", "CpuParticleSetColor"), ("023", "CpuParticleSetSize"), ("024", "CpuParticleSetLife"),
-            ("025", "CpuParticleMove"), ("030", "CpuParticleInputFloat"), ("031", "CpuParticleOutputFloat"),
+            ("025", "CpuParticleMove"), ("026", "CpuParticleSetAge"), ("030", "CpuParticleInputFloat"), ("031", "CpuParticleOutputFloat"),
             ("032", "CpuParticleInputVector3"), ("033", "CpuParticleOutputVector3"),
             ("034", "CpuParticleInputVector4"), ("035", "CpuParticleOutputVector4"),
             ("036", "CpuParticleInputSignal"), ("037", "CpuParticleOutputSignal"),
