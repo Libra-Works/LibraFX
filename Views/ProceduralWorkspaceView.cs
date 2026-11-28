@@ -41,6 +41,7 @@ public sealed partial class ProceduralWorkspaceView : UserControl
         IsVisible = false;
         Focusable = true;
         ContextRequested += (_, e) => e.Handled = true;
+        AddFlowCardStyles();
         var grid = new Grid { RowDefinitions = new RowDefinitions("Auto,*,Auto") };
         _toolbar.Children.Add(_breadcrumb);
         var header = new Border { Child = _toolbar, BorderThickness = new Thickness(0, 0, 0, 1) };
@@ -100,12 +101,37 @@ public sealed partial class ProceduralWorkspaceView : UserControl
     private Point _dragStart;
     private bool _dragActive;
 
+    private void AddFlowCardStyles()
+    {
+        Avalonia.Styling.Selector Build(Func<Avalonia.Styling.Selector, Avalonia.Styling.Selector> step) =>
+            step(Avalonia.Styling.Selectors.Class(
+                Avalonia.Styling.Selectors.Class(
+                    Avalonia.Styling.Selectors.OfType<Button>(null), "flow-card"), "selected"));
+
+        foreach (var selector in new[]
+        {
+            Build(s => Avalonia.Styling.Selectors.OfType<Avalonia.Controls.Presenters.ContentPresenter>(Avalonia.Styling.Selectors.Template(s))),
+            Build(s => Avalonia.Styling.Selectors.OfType<Avalonia.Controls.Presenters.ContentPresenter>(Avalonia.Styling.Selectors.Template(Avalonia.Styling.Selectors.Class(s, ":pointerover")))),
+            Build(s => Avalonia.Styling.Selectors.OfType<Avalonia.Controls.Presenters.ContentPresenter>(Avalonia.Styling.Selectors.Template(Avalonia.Styling.Selectors.Class(s, ":pressed")))),
+            Build(s => Avalonia.Styling.Selectors.OfType<Avalonia.Controls.Presenters.ContentPresenter>(Avalonia.Styling.Selectors.Template(Avalonia.Styling.Selectors.Class(s, ":focus"))))
+        })
+        {
+            var style = new Avalonia.Styling.Style(_ => selector);
+            style.Setters.Add(new Avalonia.Styling.Setter(Border.BorderBrushProperty, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension("EffectSelectionBorderBrush")));
+            style.Setters.Add(new Avalonia.Styling.Setter(Border.BorderThicknessProperty, new Thickness(2)));
+            style.Setters.Add(new Avalonia.Styling.Setter(Border.BackgroundProperty, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension("EffectSurfaceBrush")));
+            Styles.Add(style);
+        }
+    }
+
     private void Card(string text, int index)
     {
         if (_flow.Children.Count > 0) _flow.Children.Add(new TextBlock { Text = "↓", HorizontalAlignment = HorizontalAlignment.Center });
         var button = new Button { Content = text, HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 64,
             Padding = new Thickness(16), BorderThickness = new Thickness(_selected == index ? 2 : 1),
             Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand) };
+        button.Classes.Add("flow-card");
+        if (_selected == index) button.Classes.Add("selected");
         button.Bind(BackgroundProperty, button.GetResourceObservable("EffectSurfaceBrush"));
         button.Bind(BorderBrushProperty, button.GetResourceObservable(_selected == index ? "EffectSelectionBorderBrush" : "EffectBorderBrush"));
         button.Click += (_, _) =>

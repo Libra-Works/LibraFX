@@ -148,8 +148,10 @@
                     </Border>
                 </StackPanel>
                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                    <TextBlock Classes="editor-label" Text="{Binding FileStatus}" TextTrimming="CharacterEllipsis" />
-                    <TextBlock Classes="editor-label" Text="{Binding WindowLayouts.Status}" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Classes="editor-label" VerticalAlignment="Center" Text="{Binding FileStatus}" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Classes="editor-label" VerticalAlignment="Center" Text="{Binding WindowLayouts.Status}"
+                               IsVisible="{Binding WindowLayouts.Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                               TextTrimming="CharacterEllipsis" />
                 </StackPanel>
                 <Button Grid.Column="2" Classes="editor-tool" Content="{Binding PreviewConnectionSummary}"
                         Tag="PreviewConnections" Click="OnDockPanelClick" Padding="8,4" />

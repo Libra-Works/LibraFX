@@ -38,7 +38,7 @@ public sealed partial class GraphWorkspaceViewModel
         values.Add(new("proceduralState", "proceduralState", JsonSerializer.SerializeToElement(ProceduralResourceSchema.Encode(recipe))));
         var definition = ProceduralResourceSchema.Effective(node.BaseDefinition, values);
         var valid = definition.Parameters.Select(p => p.Id).ToHashSet(StringComparer.Ordinal);
-        values.RemoveAll(p => !valid.Contains(p.Id));
+        values.RemoveAll(p => !valid.Contains(p.Id) && !p.Id.StartsWith("editor.", StringComparison.Ordinal));
         var commands = new List<IUndoableCommand>();
         commands.AddRange(Connections.Where(c => c.Target == node &&
                 !definition.InputPorts!.Any(p => p.Id == c.TargetPortId))
