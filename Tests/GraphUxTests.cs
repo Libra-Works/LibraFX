@@ -38,19 +38,22 @@ internal static class GraphUxTests
         window.Show();
         try
         {
-            window.UpdateLayout(); Dispatcher.UIThread.RunJobs();
-            var arrived = false;
-            window.RequestAnimationFrame(_ => arrived = true);
-            var sw = System.Diagnostics.Stopwatch.StartNew();
-            while (!arrived && sw.Elapsed < TimeSpan.FromSeconds(3))
-            {
-                Dispatcher.UIThread.RunJobs();
-                Thread.Sleep(2);
-            }
             for (var i = 0; i < 4; i++)
             {
                 Dispatcher.UIThread.RunJobs();
                 window.UpdateLayout();
+            }
+            for (var frame = 0; frame < 2; frame++)
+            {
+                var arrived = false;
+                window.RequestAnimationFrame(_ => arrived = true);
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                while (!arrived && sw.Elapsed < TimeSpan.FromSeconds(1.5))
+                {
+                    Dispatcher.UIThread.RunJobs();
+                    Thread.Sleep(2);
+                }
+                Dispatcher.UIThread.RunJobs();
             }
             var innerView = outerView.GetVisualDescendants().OfType<GraphEditorView>().First(v => !ReferenceEquals(v, outerView));
             var innerCanvas = innerView.FindControl<Grid>("GraphCanvas")!;
