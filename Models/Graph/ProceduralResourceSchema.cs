@@ -80,6 +80,16 @@ public static class ProceduralResourceSchema
     public static bool Contains(GraphSnapshot graph) => graph.Nodes.Any(node => IsMetadata(node.Kind) ||
         node.ChildGraph is { } child && Contains(child));
     public static string Port(Guid stage, int block) => $"stage_{stage:N}_{block}";
+    public static string ScalarPort(Guid stage, int index) => $"stage_{stage:N}_p{index}";
+    public static bool TryParseScalarPort(string? portId, out Guid stageId, out int index)
+    {
+        stageId = default;
+        index = -1;
+        if (portId is null || !portId.StartsWith("stage_", StringComparison.Ordinal)) return false;
+        var sep = portId.IndexOf("_p", 6, StringComparison.Ordinal);
+        return sep == 38 && Guid.TryParseExact(portId.AsSpan(6, 32), "N", out stageId) &&
+            int.TryParse(portId.AsSpan(sep + 2), out index) && index is >= 0 and < 16;
+    }
     public static string Encode(ProceduralRecipe recipe) => JsonSerializer.Serialize(recipe, JsonOptions);
     public static ProceduralPixelOperation CreatePixel(uint kind, uint input)
     {
@@ -303,7 +313,14 @@ public static class ProceduralResourceSchema
         return index < names.Length ? names[index] : null;
     }
 
-    public static GraphNodeDefinition Effective(GraphNodeDefinition definition, IReadOnlyList<NodeParameterSnapshot>? parameters)
+    public static GraphNodeDefinition Effective(GraphNodeDefinition definition, IReadOnlyList<NodeParameterSnapshot>? parameters) =>
+        EffectiveCore(definition, parameters, scalarPins: true);
+
+    public static GraphNodeDefinition EffectiveBlocks(GraphNodeDefinition definition, IReadOnlyList<NodeParameterSnapshot>? parameters) =>
+        EffectiveCore(definition, parameters, scalarPins: false);
+
+    private static GraphNodeDefinition EffectiveCore(GraphNodeDefinition definition,
+        IReadOnlyList<NodeParameterSnapshot>? parameters, bool scalarPins)
     {
         if (!IsMetadata(definition.Kind))
         {
@@ -314,6 +331,7 @@ public static class ProceduralResourceSchema
         var values = definition.Parameters.ToList();
         void Add(Guid id, float[] data, string label, Func<int, string?> nameOf, int maxBlocks)
         {
+            var firstScalar = true;
             for (var block = 0; block < Math.Min(data.Length / 4, maxBlocks); ++block)
             {
                 var slotNames = Enumerable.Range(block * 4, 4)
@@ -323,10 +341,27 @@ public static class ProceduralResourceSchema
                     .ToArray();
                 if (slotNames.Length == 0) continue;
                 var key = Port(id, block);
-                var portType = slotNames.Length switch { 1 => "Float", 2 => "FloatX2", 3 => "FloatX3", _ => "FloatX4" };
                 var fullName = $"{label} · {string.Join(" / ", slotNames)}";
-                ports.Add(new(key, fullName, portType));
                 values.Add(new(key, fullName, "vector4", JsonSerializer.SerializeToElement(data.Skip(block * 4).Take(4))));
+                if (scalarPins)
+                {
+                    for (var c = 0; c < 4; ++c)
+                    {
+                        var j = block * 4 + c;
+                        if (nameOf(j) is not { } slotName) continue;
+                        ports.Add(new(ScalarPort(id, j), slotName, "Float",
+                            GroupHeader: firstScalar ? label : null)
+                        {
+                            ToolTip = $"{label} · {slotName}"
+                        });
+                        firstScalar = false;
+                    }
+                }
+                else
+                {
+                    var portType = slotNames.Length switch { 1 => "Float", 2 => "FloatX2", 3 => "FloatX3", _ => "FloatX4" };
+                    ports.Add(new(key, fullName, portType));
+                }
             }
         }
         foreach (var (modifier, index) in recipe.Modifiers.Select((m, i) => (m, i)))

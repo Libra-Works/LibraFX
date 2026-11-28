@@ -108,19 +108,27 @@
                               HorizontalAlignment="Stretch" VerticalAlignment="Top">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate DataType="graph:GraphInputPortDefinition">
-                            <Grid ColumnDefinitions="18,*" ColumnSpacing="4" Height="24">
-                                <Button Width="18" Height="18" Padding="0" Tag="{Binding}"
-                                        Content="●" Background="Transparent" Click="OnCustomInputClick">
-                                    <Button.Foreground>
-                                        <MultiBinding Converter="{StaticResource PortBrushConverter}">
-                                            <Binding Path="Category" />
-                                            <Binding Path="$parent[views:GraphNodeView].((vm:GraphNodeViewModel)DataContext).PortBrush" />
-                                        </MultiBinding>
-                                    </Button.Foreground>
-                                </Button>
-                                <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center"
-                                           TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding ToolTip}" />
-                            </Grid>
+                            <StackPanel Spacing="0">
+                                <TextBlock Text="{Binding GroupHeader}"
+                                           IsVisible="{Binding HasGroupHeader}"
+                                           FontSize="10" FontWeight="SemiBold"
+                                           Margin="2,4,4,1"
+                                           Foreground="{DynamicResource EffectMutedForegroundBrush}"
+                                           TextTrimming="CharacterEllipsis" />
+                                <Grid ColumnDefinitions="18,*" ColumnSpacing="4" Height="24">
+                                    <Button Width="18" Height="18" Padding="0" Tag="{Binding}"
+                                            Content="●" Background="Transparent" Click="OnCustomInputClick">
+                                        <Button.Foreground>
+                                            <MultiBinding Converter="{StaticResource PortBrushConverter}">
+                                                <Binding Path="Category" />
+                                                <Binding Path="$parent[views:GraphNodeView].((vm:GraphNodeViewModel)DataContext).PortBrush" />
+                                            </MultiBinding>
+                                        </Button.Foreground>
+                                    </Button>
+                                    <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding ToolTip}" />
+                                </Grid>
+                            </StackPanel>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>

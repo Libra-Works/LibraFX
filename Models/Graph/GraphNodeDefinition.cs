@@ -806,10 +806,11 @@ public sealed record GraphNodeDefinition(
 
 public sealed record GraphInputPortDefinition(
     string Id, string Name, string? PortType = null, GraphPortCategory? Category = null,
-    JsonElement? DefaultValue = null)
+    JsonElement? DefaultValue = null, string? GroupHeader = null)
 {
     private readonly string? _toolTip;
     public string ToolTip { get => _toolTip ?? Name; init => _toolTip = value; }
+    public bool HasGroupHeader => !string.IsNullOrEmpty(GroupHeader);
 }
 public sealed record GraphOutputPortDefinition(
     string Id, string Name, string? PortType = null, GraphPortCategory? Category = null);

@@ -59,7 +59,7 @@ internal static class ProceduralProgramBindings
             var definition = GraphNodeDefinition.All.Single(d => d.Kind == node.Kind);
             var kind = ProceduralResourceSchema.Name(node.Kind)!;
             var recipe = Recipe(node);
-            var effective = ProceduralResourceSchema.Effective(definition, node.Parameters);
+            var effective = ProceduralResourceSchema.EffectiveBlocks(definition, node.Parameters);
             var inputs = ResourceInputs(node, kind, recipe, effective, nodes, incoming);
             var slots = ProceduralPixelCompilation.TextureSlots(node, recipe, incoming);
             var textures = kind == "ProceduralMaterial" ? slots.Order().Select(slot => new

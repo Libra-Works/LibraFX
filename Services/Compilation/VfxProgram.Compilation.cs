@@ -88,6 +88,7 @@ public sealed partial class VfxProgram
                     problem.SourceType, problem.ExpectedType) +
                 " " + GraphConversionPresentation.Describe(problem.Conversion))));
 #endif
+        graph = ProceduralLowering.Lower(graph);
         graph = GroupBoundaryLowering.Lower(graph);
         if (lifeNodeId is { } lifeId)
             graph = graph with { Connections = graph.Connections.Concat(graph.Nodes

@@ -132,6 +132,22 @@ internal static class ProceduralResourceTests
             .Single(r => r.GetProperty("kind").GetString() == "ProceduralTexture");
         Require(resource.GetProperty("inputs").GetArrayLength() == 6,
             "A default texture must compile all six stable numeric input blocks without requiring an edit first.");
+        var waveId = Guid.NewGuid();
+        graph.ApplyProceduralRecipe(model, new ProceduralRecipe
+        {
+            Shape = 14,
+            Modifiers = [new() { Id = waveId, Kind = 3, Values = [0.25f, 2f, 0.5f, 1.5f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], Flags = 1 }]
+        });
+        var amp = Add("Float"); var speed = Add("Float");
+        Require(graph.TryConnectNodes(amp, model, out var ampErr, targetPortId: ProceduralResourceSchema.ScalarPort(waveId, 0), sourcePortId: "value"), ampErr ?? "Scalar Amplitude connection failed.");
+        Require(graph.TryConnectNodes(speed, model, out var spdErr, targetPortId: ProceduralResourceSchema.ScalarPort(waveId, 3), sourcePortId: "value"), spdErr ?? "Scalar Speed connection failed.");
+        var compiled = SpawnableGroupPackage.Compile(graph.CreateSnapshot());
+        using var compiledRender = JsonDocument.Parse(compiled.RootRenderConfiguration);
+        var modelRes = compiledRender.RootElement.GetProperty("proceduralResources").EnumerateArray()
+            .Single(r => r.GetProperty("kind").GetString() == "ProceduralModel");
+        Require(modelRes.GetProperty("inputs").GetArrayLength() == 4, "Scalar procedural inputs must lower into 4-component blocks.");
+        Require(modelRes.GetProperty("inputs")[0].GetProperty("sourceNodeId").GetGuid() != Guid.Empty,
+            "Connected scalar procedural inputs must lower to a valid vector4 compose source.");
     }
     public static void WriteFixtures(string directory)
     {

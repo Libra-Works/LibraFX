@@ -87,6 +87,7 @@ public sealed record SpawnableGroupPackage(byte[] ParentBytecode, IReadOnlyList<
         graph = SignalTimelineLowering.Lower(graph, includePreviewSignalKeys);
         VfxProgram.ValidateForCompilation(graph);
         GraphTypeDiagnostics.Validate(graph);
+        graph = ProceduralLowering.Lower(graph);
         graph = CpuParticleCompilation.LowerEmitters(graph);
         var templates = new List<SpawnableTemplate>();
         var destroyRoutes = new List<SpawnableDestroyRoute>();
