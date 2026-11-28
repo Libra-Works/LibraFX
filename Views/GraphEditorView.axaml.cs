@@ -185,10 +185,16 @@ public partial class GraphEditorView : UserControl
     }
 
     internal double DebugZoom => _zoom;
-    private bool OwnsInput(object? source) =>
-        source is not Visual visual ||
-        visual.GetSelfAndVisualAncestors().OfType<GraphEditorView>().FirstOrDefault() is not { } editor ||
-        ReferenceEquals(editor, this);
+    private bool OwnsInput(object? source)
+    {
+        if (source is not Visual visual) return true;
+        foreach (var ancestor in visual.GetSelfAndVisualAncestors())
+        {
+            if (ancestor is ProceduralWorkspaceView or GpuWorkspaceView) return false;
+            if (ancestor is GraphEditorView editor) return ReferenceEquals(editor, this);
+        }
+        return true;
+    }
 
     private void OnHierarchyChanging(object? sender, string key)
     {

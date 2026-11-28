@@ -39,6 +39,7 @@ public sealed partial class ProceduralWorkspaceView : UserControl
     public ProceduralWorkspaceView()
     {
         IsVisible = false;
+        Focusable = true;
         var grid = new Grid { RowDefinitions = new RowDefinitions("Auto,*,Auto") };
         _toolbar.Children.Add(_breadcrumb);
         var header = new Border { Child = _toolbar, BorderThickness = new Thickness(0, 0, 0, 1) };
@@ -106,14 +107,23 @@ public sealed partial class ProceduralWorkspaceView : UserControl
             Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand) };
         button.Bind(BackgroundProperty, button.GetResourceObservable("EffectSurfaceBrush"));
         button.Bind(BorderBrushProperty, button.GetResourceObservable(_selected == index ? "EffectSelectionBorderBrush" : "EffectBorderBrush"));
+        button.Click += (_, _) =>
+        {
+            _selected = index;
+            _selectedStage = null;
+            Refresh(restoreFocus: true);
+        };
         button.AddHandler(PointerPressedEvent, (_, e) =>
         {
-            if (index < 0 || !e.GetCurrentPoint(button).Properties.IsLeftButtonPressed) return;
-            _dragSourceIndex = index;
-            _dragTargetIndex = index;
-            _dragStart = e.GetPosition(_flow);
-            _dragActive = false;
-            e.Pointer.Capture(button);
+            if (!e.GetCurrentPoint(button).Properties.IsLeftButtonPressed) return;
+            if (index >= 0)
+            {
+                _dragSourceIndex = index;
+                _dragTargetIndex = index;
+                _dragStart = e.GetPosition(_flow);
+                _dragActive = false;
+            }
+            e.Handled = true;
         }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         button.AddHandler(PointerMovedEvent, (_, e) =>
         {
@@ -122,6 +132,7 @@ public sealed partial class ProceduralWorkspaceView : UserControl
             if (!_dragActive && Math.Abs(pos.Y - _dragStart.Y) > 6)
             {
                 _dragActive = true;
+                e.Pointer.Capture(button);
                 button.Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.SizeNorthSouth);
             }
             if (!_dragActive) return;
@@ -137,12 +148,17 @@ public sealed partial class ProceduralWorkspaceView : UserControl
             {
                 _cards[i].Opacity = i == _dragSourceIndex ? 0.55 : i == _dragTargetIndex ? 0.85 : 1.0;
             }
+            e.Handled = true;
         }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         button.AddHandler(PointerReleasedEvent, (_, e) =>
         {
+            if (e.InitialPressMouseButton != Avalonia.Input.MouseButton.Left) return;
             if (index < 0)
             {
-                _selected = -1; _selectedStage = null; Refresh();
+                _selected = index;
+                _selectedStage = null;
+                Refresh(restoreFocus: true);
+                e.Handled = true;
                 return;
             }
             if (_dragSourceIndex != index) return;
@@ -154,16 +170,31 @@ public sealed partial class ProceduralWorkspaceView : UserControl
             _dragActive = false;
             button.Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand);
             foreach (var c in _cards) c.Opacity = 1.0;
-            e.Pointer.Capture(null);
+            if (wasDrag) e.Pointer.Capture(null);
+            e.Handled = true;
             if (wasDrag && from != to)
             {
                 MoveTo(from, to);
             }
             else
             {
-                _selected = index; _selectedStage = null; Refresh();
+                _selected = index;
+                _selectedStage = null;
+                Refresh(restoreFocus: true);
             }
         }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        if (index >= 0 && !_workspace.IsReadOnly)
+        {
+            var r = Recipe;
+            var count = Model ? r.Modifiers.Length : r.Operations.Length;
+            var up = new MenuItem { Header = T("Up"), IsEnabled = index > 0 };
+            up.Click += (_, _) => MoveTo(index, index - 1);
+            var down = new MenuItem { Header = T("Down"), IsEnabled = index < count - 1 };
+            down.Click += (_, _) => MoveTo(index, index + 1);
+            var remove = new MenuItem { Header = T("Remove"), IsEnabled = Model || count > 1 };
+            remove.Click += (_, _) => Remove(index);
+            button.ContextMenu = new ContextMenu { ItemsSource = new Control[] { up, down, new Separator(), remove } };
+        }
         if (index >= 0) _cards.Add(button);
         _flow.Children.Add(button);
     }
@@ -253,7 +284,7 @@ public sealed partial class ProceduralWorkspaceView : UserControl
         row.Children.Add(box);
         parent.Children.Add(row);
     }
-    private void Refresh()
+    private void Refresh(bool restoreFocus = false)
     {
         if (_refreshing || !IsVisible) return;
         if (_suppressInspectorRebuild)
@@ -261,6 +292,7 @@ public sealed partial class ProceduralWorkspaceView : UserControl
             RefreshTexturePreview();
             return;
         }
+        var hadFocus = restoreFocus || IsKeyboardFocusWithin && TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() is not TextBox;
         _refreshing = true;
         try
         {
@@ -387,6 +419,11 @@ public sealed partial class ProceduralWorkspaceView : UserControl
             }
         }
         finally { _refreshing = false; }
+        if (hadFocus)
+        {
+            if (_selected >= 0 && _selected < _cards.Count) _cards[_selected].Focus();
+            else Focus();
+        }
         RefreshTexturePreview();
     }
     private void Toggle(Panel parent, string key, bool value, Action<bool> set)
@@ -459,14 +496,26 @@ public sealed partial class ProceduralWorkspaceView : UserControl
     private void Remove(int index)
     {
         var r = Recipe;
-        if (Model) { _selected = Math.Min(index, r.Modifiers.Length - 2); Save(r with { Modifiers = r.Modifiers.Where((_, i) => i != index).ToArray() }); }
-        else RemapPixels(r, r.Operations.Where((_, i) => i != index).ToArray());
+        if (Model)
+        {
+            _selected = Math.Min(index, r.Modifiers.Length - 2);
+            _selectedStage = null;
+            Save(r with { Modifiers = r.Modifiers.Where((_, i) => i != index).ToArray() });
+        }
+        else
+        {
+            _selected = r.Operations.Length > 1 ? Math.Min(index, r.Operations.Length - 2) : -1;
+            _selectedStage = null;
+            RemapPixels(r, r.Operations.Where((_, i) => i != index).ToArray());
+        }
+        if (_selected >= 0 && _selected < _cards.Count) _cards[_selected].Focus();
+        else Focus();
     }
     private void RemapPixels(ProceduralRecipe old, ProceduralPixelOperation[] next)
     {
         if (next.Length == 0)
         {
-            _status.Text = "At least one pixel operation is required.";
+            _status.Text = T("AtLeastOneOperation");
             return;
         }
         uint Map(uint register, uint limit)
