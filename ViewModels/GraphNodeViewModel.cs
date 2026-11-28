@@ -91,6 +91,9 @@ public sealed class GraphNodeViewModel : ObservableObject
     public bool ShowCollapsedResizeGrip => HasInlineWorkspace && !IsInlineExpanded;
     public bool IsComment => Definition.Kind == GraphNodeKind.Comment;
     public bool IsReroute => BaseDefinition.Kind.Value == "Reroute";
+    public bool ShowStandardNodeBody => !IsComment && !IsReroute;
+    public GraphInputPortDefinition? RerouteInputPort => IsReroute ? InputPorts.FirstOrDefault() : null;
+    public GraphOutputPortDefinition? RerouteOutputPort => IsReroute ? OutputPorts.FirstOrDefault() : null;
     public bool HasPorts => !IsComment && (!IsGraphGroup ||
         IsSpawnableGroup || Definition.InputPorts is { Count: > 0 } || Definition.OutputPorts is { Count: > 0 });
     public bool ShowPortType => HasPorts && !IsReroute && Definition.Kind != GraphNodeKind.GraphGroup;
@@ -166,7 +169,7 @@ public sealed class GraphNodeViewModel : ObservableObject
         p.Id == InlineExpandedId && p.Type == "bool")?.Value.ValueKind == JsonValueKind.True));
     public double InlineWidth => _previewWidth ?? InlineNumber(InlineWidthId, 640, 280, 2400);
     public double InlineHeight => _previewHeight ?? InlineNumber(InlineHeightId, 380, 160, 1600);
-    public double RenderedWidth => IsComment ? CommentWidth : IsReroute ? 86 : IsInlineExpanded ? InlineWidth : CalculatedNodeWidth;
+    public double RenderedWidth => IsComment ? CommentWidth : IsReroute ? 24 : IsInlineExpanded ? InlineWidth : CalculatedNodeWidth;
 
     private double CalculatedNodeWidth
     {

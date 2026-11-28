@@ -10,7 +10,7 @@
         <views:GraphPortBrushConverter x:Key="PortBrushConverter" />
     </UserControl.Resources>
     <Grid>
-    <Border x:Name="NodeBody" Width="{Binding RenderedWidth}" IsVisible="{Binding !IsComment}"
+    <Border x:Name="NodeBody" Width="{Binding RenderedWidth}" IsVisible="{Binding ShowStandardNodeBody}"
             Background="{DynamicResource EffectSurfaceBrush}"
             BorderBrush="{Binding BorderBrush}"
             ToolTip.Tip="{Binding DiagnosticToolTip}"
@@ -266,6 +266,36 @@
             </Grid>
         </Grid>
     </Border>
+    <Grid x:Name="RerouteBody" IsVisible="{Binding IsReroute}" Width="24" Height="24"
+          Background="Transparent" Cursor="SizeAll"
+          ToolTip.Tip="{Binding DiagnosticToolTip}"
+          AutomationProperties.HelpText="{Binding DiagnosticText}"
+          PointerPressed="OnHeaderPointerPressed"
+          PointerMoved="OnHeaderPointerMoved"
+          PointerReleased="OnHeaderPointerReleased"
+          PointerCaptureLost="OnHeaderPointerCaptureLost">
+        <Ellipse Width="20" Height="20"
+                 Stroke="{Binding BorderBrush}"
+                 StrokeThickness="2"
+                 IsVisible="{Binding IsSelected}"
+                 IsHitTestVisible="False" />
+        <Ellipse Width="10" Height="10"
+                 Fill="{Binding PortBrush}"
+                 IsHitTestVisible="False" />
+        <Button Width="6" Height="10"
+                HorizontalAlignment="Left" VerticalAlignment="Center"
+                Padding="0" Background="Transparent" BorderThickness="0"
+                Tag="{Binding RerouteInputPort}"
+                Click="OnCustomInputClick" />
+        <Border Width="8" Height="12"
+                HorizontalAlignment="Right" VerticalAlignment="Center"
+                Background="Transparent" Cursor="Hand"
+                Tag="{Binding RerouteOutputPort}"
+                PointerPressed="OnOutputPointerPressed"
+                PointerMoved="OnOutputPointerMoved"
+                PointerReleased="OnOutputPointerReleased"
+                PointerCaptureLost="OnOutputPointerCaptureLost" />
+    </Grid>
     <Border IsVisible="{Binding IsComment}" Width="{Binding CommentWidth}" Height="{Binding CommentHeight}"
             BorderBrush="{Binding BorderBrush}" BorderThickness="2" CornerRadius="5"
             Background="{DynamicResource EffectSelectionFillBrush}">

@@ -276,8 +276,8 @@ public sealed partial class GraphWorkspaceViewModel
             this,
             definition,
             definition.Name,
-            x - 43,
-            y - 22,
+            x - 12,
+            y - 12,
             id: Guid.NewGuid());
         var first = new GraphConnectionViewModel(connection.Source, reroute, "in", connection.SourcePortId);
         var second = new GraphConnectionViewModel(reroute, connection.Target, connection.TargetPortId, "out");
@@ -301,7 +301,7 @@ public sealed partial class GraphWorkspaceViewModel
         {
             var midpoint = new Point((connection.StartX + connection.EndX) / 2,
                 (connection.StartY + connection.EndY) / 2);
-            var reroute = new GraphNodeViewModel(this, definition, definition.Name, midpoint.X - 43, midpoint.Y - 22);
+            var reroute = new GraphNodeViewModel(this, definition, definition.Name, midpoint.X - 12, midpoint.Y - 12);
             created.Add(reroute);
             commands.Add(new InsertRerouteCommand(this, connection, reroute,
                 new GraphConnectionViewModel(connection.Source, reroute, "in", connection.SourcePortId),
