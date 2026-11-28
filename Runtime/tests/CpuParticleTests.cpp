@@ -45,6 +45,7 @@ auto payload(std::uint32_t capacity, std::uint32_t burst, double rate) -> Bytes
     u32(bytes, 32);
     number(bytes, rate);
     u32(bytes, burst);
+    number(bytes, 0.0);
     bytes.resize(bytes.size() + 16, 0);
     u32(bytes, 0);
     for (auto stage = 0u; stage < 2; ++stage)
